@@ -57,13 +57,13 @@ function DealerRow({ dealer, rank }: { dealer: DealerSalesSummary; rank: number 
       </View>
       <View style={[
         dealerStyles.activeBadge,
-        { backgroundColor: dealer.active ? Colors.successLight : Colors.borderLight }
+        { backgroundColor: (dealer.active === undefined || dealer.active === null || dealer.active === '' || String(dealer.active).toLowerCase() !== 'false') ? Colors.successLight : Colors.borderLight }
       ]}>
         <Text style={[
           dealerStyles.activeText,
-          { color: dealer.active ? Colors.success : Colors.textMuted }
+          { color: (dealer.active === undefined || dealer.active === null || dealer.active === '' || String(dealer.active).toLowerCase() !== 'false') ? Colors.success : Colors.textMuted }
         ]}>
-          {dealer.active ? 'ACTIVE' : 'INACTIVE'}
+          {(dealer.active === undefined || dealer.active === null || dealer.active === '' || String(dealer.active).toLowerCase() !== 'false') ? 'ACTIVE' : 'INACTIVE'}
         </Text>
       </View>
     </View>

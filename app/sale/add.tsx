@@ -106,9 +106,11 @@ export default function AddSaleScreen() {
     });
   };
 
-  const filteredDealers = (dealers || []).filter(d =>
-    d.dealer_name.toLowerCase().includes(dealerSearch.toLowerCase()) && d.active
-  );
+  const filteredDealers = (dealers || []).filter(d => {
+    const nameMatch = (d.dealer_name || '').toLowerCase().includes(dealerSearch.toLowerCase());
+    const isNotInactive = d.active === undefined || d.active === null || d.active === '' || String(d.active).toLowerCase() !== 'false';
+    return nameMatch && isNotInactive;
+  });
 
   const isPending = saleMutation.isPending || punchMutation.isPending;
 
