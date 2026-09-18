@@ -79,6 +79,18 @@ export async function apiGetDealerByToken(dealer_id: string, token: string): Pro
   return get<Dealer>('getDealerByToken', { dealer_id, token });
 }
 
+export async function apiAddDealer(data: {
+  dealer_name: string;
+  owner_name?: string;
+  phone?: string;
+  address?: string;
+  area?: string;
+  assigned_te?: string;
+  created_by?: string;
+}): Promise<ApiResponse<Dealer>> {
+  return post('addDealer', data);
+}
+
 // ── CONTRACTORS ────────────────────────────────────────────
 export async function apiGetContractors(): Promise<Contractor[]> {
   return get<Contractor[]>('getContractors');

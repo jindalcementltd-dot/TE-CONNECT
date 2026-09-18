@@ -762,6 +762,39 @@ function handleAddContractor(data) {
   return success(contractorObj, 'Contractor added.');
 }
 
+function handleAddDealer(data) {
+  if (!data.dealer_name) return error('Dealer name is required.');
+
+  const dealer_id = data.dealer_id || generateId('DLR');
+  const now = new Date().toISOString();
+  const token = generateToken();
+  const settings = sheetToObjects(getSheet(SHEETS.SETTINGS));
+  const publicUrl = getSettingValue(settings, 'public_url') || '';
+  const publicSlabLink = publicUrl
+    ? publicUrl + '?page=slab&dealer_id=' + dealer_id + '&token=' + token
+    : 'PENDING_URL?page=slab&dealer_id=' + dealer_id + '&token=' + token;
+
+  const dealerObj = {
+    dealer_id,
+    dealer_name: data.dealer_name,
+    owner_name: data.owner_name || '',
+    phone: data.phone || '',
+    address: data.address || '',
+    area: data.area || '',
+    latitude: data.latitude || '',
+    longitude: data.longitude || '',
+    assigned_te: data.assigned_te || '',
+    active: true,
+    qr_id: generateId('QR'),
+    qr_token: token,
+    public_slab_link: publicSlabLink,
+    created_at: now,
+  };
+  appendRow(SHEETS.DEALERS, dealerObj, HEADERS.DEALERS);
+  logActivity(data.created_by, data.created_by, 'ADD_DEALER', 'DEALERS', dealer_id, 'Added dealer ' + data.dealer_name);
+  return success(dealerObj, 'Dealer added successfully.');
+}
+
 function handlePublicSlabSubmit(data) {
   // Validate dealer token
   if (!data.dealer_id || !data.token) return error('Invalid link.');
@@ -913,6 +946,7 @@ function doPost(e) {
       case 'addPunch': return handleAddPunch(data);
       case 'updateContractorActivity': return handleUpdateContractorActivity(data);
       case 'addContractor': return handleAddContractor(data);
+      case 'addDealer': return handleAddDealer(data);
       case 'publicSlabSubmit': return handlePublicSlabSubmit(data);
       case 'publicMeetingSubmit': return handlePublicMeetingSubmit(data);
       case 'generateDealerQR': return handleGenerateDealerQR(data);
