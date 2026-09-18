@@ -1,496 +1,703 @@
 import React, { useState, useCallback } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity,
-  RefreshControl, ActivityIndicator, Dimensions,
+  RefreshControl, ActivityIndicator, Dimensions, Platform,
 } from 'react-native';
 import { router } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
-import { LineChart, BarChart } from 'react-native-chart-kit';
 import { Colors } from '../../src/theme/colors';
-import { Spacing, BorderRadius } from '../../src/theme/spacing';
 import {
-  apiGetSales, apiGetDealerSalesSummary,
-  apiGetTEActiveSummary, apiGetActiveTracker, apiGetTargets, apiGetSettings,
+  apiGetSales, apiGetDealers, apiGetActiveTracker, apiGetSettings,
 } from '../../src/services/api';
 import { getUser } from '../../src/services/auth';
 import {
   bagsToMT, currentMonthISO, formatPercent,
-  calcRequiredPunch, calcActivePercent, calcGap, sumBy, normalizeDate,
+  calcRequiredPunch, calcActivePercent, calcGap, normalizeDate,
 } from '../../src/utils/helpers';
 import { Sale, DealerSalesSummary, TEActiveSummary } from '../../src/types';
-import { Ionicons } from '@expo/vector-icons';
-import { format, getDaysInMonth } from 'date-fns';
+import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
-
-// ── Sub-components ───────────────────────────────────────────
-
-function MetricCard({ label, value, sub, color, icon }: {
-  label: string; value: string; sub?: string; color: string; icon: string;
-}) {
-  return (
-    <View style={[metricStyles.card, { borderLeftColor: color }]}>
-      <Text style={metricStyles.icon}>{icon}</Text>
-      <View style={{ flex: 1 }}>
-        <Text style={metricStyles.label}>{label}</Text>
-        <Text style={[metricStyles.value, { color }]}>{value}</Text>
-        {sub ? <Text style={metricStyles.sub}>{sub}</Text> : null}
-      </View>
-    </View>
-  );
-}
-
-function DealerRow({ dealer, rank }: { dealer: DealerSalesSummary; rank: number }) {
-  return (
-    <View style={dealerStyles.row}>
-      <Text style={dealerStyles.rank}>#{rank}</Text>
-      <View style={{ flex: 1 }}>
-        <Text style={dealerStyles.name}>{dealer.dealer_name}</Text>
-        <Text style={dealerStyles.area}>{dealer.area} · {dealer.assigned_te}</Text>
-      </View>
-      <View style={{ alignItems: 'flex-end' }}>
-        <Text style={dealerStyles.mt}>{dealer.total_mt.toFixed(2)} MT</Text>
-        <View style={dealerStyles.productRow}>
-          {dealer.f2r_bags > 0 && <Text style={dealerStyles.f2r}>F2R: {dealer.f2r_bags}</Text>}
-          {dealer.gold_bags > 0 && <Text style={dealerStyles.gold}>Gold: {dealer.gold_bags}</Text>}
-        </View>
-      </View>
-      <View style={[
-        dealerStyles.activeBadge,
-        { backgroundColor: (dealer.active === undefined || dealer.active === null || dealer.active === '' || String(dealer.active).toLowerCase() !== 'false') ? Colors.successLight : Colors.borderLight }
-      ]}>
-        <Text style={[
-          dealerStyles.activeText,
-          { color: (dealer.active === undefined || dealer.active === null || dealer.active === '' || String(dealer.active).toLowerCase() !== 'false') ? Colors.success : Colors.textMuted }
-        ]}>
-          {(dealer.active === undefined || dealer.active === null || dealer.active === '' || String(dealer.active).toLowerCase() !== 'false') ? 'ACTIVE' : 'INACTIVE'}
-        </Text>
-      </View>
-    </View>
-  );
-}
-
-function TEActiveRow({ te }: { te: TEActiveSummary }) {
-  const pct = te.active_percent;
-  const color = pct >= 80 ? Colors.success : pct >= 60 ? Colors.warning : Colors.error;
-  return (
-    <View style={teStyles.row}>
-      <View style={teStyles.avatar}>
-        <Text style={teStyles.avatarText}>{te.te.charAt(0).toUpperCase()}</Text>
-      </View>
-      <View style={{ flex: 1 }}>
-        <Text style={teStyles.name}>{te.te}</Text>
-        <View style={teStyles.statsRow}>
-          <Text style={teStyles.stat}>Sales: {te.total_sales_bags}bg</Text>
-          <Text style={teStyles.stat}>Punch: {te.actual_punch_bags}bg</Text>
-          <Text style={teStyles.stat}>Gap: {te.gap_bags}bg</Text>
-        </View>
-        <View style={teStyles.statsRow}>
-          <Text style={teStyles.stat}>Contractors: {te.total_contractors}</Text>
-          <Text style={[teStyles.stat, { color: Colors.success }]}>Active: {te.active_contractors}</Text>
-          <Text style={[teStyles.stat, { color: Colors.error }]}>Inactive: {te.inactive_contractors}</Text>
-        </View>
-      </View>
-      <Text style={[teStyles.percent, { color }]}>{pct.toFixed(1)}%</Text>
-    </View>
-  );
-}
-
-// ── Main Screen ──────────────────────────────────────────────
+const { width } = Dimensions.get('window');
 
 export default function SalesScreen() {
   const [refreshing, setRefreshing] = useState(false);
-  const [filter, setFilter] = useState<'THIS_MONTH' | 'TODAY' | 'CUSTOM'>('THIS_MONTH');
-  const month = currentMonthISO();
-  const today = new Date().toISOString().split('T')[0];
+  const [filter, setFilter] = useState<'ALL' | 'TODAY'>('ALL');
+  const today = normalizeDate(new Date());
 
   const { data: settings } = useQuery({
     queryKey: ['settings'],
     queryFn: apiGetSettings,
   });
 
-  const { data: sales, refetch: refetchSales } = useQuery({
-    queryKey: ['sales', month],
-    queryFn: () => apiGetSales({ month }),
+  const { data: allSales, refetch: refetchSales } = useQuery({
+    queryKey: ['sales'],
+    queryFn: () => apiGetSales(),
   });
 
-  const { data: dealerSales, refetch: refetchDealerSales } = useQuery({
-    queryKey: ['dealerSalesSummary', month],
-    queryFn: () => apiGetDealerSalesSummary(month),
+  const { data: dealers, refetch: refetchDealers } = useQuery({
+    queryKey: ['dealers'],
+    queryFn: () => apiGetDealers(),
   });
 
-  const { data: teActive, refetch: refetchTeActive } = useQuery({
-    queryKey: ['teActiveSummary', month],
-    queryFn: () => apiGetTEActiveSummary(month),
-  });
-
-  const { data: targets } = useQuery({
-    queryKey: ['targets', month],
-    queryFn: () => apiGetTargets({ month }),
+  const { data: activeTrackers, refetch: refetchTrackers } = useQuery({
+    queryKey: ['activeTrackers'],
+    queryFn: () => apiGetActiveTracker(),
   });
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await Promise.all([refetchSales(), refetchDealerSales(), refetchTeActive()]);
+    await Promise.all([refetchSales(), refetchDealers(), refetchTrackers()]);
     setRefreshing(false);
   }, []);
 
-  // Compute totals
-  const filteredSales = filter === 'TODAY'
-    ? (sales || []).filter(s => normalizeDate(s.sale_date) === today)
-    : (sales || []);
-
-  const totalBags = sumBy(filteredSales, 'quantity_bags');
-  const f2rBags = filteredSales.filter(s => s.product === 'ACC F2R').reduce((sum, s) => sum + Number(s.quantity_bags), 0);
-  const goldBags = filteredSales.filter(s => s.product === 'ACC GOLD').reduce((sum, s) => sum + Number(s.quantity_bags), 0);
-  const totalMT = bagsToMT(totalBags);
-
-  // Active/Punch calculations
   const activeTarget = Number(settings?.find(s => s.setting === 'active_target')?.value || 80);
-  const totalTeActive = teActive || [];
-  const totalSalesBagsAll = totalTeActive.reduce((sum, te) => sum + te.total_sales_bags, 0);
-  const totalPunchAll = totalTeActive.reduce((sum, te) => sum + te.actual_punch_bags, 0);
-  const requiredPunchAll = calcRequiredPunch(totalSalesBagsAll, activeTarget);
-  const activePercentAll = calcActivePercent(totalPunchAll, totalSalesBagsAll);
-  const gapAll = calcGap(requiredPunchAll, totalPunchAll);
+  const salesList = allSales || [];
 
-  // Daily sales chart data
-  const daysInMonth = getDaysInMonth(new Date(month + '-01'));
-  const dailyLabels: string[] = [];
-  const dailyData: number[] = [];
-  for (let d = 1; d <= Math.min(daysInMonth, 15); d++) {
-    const dateStr = `${month}-${String(d).padStart(2, '0')}`;
-    const dayBags = (sales || [])
-      .filter(s => normalizeDate(s.sale_date) === dateStr)
-      .reduce((sum, s) => sum + Number(s.quantity_bags), 0);
-    dailyLabels.push(String(d));
-    dailyData.push(dayBags);
-  }
+  // Filter sales
+  const filteredSales = filter === 'TODAY'
+    ? salesList.filter(s => normalizeDate(s.sale_date) === today)
+    : salesList;
 
-  const chartConfig = {
-    backgroundColor: Colors.white,
-    backgroundGradientFrom: Colors.white,
-    backgroundGradientTo: Colors.white,
-    decimalPlaces: 0,
-    color: (opacity = 1) => `rgba(201, 31, 43, ${opacity})`,
-    labelColor: () => Colors.textSecondary,
-    propsForDots: { r: '4', strokeWidth: '2', stroke: Colors.primary },
-  };
+  const totalBags = filteredSales.reduce((sum, s) => sum + (Number(s.quantity_bags) || 0), 0);
+  const totalMT = (totalBags / 20).toFixed(1);
+  const f2rBags = filteredSales.filter(s => String(s.product).includes('F2R')).reduce((sum, s) => sum + Number(s.quantity_bags || 0), 0);
+  const goldBags = filteredSales.filter(s => String(s.product).includes('GOLD')).reduce((sum, s) => sum + Number(s.quantity_bags || 0), 0);
+
+  // Active / Punch Calculations
+  const totalPunchBags = (activeTrackers || []).reduce((sum, t) => sum + (Number(t.punched_quantity_bags) || 0), 0);
+  const totalSalesBagsAll = salesList.reduce((sum, s) => sum + (Number(s.quantity_bags) || 0), 0);
+  const requiredPunch = calcRequiredPunch(totalSalesBagsAll, activeTarget);
+  const activePercent = totalSalesBagsAll > 0 ? Math.round((totalPunchBags / totalSalesBagsAll) * 100) : 0;
+  const punchGap = calcGap(requiredPunch, totalPunchBags);
+
+  // Dealer Leaderboard computation
+  const dealerMap: Record<string, { dealer_id: string; dealer_name: string; area: string; total_bags: number; f2r: number; gold: number }> = {};
+  
+  (dealers || []).forEach(d => {
+    dealerMap[d.dealer_id] = {
+      dealer_id: d.dealer_id,
+      dealer_name: d.dealer_name,
+      area: d.area || 'Jajpur',
+      total_bags: 0,
+      f2r: 0,
+      gold: 0,
+    };
+  });
+
+  salesList.forEach(s => {
+    const did = s.dealer_id || s.dealer_name;
+    if (!dealerMap[did]) {
+      dealerMap[did] = {
+        dealer_id: did,
+        dealer_name: s.dealer_name,
+        area: 'Jajpur',
+        total_bags: 0,
+        f2r: 0,
+        gold: 0,
+      };
+    }
+    const q = Number(s.quantity_bags) || 0;
+    dealerMap[did].total_bags += q;
+    if (String(s.product).includes('F2R')) dealerMap[did].f2r += q;
+    if (String(s.product).includes('GOLD')) dealerMap[did].gold += q;
+  });
+
+  const rankedDealers = Object.values(dealerMap)
+    .filter(d => d.total_bags > 0)
+    .sort((a, b) => b.total_bags - a.total_bags);
 
   return (
-    <ScrollView
-      style={styles.container}
-      showsVerticalScrollIndicator={false}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary} />}
-    >
+    <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
         <View>
-          <Text style={styles.headerTitle}>Sales</Text>
-          <Text style={styles.headerSub}>Active / Punching</Text>
+          <Text style={styles.headerTitle}>Sales & Active</Text>
+          <Text style={styles.headerSub}>Team Jajpur Performance</Text>
         </View>
-        <TouchableOpacity style={styles.addBtn} onPress={() => router.push('/sale/add')}>
-          <Ionicons name="add" size={20} color={Colors.white} />
-          <Text style={styles.addBtnText}>Add Sale</Text>
+        <TouchableOpacity
+          style={styles.addSaleBtn}
+          onPress={() => router.push('/sale/add')}
+          activeOpacity={0.85}
+        >
+          <Ionicons name="add" size={20} color="#FFFFFF" />
+          <Text style={styles.addSaleBtnText}>Add Sale</Text>
         </TouchableOpacity>
       </View>
 
-      {/* Filter Tabs */}
-      <View style={filterStyles.container}>
-        {(['THIS_MONTH', 'TODAY'] as const).map(f => (
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#800E20" />}
+      >
+        {/* ── 1. BIG SALES HERO CARD ── */}
+        <View style={styles.heroCard}>
+          <View style={styles.heroTop}>
+            <View>
+              <Text style={styles.heroLabel}>TOTAL SALES ({filter === 'TODAY' ? 'TODAY' : 'THIS MONTH'})</Text>
+              <Text style={styles.heroValueMT}>{totalMT} <Text style={styles.heroUnit}>MT</Text></Text>
+              <Text style={styles.heroBagsSub}>{totalBags} Total Bags Logged</Text>
+            </View>
+            <View style={styles.heroBadgeIcon}>
+              <MaterialCommunityIcons name="chart-box" size={32} color="#FFFFFF" />
+            </View>
+          </View>
+
+          <View style={styles.heroDivider} />
+
+          {/* Product Breakdown */}
+          <View style={styles.productRow}>
+            <View style={styles.productCol}>
+              <View style={[styles.productDot, { backgroundColor: '#E53935' }]} />
+              <View>
+                <Text style={styles.productLabel}>ACC F2R</Text>
+                <Text style={styles.productValue}>{f2rBags} bags ({(f2rBags / 20).toFixed(1)} MT)</Text>
+              </View>
+            </View>
+
+            <View style={styles.productCol}>
+              <View style={[styles.productDot, { backgroundColor: '#F59E0B' }]} />
+              <View>
+                <Text style={styles.productLabel}>ACC GOLD</Text>
+                <Text style={styles.productValue}>{goldBags} bags ({(goldBags / 20).toFixed(1)} MT)</Text>
+              </View>
+            </View>
+          </View>
+        </View>
+
+        {/* ── 2. ACTIVE PUNCH CARD ── */}
+        <View style={styles.activeCard}>
+          <View style={styles.activeHeader}>
+            <View style={styles.activeIconCircle}>
+              <MaterialCommunityIcons name="target" size={22} color="#15803D" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.activeTitle}>Active % Punching Tracker</Text>
+              <Text style={styles.activeSub}>Monthly Active Target: {activeTarget}%</Text>
+            </View>
+            <Text style={[styles.activeScoreText, { color: activePercent >= activeTarget ? '#15803D' : '#800E20' }]}>
+              {activePercent}%
+            </Text>
+          </View>
+
+          <View style={styles.progressBarTrack}>
+            <View style={[styles.progressBarFill, { width: `${Math.min(activePercent, 100)}%` as any }]} />
+          </View>
+
+          <View style={styles.activeStatsRow}>
+            <View style={styles.activeStat}>
+              <Text style={styles.activeStatVal}>{totalPunchBags} bg</Text>
+              <Text style={styles.activeStatLbl}>Actual Punch</Text>
+            </View>
+            <View style={styles.activeStat}>
+              <Text style={styles.activeStatVal}>{requiredPunch} bg</Text>
+              <Text style={styles.activeStatLbl}>Required Punch</Text>
+            </View>
+            <View style={styles.activeStat}>
+              <Text style={[styles.activeStatVal, { color: punchGap > 0 ? '#DC2626' : '#15803D' }]}>
+                {punchGap > 0 ? `${punchGap} bg gap` : 'Target Met'}
+              </Text>
+              <Text style={styles.activeStatLbl}>Gap to Target</Text>
+            </View>
+          </View>
+
           <TouchableOpacity
-            key={f}
-            style={[filterStyles.tab, filter === f && filterStyles.tabActive]}
-            onPress={() => setFilter(f)}
+            style={styles.recordPunchBtn}
+            onPress={() => router.push({ pathname: '/sale/add', params: { type: 'punch' } })}
+            activeOpacity={0.85}
           >
-            <Text style={[filterStyles.tabText, filter === f && filterStyles.tabTextActive]}>
-              {f === 'THIS_MONTH' ? 'This Month' : 'Today'}
-            </Text>
+            <Feather name="plus-circle" size={16} color="#800E20" style={{ marginRight: 6 }} />
+            <Text style={styles.recordPunchBtnText}>+ Record Active Punch</Text>
           </TouchableOpacity>
-        ))}
-      </View>
-
-      {/* Total Sales */}
-      <View style={styles.sectionCard}>
-        <Text style={styles.sectionLabel}>TOTAL SALES</Text>
-        <Text style={styles.totalMT}>{totalMT.toFixed(2)} MT</Text>
-        <Text style={styles.totalBags}>{totalBags.toLocaleString()} Bags</Text>
-        <View style={productStyles.row}>
-          <View style={productStyles.item}>
-            <View style={[productStyles.dot, { backgroundColor: Colors.primary }]} />
-            <View>
-              <Text style={productStyles.name}>ACC F2R</Text>
-              <Text style={productStyles.mt}>{bagsToMT(f2rBags).toFixed(2)} MT</Text>
-              <Text style={productStyles.bags}>{f2rBags} Bags</Text>
-            </View>
-          </View>
-          <View style={productStyles.divider} />
-          <View style={productStyles.item}>
-            <View style={[productStyles.dot, { backgroundColor: '#D97706' }]} />
-            <View>
-              <Text style={productStyles.name}>ACC GOLD</Text>
-              <Text style={productStyles.mt}>{bagsToMT(goldBags).toFixed(2)} MT</Text>
-              <Text style={productStyles.bags}>{goldBags} Bags</Text>
-            </View>
-          </View>
         </View>
-      </View>
 
-      {/* Monthly Sales Chart */}
-      {dailyData.some(d => d > 0) && (
-        <View style={styles.sectionCard}>
-          <Text style={styles.sectionLabel}>DAILY SALES — {format(new Date(month + '-01'), 'MMMM yyyy')}</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            <BarChart
-              data={{ labels: dailyLabels, datasets: [{ data: dailyData }] }}
-              width={Math.max(SCREEN_WIDTH - 64, dailyLabels.length * 28)}
-              height={160}
-              chartConfig={chartConfig}
-              style={{ borderRadius: 12, marginTop: 8 }}
-              showValuesOnTopOfBars
-              yAxisLabel=""
-              yAxisSuffix=""
-            />
-          </ScrollView>
+        {/* ── 3. FILTER TABS ── */}
+        <View style={styles.filterTabsRow}>
+          <TouchableOpacity
+            style={[styles.filterTab, filter === 'ALL' && styles.filterTabActive]}
+            onPress={() => setFilter('ALL')}
+          >
+            <Text style={[styles.filterTabText, filter === 'ALL' && styles.filterTabTextActive]}>All Sales ({salesList.length})</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.filterTab, filter === 'TODAY' && styles.filterTabActive]}
+            onPress={() => setFilter('TODAY')}
+          >
+            <Text style={[styles.filterTabText, filter === 'TODAY' && styles.filterTabTextActive]}>Today's Sales</Text>
+          </TouchableOpacity>
         </View>
-      )}
 
-      {/* Active / Punching */}
-      <View style={styles.sectionCard}>
+        {/* ── 4. DEALER LEADERBOARD ── */}
         <View style={styles.sectionHeaderRow}>
-          <Text style={styles.sectionLabel}>ACTIVE / PUNCHING</Text>
-          <Text style={styles.targetText}>Target: {activeTarget}%</Text>
+          <Text style={styles.sectionHeaderTitle}>Dealer Leaderboard</Text>
+          <Text style={styles.sectionHeaderCount}>{rankedDealers.length} Active</Text>
         </View>
-        <View style={activeStyles.grid}>
-          <View style={activeStyles.cell}>
-            <Text style={activeStyles.cellLabel}>Total Sales</Text>
-            <Text style={activeStyles.cellValue}>{totalSalesBagsAll} Bags</Text>
+
+        {rankedDealers.length === 0 ? (
+          <View style={styles.emptyCard}>
+            <Text style={styles.emptyTitle}>No Dealer Sales Recorded</Text>
+            <Text style={styles.emptySub}>Add a sale to see dealer sales leaderboard ranking here.</Text>
           </View>
-          <View style={activeStyles.cell}>
-            <Text style={activeStyles.cellLabel}>Required Punch</Text>
-            <Text style={activeStyles.cellValue}>{requiredPunchAll} Bags</Text>
-          </View>
-          <View style={activeStyles.cell}>
-            <Text style={activeStyles.cellLabel}>Actual Punch</Text>
-            <Text style={activeStyles.cellValue}>{totalPunchAll} Bags</Text>
-          </View>
-          <View style={[activeStyles.cell, activeStyles.highlightCell]}>
-            <Text style={activeStyles.cellLabel}>Active %</Text>
-            <Text style={[activeStyles.cellValue, {
-              color: activePercentAll >= activeTarget ? Colors.success :
-                activePercentAll >= activeTarget * 0.75 ? Colors.warning : Colors.error
-            }]}>
-              {formatPercent(activePercentAll)}
-            </Text>
-          </View>
-        </View>
-        {gapAll > 0 && (
-          <View style={activeStyles.gapBanner}>
-            <Text style={activeStyles.gapText}>⚠️ Gap: {gapAll} bags remaining to reach {activeTarget}% target</Text>
+        ) : (
+          <View style={styles.leaderboardContainer}>
+            {rankedDealers.map((d, idx) => (
+              <View key={d.dealer_id} style={[styles.dealerRow, idx === rankedDealers.length - 1 && { borderBottomWidth: 0 }]}>
+                <View style={[styles.rankBadge, idx === 0 ? styles.rankGold : idx === 1 ? styles.rankSilver : styles.rankBronze]}>
+                  <Text style={styles.rankBadgeText}>{idx + 1}</Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.dealerName}>{d.dealer_name}</Text>
+                  <Text style={styles.dealerArea}>{d.area} • F2R: {d.f2r} | Gold: {d.gold}</Text>
+                </View>
+                <View style={{ alignItems: 'flex-end' }}>
+                  <Text style={styles.dealerMT}>{(d.total_bags / 20).toFixed(1)} MT</Text>
+                  <Text style={styles.dealerBags}>{d.total_bags} bags</Text>
+                </View>
+              </View>
+            ))}
           </View>
         )}
-        <TouchableOpacity style={activeStyles.addPunchBtn} onPress={() => router.push('/sale/add?type=punch' as any)}>
-          <Ionicons name="add-circle-outline" size={18} color={Colors.primary} />
-          <Text style={activeStyles.addPunchText}>Add Punch</Text>
-        </TouchableOpacity>
-      </View>
 
-      {/* Dealer-wise Sales */}
-      {(dealerSales?.length ?? 0) > 0 && (
-        <View style={styles.sectionCard}>
-          <Text style={styles.sectionLabel}>DEALER-WISE SALES</Text>
-          {(dealerSales || []).map((d, i) => (
-            <DealerRow key={d.dealer_id} dealer={d} rank={i + 1} />
-          ))}
+        {/* ── 5. RECENT SALES TRANSACTIONS ── */}
+        <View style={[styles.sectionHeaderRow, { marginTop: 24 }]}>
+          <Text style={styles.sectionHeaderTitle}>Sales Log ({filteredSales.length})</Text>
+          <TouchableOpacity onPress={() => onRefresh()}>
+            <Text style={styles.refreshLink}>Refresh ⟳</Text>
+          </TouchableOpacity>
         </View>
-      )}
 
-      {/* Team Active % */}
-      {(teActive?.length ?? 0) > 0 && (
-        <View style={styles.sectionCard}>
-          <Text style={styles.sectionLabel}>TEAM ACTIVE %</Text>
-          {(teActive || []).map(te => (
-            <TEActiveRow key={te.te} te={te} />
-          ))}
-        </View>
-      )}
+        {filteredSales.length === 0 ? (
+          <View style={styles.emptyCard}>
+            <Text style={styles.emptyTitle}>No Sales Entries Found</Text>
+            <Text style={styles.emptySub}>Tap '+ Add Sale' above to record a new sale in Google Sheets.</Text>
+          </View>
+        ) : (
+          <View style={styles.salesList}>
+            {filteredSales.map((sale) => (
+              <View key={sale.sale_id} style={styles.saleTransactionCard}>
+                <View style={styles.saleIconBox}>
+                  <MaterialCommunityIcons name="package-variant-closed" size={22} color="#800E20" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.saleDealer}>{sale.dealer_name}</Text>
+                  <Text style={styles.saleProduct}>{sale.product} • Logged by {sale.created_by || 'Admin'}</Text>
+                  <Text style={styles.saleDateText}>{normalizeDate(sale.sale_date)}</Text>
+                </View>
+                <View style={{ alignItems: 'flex-end' }}>
+                  <Text style={styles.saleQuantity}>{sale.quantity_bags} Bags</Text>
+                  <Text style={styles.saleMT}>{(Number(sale.quantity_bags) / 20).toFixed(1)} MT</Text>
+                </View>
+              </View>
+            ))}
+          </View>
+        )}
 
-      <View style={{ height: 32 }} />
-    </ScrollView>
+        <View style={{ height: 60 }} />
+      </ScrollView>
+    </View>
   );
 }
 
-// ── Styles ───────────────────────────────────────────────────
-
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.background },
+  container: {
+    flex: 1,
+    backgroundColor: '#F9F5F6',
+  },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: Spacing.base,
-    paddingTop: 56,
+    paddingHorizontal: 18,
+    paddingTop: Platform.OS === 'ios' ? 56 : 38,
     paddingBottom: 16,
-    backgroundColor: Colors.white,
+    backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
+    borderBottomColor: '#F0E2E5',
   },
-  headerTitle: { fontSize: 24, fontWeight: '800', color: Colors.textPrimary },
-  headerSub: { fontSize: 13, color: Colors.textSecondary },
-  addBtn: {
+  headerTitle: {
+    fontSize: 22,
+    fontWeight: '900',
+    color: '#1F0B10',
+    letterSpacing: -0.5,
+  },
+  headerSub: {
+    fontSize: 12,
+    color: '#8A7277',
+    fontWeight: '500',
+    marginTop: 2,
+  },
+  addSaleBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.primary,
-    borderRadius: 12,
+    backgroundColor: '#800E20',
     paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingVertical: 9,
+    borderRadius: 14,
     gap: 4,
+    shadowColor: '#800E20',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 4,
   },
-  addBtnText: { color: Colors.white, fontWeight: '700', fontSize: 14 },
-  sectionCard: {
-    backgroundColor: Colors.white,
-    marginHorizontal: Spacing.base,
-    marginTop: Spacing.md,
-    borderRadius: BorderRadius.xl,
-    padding: Spacing.base,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
+  addSaleBtnText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  scroll: {
+    flex: 1,
+  },
+  scrollContent: {
+    padding: 16,
+  },
+
+  // Hero Card
+  heroCard: {
+    backgroundColor: '#4A0611',
+    borderRadius: 24,
+    padding: 20,
+    marginBottom: 16,
+    shadowColor: '#4A0611',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.35,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  heroTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  heroLabel: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: 'rgba(255, 255, 255, 0.7)',
+    letterSpacing: 1,
+  },
+  heroValueMT: {
+    fontSize: 32,
+    fontWeight: '900',
+    color: '#FFFFFF',
+    marginTop: 2,
+  },
+  heroUnit: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#E53935',
+  },
+  heroBagsSub: {
+    fontSize: 12,
+    color: 'rgba(255, 255, 255, 0.8)',
+    fontWeight: '600',
+    marginTop: 2,
+  },
+  heroBadgeIcon: {
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    backgroundColor: 'rgba(255, 255, 255, 0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  heroDivider: {
+    height: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    marginVertical: 16,
+  },
+  productRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  productCol: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  productDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+  productLabel: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#FFFFFF',
+  },
+  productValue: {
+    fontSize: 11,
+    color: 'rgba(255, 255, 255, 0.75)',
+  },
+
+  // Active Punch Card
+  activeCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    padding: 18,
+    borderWidth: 1.5,
+    borderColor: '#EEDCE1',
+    marginBottom: 20,
+    shadowColor: 'rgba(78, 5, 17, 0.06)',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 1,
+    shadowRadius: 10,
     elevation: 3,
   },
-  sectionLabel: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: Colors.textSecondary,
-    letterSpacing: 1,
+  activeHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
     marginBottom: 12,
   },
-  sectionHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-  targetText: { fontSize: 12, color: Colors.textSecondary, fontWeight: '500' },
-  totalMT: { fontSize: 36, fontWeight: '800', color: Colors.primary },
-  totalBags: { fontSize: 14, color: Colors.textSecondary, marginTop: 2, marginBottom: 16 },
-});
-
-const filterStyles = StyleSheet.create({
-  container: {
-    flexDirection: 'row',
-    paddingHorizontal: Spacing.base,
-    paddingTop: Spacing.md,
-    gap: 8,
-  },
-  tab: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: Colors.white,
-    borderWidth: 1.5,
-    borderColor: Colors.border,
-  },
-  tabActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
-  tabText: { fontSize: 13, fontWeight: '600', color: Colors.textSecondary },
-  tabTextActive: { color: Colors.white },
-});
-
-const productStyles = StyleSheet.create({
-  row: { flexDirection: 'row', alignItems: 'stretch' },
-  item: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 },
-  divider: { width: 1, backgroundColor: Colors.border, marginHorizontal: 16 },
-  dot: { width: 10, height: 10, borderRadius: 5, marginTop: 2 },
-  name: { fontSize: 13, fontWeight: '600', color: Colors.textPrimary },
-  mt: { fontSize: 16, fontWeight: '700', color: Colors.textPrimary, marginTop: 2 },
-  bags: { fontSize: 12, color: Colors.textSecondary },
-});
-
-const activeStyles = StyleSheet.create({
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 12 },
-  cell: {
-    flex: 1,
-    minWidth: '45%',
-    backgroundColor: Colors.background,
-    borderRadius: 12,
-    padding: 12,
-  },
-  highlightCell: { backgroundColor: Colors.primaryLight },
-  cellLabel: { fontSize: 11, color: Colors.textSecondary, fontWeight: '500', marginBottom: 4 },
-  cellValue: { fontSize: 18, fontWeight: '700', color: Colors.textPrimary },
-  gapBanner: {
-    backgroundColor: Colors.warningLight,
-    borderRadius: 10,
-    padding: 10,
-    marginBottom: 12,
-  },
-  gapText: { fontSize: 13, color: Colors.warning, fontWeight: '500' },
-  addPunchBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 10,
-    borderWidth: 1.5,
-    borderColor: Colors.primary,
-    borderRadius: 10,
-  },
-  addPunchText: { color: Colors.primary, fontWeight: '600', fontSize: 14 },
-});
-
-const dealerStyles = StyleSheet.create({
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.borderLight,
-    gap: 8,
-  },
-  rank: { fontSize: 12, fontWeight: '700', color: Colors.textMuted, width: 28 },
-  name: { fontSize: 14, fontWeight: '600', color: Colors.textPrimary },
-  area: { fontSize: 12, color: Colors.textSecondary, marginTop: 1 },
-  mt: { fontSize: 15, fontWeight: '700', color: Colors.primary },
-  productRow: { flexDirection: 'row', gap: 6, marginTop: 2 },
-  f2r: { fontSize: 10, color: Colors.textSecondary },
-  gold: { fontSize: 10, color: '#D97706' },
-  activeBadge: { borderRadius: 6, paddingHorizontal: 6, paddingVertical: 3 },
-  activeText: { fontSize: 9, fontWeight: '700' },
-});
-
-const metricStyles = StyleSheet.create({
-  card: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.background,
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 10,
-    borderLeftWidth: 4,
-    gap: 12,
-  },
-  icon: { fontSize: 22 },
-  label: { fontSize: 12, color: Colors.textSecondary, fontWeight: '500' },
-  value: { fontSize: 20, fontWeight: '800', marginTop: 2 },
-  sub: { fontSize: 11, color: Colors.textSecondary, marginTop: 1 },
-});
-
-const teStyles = StyleSheet.create({
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.borderLight,
-    gap: 12,
-  },
-  avatar: {
+  activeIconCircle: {
     width: 40,
     height: 40,
-    borderRadius: 20,
-    backgroundColor: Colors.primaryLight,
+    borderRadius: 14,
+    backgroundColor: '#DCFCE7',
     alignItems: 'center',
     justifyContent: 'center',
+    marginRight: 10,
   },
-  avatarText: { fontSize: 16, fontWeight: '700', color: Colors.primary },
-  name: { fontSize: 14, fontWeight: '600', color: Colors.textPrimary, marginBottom: 4 },
-  statsRow: { flexDirection: 'row', gap: 8, marginTop: 2 },
-  stat: { fontSize: 11, color: Colors.textSecondary },
-  percent: { fontSize: 20, fontWeight: '800', minWidth: 56, textAlign: 'right' },
+  activeTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#1F0B10',
+  },
+  activeSub: {
+    fontSize: 11,
+    color: '#8A7277',
+    marginTop: 1,
+  },
+  activeScoreText: {
+    fontSize: 22,
+    fontWeight: '900',
+  },
+  progressBarTrack: {
+    height: 8,
+    backgroundColor: '#F5E8EB',
+    borderRadius: 4,
+    overflow: 'hidden',
+    marginBottom: 14,
+  },
+  progressBarFill: {
+    height: '100%',
+    backgroundColor: '#15803D',
+    borderRadius: 4,
+  },
+  activeStatsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 14,
+    paddingTop: 4,
+  },
+  activeStat: {
+    alignItems: 'center',
+  },
+  activeStatVal: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#1F0B10',
+  },
+  activeStatLbl: {
+    fontSize: 10,
+    color: '#8A7277',
+    marginTop: 2,
+  },
+  recordPunchBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FBE8EC',
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E8D5DA',
+  },
+  recordPunchBtnText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#800E20',
+  },
+
+  // Filter Tabs
+  filterTabsRow: {
+    flexDirection: 'row',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 4,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#EEDCE1',
+  },
+  filterTab: {
+    flex: 1,
+    paddingVertical: 10,
+    alignItems: 'center',
+    borderRadius: 12,
+  },
+  filterTabActive: {
+    backgroundColor: '#800E20',
+  },
+  filterTabText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#8A7277',
+  },
+  filterTabTextActive: {
+    color: '#FFFFFF',
+  },
+
+  // Section Headers
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  sectionHeaderTitle: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: '#1F0B10',
+    letterSpacing: -0.3,
+  },
+  sectionHeaderCount: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#800E20',
+  },
+  refreshLink: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#800E20',
+  },
+
+  // Leaderboard
+  leaderboardContainer: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 22,
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    borderWidth: 1.5,
+    borderColor: '#EEDCE1',
+    marginBottom: 20,
+    shadowColor: 'rgba(78, 5, 17, 0.05)',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 1,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  dealerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F7EFF1',
+  },
+  rankBadge: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  rankGold: { backgroundColor: '#FBBF24' },
+  rankSilver: { backgroundColor: '#CBD5E1' },
+  rankBronze: { backgroundColor: '#FDBA74' },
+  rankBadgeText: {
+    fontSize: 13,
+    fontWeight: '900',
+    color: '#1F0B10',
+  },
+  dealerName: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#1F0B10',
+  },
+  dealerArea: {
+    fontSize: 12,
+    color: '#8A7277',
+    marginTop: 2,
+  },
+  dealerMT: {
+    fontSize: 15,
+    fontWeight: '900',
+    color: '#800E20',
+  },
+  dealerBags: {
+    fontSize: 11,
+    color: '#8A7277',
+  },
+
+  // Recent Sales List
+  salesList: {
+    gap: 10,
+  },
+  saleTransactionCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    padding: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: '#EEDCE1',
+    shadowColor: 'rgba(78, 5, 17, 0.04)',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 1,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  saleIconBox: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: '#FBE8EC',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  saleDealer: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#1F0B10',
+  },
+  saleProduct: {
+    fontSize: 12,
+    color: '#6B4E55',
+    marginTop: 2,
+  },
+  saleDateText: {
+    fontSize: 10,
+    color: '#8A7277',
+    marginTop: 2,
+  },
+  saleQuantity: {
+    fontSize: 15,
+    fontWeight: '900',
+    color: '#800E20',
+  },
+  saleMT: {
+    fontSize: 11,
+    color: '#8A7277',
+  },
+
+  emptyCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 20,
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: '#EEDCE1',
+  },
+  emptyTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#1F0B10',
+  },
+  emptySub: {
+    fontSize: 12,
+    color: '#8A7277',
+    marginTop: 4,
+    textAlign: 'center',
+  },
 });

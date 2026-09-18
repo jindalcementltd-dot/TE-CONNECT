@@ -1,374 +1,394 @@
 import React, { useState, useCallback } from 'react';
 import {
-  View, Text, ScrollView, StyleSheet, TouchableOpacity, RefreshControl,
+  View, Text, ScrollView, StyleSheet, TouchableOpacity, RefreshControl, Platform,
 } from 'react-native';
 import { Calendar } from 'react-native-calendars';
 import { router } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { Colors } from '../../src/theme/colors';
-import { Spacing, BorderRadius } from '../../src/theme/spacing';
-import { apiGetMeetings, apiGetMeetingTargetSummary } from '../../src/services/api';
+import { apiGetMeetings, apiGetTargets } from '../../src/services/api';
 import { getUser } from '../../src/services/auth';
-import { currentMonthISO, formatPercent } from '../../src/utils/helpers';
+import { currentMonthISO, formatPercent, normalizeDate } from '../../src/utils/helpers';
 import { Meeting } from '../../src/types';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
 import { format } from 'date-fns';
 
-// ── Sub-components ───────────────────────────────────────────
-
 function MeetingTypeBadge({ type }: { type: Meeting['meeting_type'] }) {
-  const config = {
-    CUSTOMER: { bg: Colors.meetingCustomerBg, text: Colors.meetingCustomer, label: 'CUSTOMER' },
-    CONTRACTOR: { bg: Colors.meetingContractorBg, text: Colors.meetingContractor, label: 'CONTRACTOR' },
-    OTHER: { bg: Colors.meetingOtherBg, text: Colors.meetingOther, label: 'OTHER' },
-  }[type];
+  const isCust = type === 'CUSTOMER';
+  const isCont = type === 'CONTRACTOR';
   return (
-    <View style={[badge.container, { backgroundColor: config.bg }]}>
-      <Text style={[badge.text, { color: config.text }]}>{config.label}</Text>
+    <View style={[
+      badge.container,
+      { backgroundColor: isCust ? '#FBE8EC' : isCont ? '#FFEDD5' : '#CCFBF1' }
+    ]}>
+      <Text style={[
+        badge.text,
+        { color: isCust ? '#800E20' : isCont ? '#C2410C' : '#0F766E' }
+      ]}>
+        {type}
+      </Text>
     </View>
   );
 }
 
 function MeetingStatusBadge({ status }: { status: Meeting['status'] }) {
   const colors: Record<string, { bg: string; text: string }> = {
-    PLANNED: { bg: Colors.infoLight, text: Colors.info },
-    COMPLETED: { bg: Colors.successLight, text: Colors.success },
-    CANCELLED: { bg: Colors.borderLight, text: Colors.textMuted },
-    RESCHEDULED: { bg: Colors.warningLight, text: Colors.warning },
+    PLANNED: { bg: '#FBE8EC', text: '#800E20' },
+    COMPLETED: { bg: '#DCFCE7', text: '#15803D' },
+    CANCELLED: { bg: '#F3F4F6', text: '#6B7280' },
+    RESCHEDULED: { bg: '#FEF3C7', text: '#D97706' },
   };
   const cfg = colors[status] || colors.PLANNED;
   return (
     <View style={[badge.container, { backgroundColor: cfg.bg }]}>
-      <Text style={[badge.text, { color: cfg.text }]}>{status}</Text>
+      <Text style={[badge.text, { color: cfg.text }]}>{status || 'PLANNED'}</Text>
     </View>
   );
 }
 
 function MeetingCard({ meeting, onPress }: { meeting: Meeting; onPress: () => void }) {
   return (
-    <TouchableOpacity style={cardStyles.card} onPress={onPress} activeOpacity={0.85}>
+    <TouchableOpacity style={cardStyles.card} onPress={onPress} activeOpacity={0.88}>
       <View style={cardStyles.header}>
         <MeetingTypeBadge type={meeting.meeting_type} />
         <MeetingStatusBadge status={meeting.status} />
       </View>
-      <Text style={cardStyles.name}>{meeting.meeting_name || '(No name)'}</Text>
-      {meeting.location ? <Text style={cardStyles.detail}>📍 {meeting.location}</Text> : null}
-      {meeting.purpose ? <Text style={cardStyles.detail}>🎯 {meeting.purpose}</Text> : null}
+      <Text style={cardStyles.name}>{meeting.meeting_name || meeting.meeting_type || 'Meeting'}</Text>
+      
+      {meeting.location ? (
+        <View style={cardStyles.infoRow}>
+          <Feather name="map-pin" size={13} color="#8A7277" style={{ marginRight: 6 }} />
+          <Text style={cardStyles.detail}>{meeting.location}</Text>
+        </View>
+      ) : null}
+
+      {meeting.purpose ? (
+        <View style={cardStyles.infoRow}>
+          <Feather name="target" size={13} color="#8A7277" style={{ marginRight: 6 }} />
+          <Text style={cardStyles.detail}>{meeting.purpose}</Text>
+        </View>
+      ) : null}
+
       <View style={cardStyles.footer}>
-        <Text style={cardStyles.te}>👤 {meeting.te || 'Unassigned'}</Text>
-        {meeting.people_count ? <Text style={cardStyles.detail}>👥 {meeting.people_count} people</Text> : null}
-        {meeting.expense_amount ? <Text style={cardStyles.detail}>💰 ₹{meeting.expense_amount}</Text> : null}
+        <View style={cardStyles.teTag}>
+          <Feather name="user" size={12} color="#800E20" style={{ marginRight: 4 }} />
+          <Text style={cardStyles.te}>{meeting.te || meeting.created_by || 'Team Jajpur'}</Text>
+        </View>
+        {meeting.people_count ? (
+          <Text style={cardStyles.detail}>👥 {meeting.people_count} people</Text>
+        ) : null}
       </View>
     </TouchableOpacity>
   );
 }
 
-function TargetCard({ label, completed, target, color }: {
-  label: string; completed: number; target: number; color: string;
-}) {
-  const pct = target > 0 ? Math.min((completed / target) * 100, 100) : 0;
-  return (
-    <View style={targetStyles.card}>
-      <View style={targetStyles.header}>
-        <Text style={targetStyles.label}>{label}</Text>
-        <Text style={targetStyles.fraction}>
-          <Text style={{ color }}>{completed}</Text>/{target}
-        </Text>
-      </View>
-      <View style={targetStyles.barBg}>
-        <View style={[targetStyles.barFill, { width: `${pct}%` as any, backgroundColor: color }]} />
-      </View>
-      <View style={targetStyles.footer}>
-        <Text style={targetStyles.pct}>{formatPercent(pct)}</Text>
-        <Text style={targetStyles.remaining}>
-          {Math.max(0, target - completed)} remaining
-        </Text>
-      </View>
-    </View>
-  );
-}
-
-// ── Main Screen ──────────────────────────────────────────────
-
 export default function MeetingScreen() {
-  const today = new Date().toISOString().split('T')[0];
+  const today = normalizeDate(new Date());
   const [selectedDate, setSelectedDate] = useState(today);
-  const [currentMonth, setCurrentMonth] = useState(currentMonthISO());
   const [refreshing, setRefreshing] = useState(false);
 
-  const { data: meetings, refetch: refetchMeetings } = useQuery({
-    queryKey: ['meetings', currentMonth],
-    queryFn: () => apiGetMeetings({ month: currentMonth }),
-  });
-
-  const { data: targetSummary, refetch: refetchTargets } = useQuery({
-    queryKey: ['meetingTargetSummary', currentMonth],
-    queryFn: () => apiGetMeetingTargetSummary(currentMonth),
+  const { data: allMeetings, refetch: refetchMeetings } = useQuery({
+    queryKey: ['meetings'],
+    queryFn: () => apiGetMeetings(),
   });
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await Promise.all([refetchMeetings(), refetchTargets()]);
+    await refetchMeetings();
     setRefreshing(false);
-  }, []);
+  }, [refetchMeetings]);
 
-  // Build marked dates
+  const meetingsList = allMeetings || [];
+
+  // Build marked dates for calendar
   const markedDates: Record<string, any> = {};
-  (meetings || []).forEach(m => {
-    const date = m.meeting_date.split('T')[0];
-    if (!markedDates[date]) markedDates[date] = { dots: [], marked: true };
-    markedDates[date].dots = markedDates[date].dots || [];
-    const dotColor = m.meeting_type === 'CUSTOMER' ? Colors.meetingCustomer
-      : m.meeting_type === 'CONTRACTOR' ? Colors.meetingContractor
-      : Colors.meetingOther;
-    markedDates[date].dots.push({ color: dotColor });
-  });
-  if (selectedDate) {
-    markedDates[selectedDate] = {
-      ...markedDates[selectedDate],
-      selected: true,
-      selectedColor: Colors.primary,
+  meetingsList.forEach(m => {
+    if (!m.meeting_date) return;
+    const dateKey = normalizeDate(m.meeting_date);
+    if (!dateKey) return;
+    markedDates[dateKey] = {
+      marked: true,
+      dotColor: '#800E20',
     };
-  }
+  });
 
-  const selectedMeetings = (meetings || []).filter(m =>
-    m.meeting_date.split('T')[0] === selectedDate
+  // Selected date highlighting
+  const isSelectedDateMarked = !!markedDates[selectedDate];
+  markedDates[selectedDate] = {
+    ...markedDates[selectedDate],
+    selected: true,
+    selectedColor: '#800E20',
+    selectedTextColor: '#FFFFFF',
+    marked: isSelectedDateMarked,
+    dotColor: '#FFFFFF',
+  };
+
+  const selectedMeetings = meetingsList.filter(m =>
+    normalizeDate(m.meeting_date) === selectedDate
   );
 
-  // Aggregate target summary across all TEs
-  const totalCustomerTarget = (targetSummary || []).reduce((s, t) => s + t.customer_target, 0);
-  const totalCustomerCompleted = (targetSummary || []).reduce((s, t) => s + t.customer_completed, 0);
-  const totalContractorTarget = (targetSummary || []).reduce((s, t) => s + t.contractor_target, 0);
-  const totalContractorCompleted = (targetSummary || []).reduce((s, t) => s + t.contractor_completed, 0);
-  const totalPlanned = (targetSummary || []).reduce((s, t) => s + t.total_planned, 0);
-  const totalCompleted = (targetSummary || []).reduce((s, t) => s + t.total_completed, 0);
+  const customerMeetingsCount = meetingsList.filter(m => m.meeting_type === 'CUSTOMER').length;
+  const contractorMeetingsCount = meetingsList.filter(m => m.meeting_type === 'CONTRACTOR').length;
 
   return (
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
         <View>
-          <Text style={styles.headerTitle}>Meeting</Text>
-          <Text style={styles.headerSub}>Planning Calendar</Text>
+          <Text style={styles.headerTitle}>Meetings</Text>
+          <Text style={styles.headerSub}>Customer & Contractor Meets</Text>
         </View>
         <TouchableOpacity
           style={styles.addBtn}
           onPress={() => router.push('/meeting/add')}
+          activeOpacity={0.85}
         >
-          <Ionicons name="add" size={20} color={Colors.white} />
+          <Ionicons name="add" size={20} color="#FFFFFF" />
           <Text style={styles.addBtnText}>Add Meeting</Text>
         </TouchableOpacity>
       </View>
 
       <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary} />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#800E20" />}
       >
-        {/* Target Summary Cards */}
-        <View style={styles.targetsSection}>
-          <TargetCard
-            label="Customer Meetings"
-            completed={totalCustomerCompleted}
-            target={totalCustomerTarget}
-            color={Colors.meetingCustomer}
-          />
-          <TargetCard
-            label="Contractor Meetings"
-            completed={totalContractorCompleted}
-            target={totalContractorTarget}
-            color={Colors.meetingContractor}
-          />
-          <View style={targetStyles.totalRow}>
-            <View style={targetStyles.totalItem}>
-              <Text style={targetStyles.totalValue}>{totalPlanned}</Text>
-              <Text style={targetStyles.totalLabel}>Total Planned</Text>
-            </View>
-            <View style={targetStyles.totalItem}>
-              <Text style={[targetStyles.totalValue, { color: Colors.success }]}>{totalCompleted}</Text>
-              <Text style={targetStyles.totalLabel}>Completed</Text>
-            </View>
-            <View style={targetStyles.totalItem}>
-              <Text style={[targetStyles.totalValue, { color: Colors.error }]}>
-                {totalPlanned - totalCompleted}
-              </Text>
-              <Text style={targetStyles.totalLabel}>Remaining</Text>
-            </View>
+        {/* ── 1. TARGET SUMMARY CARDS ── */}
+        <View style={styles.targetsRow}>
+          <View style={styles.targetCard}>
+            <Text style={styles.targetCardTitle}>Customer Meets</Text>
+            <Text style={styles.targetCardValue}>{customerMeetingsCount}</Text>
+            <Text style={styles.targetCardSub}>Total Logged</Text>
+          </View>
+
+          <View style={styles.targetCard}>
+            <Text style={styles.targetCardTitle}>Contractor Meets</Text>
+            <Text style={styles.targetCardValue}>{contractorMeetingsCount}</Text>
+            <Text style={styles.targetCardSub}>Total Logged</Text>
           </View>
         </View>
 
-        {/* Calendar */}
-        <View style={styles.calendarContainer}>
+        {/* ── 2. CALENDAR ── */}
+        <View style={styles.calendarCard}>
           <Calendar
-            current={currentMonth + '-01'}
-            onDayPress={(day: any) => setSelectedDate(day.dateString)}
-            onMonthChange={(month: any) => setCurrentMonth(month.dateString.substring(0, 7))}
+            current={selectedDate}
+            onDayPress={(day) => setSelectedDate(day.dateString)}
             markedDates={markedDates}
-            markingType="multi-dot"
             theme={{
-              backgroundColor: Colors.white,
-              calendarBackground: Colors.white,
-              textSectionTitleColor: Colors.textSecondary,
-              selectedDayBackgroundColor: Colors.primary,
-              selectedDayTextColor: Colors.white,
-              todayTextColor: Colors.primary,
-              dayTextColor: Colors.textPrimary,
-              textDisabledColor: Colors.textMuted,
-              arrowColor: Colors.primary,
-              monthTextColor: Colors.textPrimary,
-              textMonthFontWeight: '700',
-              textDayFontWeight: '500',
-              textDayHeaderFontWeight: '600',
+              backgroundColor: '#FFFFFF',
+              calendarBackground: '#FFFFFF',
+              textSectionTitleColor: '#8A7277',
+              selectedDayBackgroundColor: '#800E20',
+              selectedDayTextColor: '#FFFFFF',
+              todayTextColor: '#800E20',
+              dayTextColor: '#1F0B10',
+              textDisabledColor: '#D1C2C5',
+              dotColor: '#800E20',
+              selectedDotColor: '#FFFFFF',
+              arrowColor: '#800E20',
+              monthTextColor: '#1F0B10',
+              textDayFontWeight: '600',
+              textMonthFontWeight: '800',
+              textDayHeaderFontWeight: '700',
             }}
           />
         </View>
 
-        {/* Selected Date Meetings */}
-        <View style={styles.selectedSection}>
-          <View style={styles.selectedHeader}>
-            <Text style={styles.selectedDate}>
-              {format(new Date(selectedDate), 'dd MMMM yyyy')}
-            </Text>
-            <View style={styles.countBadge}>
-              <Text style={styles.countText}>
-                {selectedMeetings.length} Meeting{selectedMeetings.length !== 1 ? 's' : ''}
-              </Text>
-            </View>
+        {/* ── 3. MEETINGS FOR SELECTED DATE ── */}
+        <View style={styles.sectionHeaderRow}>
+          <View>
+            <Text style={styles.sectionTitle}>Meetings on Selected Date</Text>
+            <Text style={styles.sectionDate}>{selectedDate}</Text>
           </View>
+          <View style={styles.countBadge}>
+            <Text style={styles.countBadgeText}>{selectedMeetings.length} Meetings</Text>
+          </View>
+        </View>
 
-          {selectedMeetings.length === 0 ? (
-            <View style={styles.emptyState}>
-              <Text style={styles.emptyEmoji}>🤝</Text>
-              <Text style={styles.emptyTitle}>No meetings on this date</Text>
-              <Text style={styles.emptySub}>Tap + Add Meeting to plan one</Text>
-            </View>
-          ) : (
-            selectedMeetings.map(m => (
+        {selectedMeetings.length === 0 ? (
+          <View style={styles.emptyCard}>
+            <Text style={styles.emptyTitle}>No Meetings Scheduled on This Date</Text>
+            <Text style={styles.emptySub}>Tap below to plan a customer or contractor meeting.</Text>
+            <TouchableOpacity
+              style={styles.emptyAddBtn}
+              onPress={() => router.push('/meeting/add')}
+            >
+              <Text style={styles.emptyAddBtnText}>+ Schedule Meeting</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <View style={styles.list}>
+            {selectedMeetings.map(m => (
               <MeetingCard
                 key={m.meeting_id}
                 meeting={m}
                 onPress={() => router.push(`/meeting/${m.meeting_id}` as any)}
               />
-            ))
-          )}
+            ))}
+          </View>
+        )}
+
+        {/* ── 4. ALL MEETINGS OVERVIEW ── */}
+        <View style={[styles.sectionHeaderRow, { marginTop: 24 }]}>
+          <Text style={styles.sectionTitle}>All Meetings ({meetingsList.length})</Text>
+          <TouchableOpacity onPress={() => onRefresh()}>
+            <Text style={styles.refreshLink}>Refresh ⟳</Text>
+          </TouchableOpacity>
         </View>
 
-        <View style={{ height: 32 }} />
+        {meetingsList.length === 0 ? (
+          <View style={styles.emptyCard}>
+            <Text style={styles.emptyTitle}>No Meetings Found</Text>
+            <Text style={styles.emptySub}>Recorded meetings in Google Sheets will appear here.</Text>
+          </View>
+        ) : (
+          <View style={styles.list}>
+            {meetingsList.map(m => (
+              <MeetingCard
+                key={m.meeting_id}
+                meeting={m}
+                onPress={() => router.push(`/meeting/${m.meeting_id}` as any)}
+              />
+            ))}
+          </View>
+        )}
+
+        <View style={{ height: 60 }} />
       </ScrollView>
     </View>
   );
 }
 
-// ── Styles ───────────────────────────────────────────────────
-
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.background },
+  container: { flex: 1, backgroundColor: '#F9F5F6' },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: Spacing.base,
-    paddingTop: 56,
+    paddingHorizontal: 18,
+    paddingTop: Platform.OS === 'ios' ? 56 : 38,
     paddingBottom: 16,
-    backgroundColor: Colors.white,
+    backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
+    borderBottomColor: '#F0E2E5',
   },
-  headerTitle: { fontSize: 24, fontWeight: '800', color: Colors.textPrimary },
-  headerSub: { fontSize: 13, color: Colors.textSecondary },
+  headerTitle: { fontSize: 22, fontWeight: '900', color: '#1F0B10', letterSpacing: -0.5 },
+  headerSub: { fontSize: 12, color: '#8A7277', fontWeight: '500', marginTop: 2 },
   addBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.primary,
-    borderRadius: 12,
+    backgroundColor: '#800E20',
     paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingVertical: 9,
+    borderRadius: 14,
     gap: 4,
+    shadowColor: '#800E20',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 4,
   },
-  addBtnText: { color: Colors.white, fontWeight: '700', fontSize: 14 },
-  targetsSection: {
-    backgroundColor: Colors.white,
-    marginBottom: 8,
-    paddingHorizontal: Spacing.base,
-    paddingTop: Spacing.base,
-    paddingBottom: Spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-  },
-  calendarContainer: {
-    backgroundColor: Colors.white,
-    marginBottom: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
-  },
-  selectedSection: { paddingHorizontal: Spacing.base },
-  selectedHeader: {
-    flexDirection: 'row',
+  addBtnText: { color: '#FFFFFF', fontSize: 13, fontWeight: '800' },
+  scroll: { flex: 1 },
+  scrollContent: { padding: 16 },
+  targetsRow: { flexDirection: 'row', gap: 12, marginBottom: 16 },
+  targetCard: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 16,
+    borderWidth: 1.5,
+    borderColor: '#EEDCE1',
     alignItems: 'center',
+  },
+  targetCardTitle: { fontSize: 12, fontWeight: '700', color: '#8A7277' },
+  targetCardValue: { fontSize: 28, fontWeight: '900', color: '#800E20', marginVertical: 4 },
+  targetCardSub: { fontSize: 11, color: '#A0858C' },
+  calendarCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    padding: 12,
+    borderWidth: 1.5,
+    borderColor: '#EEDCE1',
+    marginBottom: 20,
+    overflow: 'hidden',
+  },
+  sectionHeaderRow: {
+    flexDirection: 'row',
     justifyContent: 'space-between',
-    marginTop: Spacing.md,
+    alignItems: 'center',
     marginBottom: 12,
   },
-  selectedDate: { fontSize: 16, fontWeight: '700', color: Colors.textPrimary },
+  sectionTitle: { fontSize: 17, fontWeight: '800', color: '#1F0B10', letterSpacing: -0.3 },
+  sectionDate: { fontSize: 12, color: '#800E20', fontWeight: '600', marginTop: 2 },
   countBadge: {
-    backgroundColor: Colors.primaryLight,
-    borderRadius: 20,
+    backgroundColor: '#FBE8EC',
     paddingHorizontal: 10,
     paddingVertical: 4,
+    borderRadius: 10,
   },
-  countText: { fontSize: 12, fontWeight: '600', color: Colors.primary },
-  emptyState: { alignItems: 'center', paddingVertical: 40 },
-  emptyEmoji: { fontSize: 40, marginBottom: 12 },
-  emptyTitle: { fontSize: 16, fontWeight: '600', color: Colors.textPrimary },
-  emptySub: { fontSize: 13, color: Colors.textSecondary, marginTop: 4 },
-});
-
-const badge = StyleSheet.create({
-  container: { borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 },
-  text: { fontSize: 10, fontWeight: '700', letterSpacing: 0.5 },
+  countBadgeText: { fontSize: 12, fontWeight: '800', color: '#800E20' },
+  refreshLink: { fontSize: 13, fontWeight: '700', color: '#800E20' },
+  list: { gap: 10 },
+  emptyCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 20,
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: '#EEDCE1',
+  },
+  emptyTitle: { fontSize: 14, fontWeight: '800', color: '#1F0B10' },
+  emptySub: { fontSize: 12, color: '#8A7277', marginTop: 4, textAlign: 'center' },
+  emptyAddBtn: {
+    backgroundColor: '#800E20',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    marginTop: 12,
+  },
+  emptyAddBtnText: { color: '#FFFFFF', fontSize: 12, fontWeight: '800' },
 });
 
 const cardStyles = StyleSheet.create({
   card: {
-    backgroundColor: Colors.white,
-    borderRadius: BorderRadius.lg,
-    padding: Spacing.md,
-    marginBottom: 10,
-    shadowColor: '#000',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 16,
+    borderWidth: 1.5,
+    borderColor: '#EEDCE1',
+    shadowColor: 'rgba(78, 5, 17, 0.05)',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
+    shadowOpacity: 1,
     shadowRadius: 6,
-    elevation: 3,
+    elevation: 2,
   },
-  header: { flexDirection: 'row', gap: 8, marginBottom: 8 },
-  name: { fontSize: 15, fontWeight: '700', color: Colors.textPrimary, marginBottom: 6 },
-  detail: { fontSize: 12, color: Colors.textSecondary, marginBottom: 3 },
-  footer: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginTop: 6 },
-  te: { fontSize: 12, color: Colors.textSecondary },
+  header: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 },
+  name: { fontSize: 16, fontWeight: '800', color: '#1F0B10', marginBottom: 6 },
+  infoRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
+  detail: { fontSize: 13, color: '#6B4E55' },
+  footer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 10,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#F7EFF1',
+  },
+  teTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FBE8EC',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  te: { fontSize: 11, fontWeight: '700', color: '#800E20' },
 });
 
-const targetStyles = StyleSheet.create({
-  card: {
-    marginBottom: 12,
-  },
-  header: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 },
-  label: { fontSize: 13, fontWeight: '600', color: Colors.textPrimary },
-  fraction: { fontSize: 13, fontWeight: '600', color: Colors.textSecondary },
-  barBg: { height: 8, backgroundColor: Colors.borderLight, borderRadius: 4, overflow: 'hidden' },
-  barFill: { height: 8, borderRadius: 4 },
-  footer: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 },
-  pct: { fontSize: 12, fontWeight: '600', color: Colors.textSecondary },
-  remaining: { fontSize: 12, color: Colors.textMuted },
-  totalRow: {
-    flexDirection: 'row',
-    backgroundColor: Colors.background,
-    borderRadius: 12,
-    padding: 12,
-    marginTop: 8,
-  },
-  totalItem: { flex: 1, alignItems: 'center' },
-  totalValue: { fontSize: 22, fontWeight: '800', color: Colors.textPrimary },
-  totalLabel: { fontSize: 11, color: Colors.textSecondary, marginTop: 2, fontWeight: '500' },
+const badge = StyleSheet.create({
+  container: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
+  text: { fontSize: 10, fontWeight: '800', letterSpacing: 0.5 },
 });
