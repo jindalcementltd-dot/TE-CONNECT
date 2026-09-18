@@ -15,7 +15,7 @@ import {
 import { getUser } from '../../src/services/auth';
 import {
   bagsToMT, currentMonthISO, formatPercent,
-  calcRequiredPunch, calcActivePercent, calcGap, sumBy,
+  calcRequiredPunch, calcActivePercent, calcGap, sumBy, normalizeDate,
 } from '../../src/utils/helpers';
 import { Sale, DealerSalesSummary, TEActiveSummary } from '../../src/types';
 import { Ionicons } from '@expo/vector-icons';
@@ -137,7 +137,7 @@ export default function SalesScreen() {
 
   // Compute totals
   const filteredSales = filter === 'TODAY'
-    ? (sales || []).filter(s => s.sale_date.startsWith(today))
+    ? (sales || []).filter(s => normalizeDate(s.sale_date) === today)
     : (sales || []);
 
   const totalBags = sumBy(filteredSales, 'quantity_bags');
@@ -161,7 +161,7 @@ export default function SalesScreen() {
   for (let d = 1; d <= Math.min(daysInMonth, 15); d++) {
     const dateStr = `${month}-${String(d).padStart(2, '0')}`;
     const dayBags = (sales || [])
-      .filter(s => s.sale_date.startsWith(dateStr))
+      .filter(s => normalizeDate(s.sale_date) === dateStr)
       .reduce((sum, s) => sum + Number(s.quantity_bags), 0);
     dailyLabels.push(String(d));
     dailyData.push(dayBags);

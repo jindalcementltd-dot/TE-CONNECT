@@ -8,10 +8,10 @@ import { useQuery } from '@tanstack/react-query';
 import { Colors } from '../../src/theme/colors';
 import {
   apiGetTodaySummary, apiGetDealerSalesSummary,
-  apiGetSlabs, apiGetMeetings, apiGetSettings,
+  apiGetSlabs, apiGetMeetings, apiGetSettings, apiGetSales,
 } from '../../src/services/api';
 import { getUser } from '../../src/services/auth';
-import { getGreeting, currentMonthISO, bagsToMT } from '../../src/utils/helpers';
+import { getGreeting, currentMonthISO, bagsToMT, normalizeDate } from '../../src/utils/helpers';
 import { User } from '../../src/types';
 import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
 
@@ -21,7 +21,7 @@ export default function HomeScreen() {
   const [user, setUser] = useState<User | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const month = currentMonthISO();
-  const today = new Date().toISOString().split('T')[0];
+  const today = normalizeDate(new Date());
 
   useEffect(() => {
     getUser().then(setUser);
@@ -37,6 +37,11 @@ export default function HomeScreen() {
     queryKey: ['todaySummary', user?.name],
     queryFn: () => apiGetTodaySummary(user?.name),
     enabled: !!user,
+  });
+
+  const { data: allSales, refetch: refetchSales } = useQuery({
+    queryKey: ['sales', month],
+    queryFn: () => apiGetSales({ month }),
   });
 
   const { data: dealerSales, refetch: refetchDealerSales } = useQuery({
@@ -57,7 +62,7 @@ export default function HomeScreen() {
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     await Promise.all([
-      refetchToday(), refetchDealerSales(), refetchSlabs(), refetchMeetings()
+      refetchToday(), refetchSales(), refetchDealerSales(), refetchSlabs(), refetchMeetings()
     ]);
     setRefreshing(false);
   }, []);
@@ -78,18 +83,20 @@ export default function HomeScreen() {
   const targetActiveSetting = Number(settings?.find(s => s.setting === 'active_target')?.value || 80);
 
   // Real Slabs & Meetings for today
-  const todaySlabsList = (allSlabs || []).filter(s => String(s.slab_date).startsWith(today));
-  const todayMeetingsList = (allMeetings || []).filter(m => String(m.meeting_date).startsWith(today));
+  const todaySlabsList = (allSlabs || []).filter(s => normalizeDate(s.slab_date) === today);
+  const todayMeetingsList = (allMeetings || []).filter(m => normalizeDate(m.meeting_date) === today);
+  const todaySalesList = (allSales || []).filter(s => normalizeDate(s.sale_date) === today);
 
   // Real Summary metrics
-  const realSlabsCount = todaySummary?.slabs_today ?? todaySlabsList.length;
-  const realSalesBags = todaySummary?.sales_bags_today ?? 0;
+  const realSlabsCount = todaySlabsList.length || (todaySummary?.slabs_today ?? 0);
+  const todayBagsFromList = todaySalesList.reduce((sum, s) => sum + (Number(s.quantity_bags) || 0), 0);
+  const realSalesBags = todayBagsFromList || (todaySummary?.sales_bags_today ?? 0);
   const realSalesMT = bagsToMT(realSalesBags);
   const realActivePercent = todaySummary?.active_percent ?? 0;
-  const realMeetingsCount = todaySummary?.meetings_today ?? todayMeetingsList.length;
+  const realMeetingsCount = todayMeetingsList.length || (todaySummary?.meetings_today ?? 0);
 
   // Monthly totals from Google Sheets
-  const monthlyTotalBags = (dealerSales || []).reduce((sum, d) => sum + (Number(d.total_bags) || 0), 0);
+  const monthlyTotalBags = (dealerSales || []).reduce((sum, d) => sum + (Number(d.total_bags) || 0), 0) || (allSales || []).reduce((sum, s) => sum + (Number(s.quantity_bags) || 0), 0);
   const monthlyTotalMT = (monthlyTotalBags / 20).toFixed(1);
   const topDealersList = (dealerSales || []).filter(d => (Number(d.total_bags) || 0) > 0).slice(0, 5);
 

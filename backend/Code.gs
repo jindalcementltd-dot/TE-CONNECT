@@ -71,9 +71,20 @@ function sheetToObjects(sheet) {
   const data = sheet.getDataRange().getValues();
   if (data.length < 2) return [];
   const headers = data[0].map(h => String(h).trim());
+  const tz = Session.getScriptTimeZone() || 'Asia/Kolkata';
   return data.slice(1).map(row => {
     const obj = {};
-    headers.forEach((h, i) => { obj[h] = row[i]; });
+    headers.forEach((h, i) => {
+      let val = row[i];
+      if (val instanceof Date) {
+        if (h.endsWith('_at') || h === 'timestamp') {
+          val = Utilities.formatDate(val, tz, "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'");
+        } else {
+          val = Utilities.formatDate(val, tz, 'yyyy-MM-dd');
+        }
+      }
+      obj[h] = val;
+    });
     return obj;
   });
 }

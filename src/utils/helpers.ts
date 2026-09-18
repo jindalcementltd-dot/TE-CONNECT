@@ -1,4 +1,4 @@
-﻿import { format, parseISO, isToday, isThisMonth } from 'date-fns';
+import { format, parseISO, isToday, isThisMonth } from 'date-fns';
 
 // Bags to MT conversion (1 MT = 20 bags)
 export const BAGS_PER_MT = 20;
@@ -49,11 +49,28 @@ export function currentMonthISO(): string {
   return format(new Date(), 'yyyy-MM');
 }
 
+export function normalizeDate(dateStr: any): string {
+  if (!dateStr) return '';
+  const str = String(dateStr).trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str;
+  try {
+    const d = new Date(str);
+    if (isNaN(d.getTime())) return str.substring(0, 10);
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  } catch {
+    return str.substring(0, 10);
+  }
+}
+
 export function getGreeting(): string {
   const hour = new Date().getHours();
-  if (hour < 12) return 'Good Morning';
-  if (hour < 17) return 'Good Afternoon';
-  return 'Good Evening';
+  if (hour >= 4 && hour < 12) return 'Good Morning';
+  if (hour >= 12 && hour < 17) return 'Good Afternoon';
+  if (hour >= 17 && hour < 22) return 'Good Evening';
+  return 'Good Evening'; // Late night
 }
 
 export function calcActivePercent(actualPunch: number, totalSales: number): number {
