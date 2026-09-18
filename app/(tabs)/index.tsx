@@ -15,6 +15,8 @@ import { getGreeting, currentMonthISO, bagsToMT } from '../../src/utils/helpers'
 import { User } from '../../src/types';
 import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
 
+const { width } = Dimensions.get('window');
+
 export default function HomeScreen() {
   const [user, setUser] = useState<User | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -673,7 +675,8 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   bigMetricCard: {
-    width: (width - 48) / 2,
+    flexBasis: '47%',
+    flexGrow: 1,
     backgroundColor: '#FFFFFF',
     borderRadius: 24,
     padding: 16,
