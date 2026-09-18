@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, Modal, Platform } from 'react
 import { Tabs, router } from 'expo-router';
 import { Colors } from '../../src/theme/colors';
 import { getSession } from '../../src/services/auth';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 
 function TabIcon({ name, focused, label }: { name: any; focused: boolean; label: string }) {
   return (
@@ -11,7 +11,7 @@ function TabIcon({ name, focused, label }: { name: any; focused: boolean; label:
       <Ionicons
         name={name}
         size={22}
-        color={focused ? Colors.primary : Colors.textMuted}
+        color={focused ? '#800E20' : '#8A7277'}
       />
       <Text style={[tabStyles.label, focused && tabStyles.labelActive]}>{label}</Text>
     </View>
@@ -21,7 +21,7 @@ function TabIcon({ name, focused, label }: { name: any; focused: boolean; label:
 function PlusTabIcon() {
   return (
     <View style={tabStyles.plusButton}>
-      <Ionicons name="add" size={30} color={Colors.white} />
+      <Ionicons name="add" size={32} color="#FFFFFF" />
     </View>
   );
 }
@@ -31,14 +31,14 @@ function FABModal({ visible, onClose }: { visible: boolean; onClose: () => void 
     <Modal transparent visible={visible} animationType="fade" onRequestClose={onClose}>
       <TouchableOpacity style={fabStyles.overlay} onPress={onClose} activeOpacity={1}>
         <View style={fabStyles.container}>
-          <Text style={fabStyles.title}>What would you like to add?</Text>
+          <Text style={fabStyles.title}>Quick Actions</Text>
 
           <TouchableOpacity
             style={fabStyles.option}
             onPress={() => { onClose(); router.push('/slab/add'); }}
           >
-            <View style={[fabStyles.optionIcon, { backgroundColor: Colors.primaryLight }]}>
-              <Text style={fabStyles.optionEmoji}>🏗️</Text>
+            <View style={[fabStyles.optionIcon, { backgroundColor: '#FBE8EC' }]}>
+              <MaterialCommunityIcons name="office-building" size={24} color="#800E20" />
             </View>
             <View>
               <Text style={fabStyles.optionTitle}>Add Slab</Text>
@@ -51,7 +51,7 @@ function FABModal({ visible, onClose }: { visible: boolean; onClose: () => void 
             onPress={() => { onClose(); router.push('/sale/add'); }}
           >
             <View style={[fabStyles.optionIcon, { backgroundColor: '#FEF3C7' }]}>
-              <Text style={fabStyles.optionEmoji}>📊</Text>
+              <MaterialCommunityIcons name="package-variant-closed" size={24} color="#D97706" />
             </View>
             <View>
               <Text style={fabStyles.optionTitle}>Add Sale</Text>
@@ -63,8 +63,8 @@ function FABModal({ visible, onClose }: { visible: boolean; onClose: () => void 
             style={fabStyles.option}
             onPress={() => { onClose(); router.push('/meeting/add'); }}
           >
-            <View style={[fabStyles.optionIcon, { backgroundColor: '#EDE9FE' }]}>
-              <Text style={fabStyles.optionEmoji}>🤝</Text>
+            <View style={[fabStyles.optionIcon, { backgroundColor: '#FBE8EC' }]}>
+              <Ionicons name="people" size={24} color="#800E20" />
             </View>
             <View>
               <Text style={fabStyles.optionTitle}>Add Meeting</Text>
@@ -106,28 +106,32 @@ export default function TabsLayout() {
         screenOptions={{
           headerShown: false,
           tabBarStyle: styles.tabBar,
-          tabBarActiveTintColor: Colors.primary,
-          tabBarInactiveTintColor: Colors.textMuted,
+          tabBarActiveTintColor: '#800E20',
+          tabBarInactiveTintColor: '#8A7277',
           tabBarShowLabel: false,
         }}
       >
         <Tabs.Screen
           name="index"
           options={{
-            tabBarIcon: ({ focused }) => <TabIcon name="home" focused={focused} label="Home" />,
+            tabBarIcon: ({ focused }) => (
+              <TabIcon name={focused ? "home" : "home-outline"} focused={focused} label="Home" />
+            ),
           }}
         />
         <Tabs.Screen
           name="slab"
           options={{
-            tabBarIcon: ({ focused }) => <TabIcon name="calendar" focused={focused} label="Slab" />,
+            tabBarIcon: ({ focused }) => (
+              <TabIcon name={focused ? "calendar" : "calendar-outline"} focused={focused} label="Slab" />
+            ),
           }}
         />
         <Tabs.Screen
           name="plus"
           options={{
             tabBarIcon: () => <PlusTabIcon />,
-            tabBarButton: (props) => (
+            tabBarButton: () => (
               <TouchableOpacity
                 style={styles.plusTab}
                 onPress={() => setFabVisible(true)}
@@ -142,13 +146,17 @@ export default function TabsLayout() {
         <Tabs.Screen
           name="sales"
           options={{
-            tabBarIcon: ({ focused }) => <TabIcon name="bar-chart" focused={focused} label="Sales" />,
+            tabBarIcon: ({ focused }) => (
+              <TabIcon name={focused ? "stats-chart" : "stats-chart-outline"} focused={focused} label="Sales" />
+            ),
           }}
         />
         <Tabs.Screen
           name="meeting"
           options={{
-            tabBarIcon: ({ focused }) => <TabIcon name="people" focused={focused} label="Meeting" />,
+            tabBarIcon: ({ focused }) => (
+              <TabIcon name={focused ? "people" : "people-outline"} focused={focused} label="Meeting" />
+            ),
           }}
         />
       </Tabs>
@@ -160,22 +168,23 @@ export default function TabsLayout() {
 
 const styles = StyleSheet.create({
   tabBar: {
-    height: Platform.OS === 'ios' ? 88 : 64,
-    backgroundColor: Colors.white,
+    height: Platform.OS === 'ios' ? 88 : 68,
+    backgroundColor: '#FFFFFF',
     borderTopWidth: 1,
-    borderTopColor: Colors.border,
-    shadowColor: '#000',
+    borderTopColor: '#F0E2E5',
+    shadowColor: 'rgba(78, 5, 17, 0.1)',
     shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.06,
+    shadowOpacity: 1,
     shadowRadius: 12,
-    elevation: 12,
-    paddingBottom: Platform.OS === 'ios' ? 20 : 4,
+    elevation: 10,
+    paddingBottom: Platform.OS === 'ios' ? 24 : 8,
+    paddingTop: 6,
   },
   plusTab: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: -20,
+    marginTop: -24,
   },
 });
 
@@ -183,51 +192,54 @@ const tabStyles = StyleSheet.create({
   iconContainer: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingTop: 4,
   },
   label: {
     fontSize: 10,
-    color: Colors.textMuted,
+    color: '#8A7277',
     marginTop: 2,
-    fontWeight: '500',
-  },
-  labelActive: {
-    color: Colors.primary,
     fontWeight: '600',
   },
+  labelActive: {
+    color: '#800E20',
+    fontWeight: '800',
+  },
   plusButton: {
-    width: 58,
-    height: 58,
-    borderRadius: 29,
-    backgroundColor: Colors.primary,
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    backgroundColor: '#800E20',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: Colors.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
-    shadowRadius: 8,
-    elevation: 8,
+    shadowColor: '#800E20',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.45,
+    shadowRadius: 10,
+    elevation: 10,
+    borderWidth: 3,
+    borderColor: '#FFFFFF',
   },
 });
 
 const fabStyles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'rgba(31, 11, 16, 0.65)',
     justifyContent: 'flex-end',
   },
   container: {
-    backgroundColor: Colors.white,
+    backgroundColor: '#FFFFFF',
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     padding: 24,
     paddingBottom: Platform.OS === 'ios' ? 44 : 24,
+    borderWidth: 1,
+    borderColor: '#F0E2E5',
   },
   title: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: Colors.textPrimary,
-    marginBottom: 20,
+    fontSize: 17,
+    fontWeight: '800',
+    color: '#1F0B10',
+    marginBottom: 18,
     textAlign: 'center',
   },
   option: {
@@ -235,37 +247,34 @@ const fabStyles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 14,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.borderLight,
+    borderBottomColor: '#F7EFF1',
   },
   optionIcon: {
     width: 48,
     height: 48,
-    borderRadius: 14,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 16,
   },
-  optionEmoji: {
-    fontSize: 22,
-  },
   optionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: Colors.textPrimary,
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#1F0B10',
   },
   optionSub: {
-    fontSize: 13,
-    color: Colors.textSecondary,
+    fontSize: 12,
+    color: '#8A7277',
     marginTop: 2,
   },
   cancelBtn: {
-    marginTop: 16,
+    marginTop: 18,
     alignItems: 'center',
     paddingVertical: 12,
   },
   cancelText: {
     fontSize: 15,
-    color: Colors.textSecondary,
-    fontWeight: '500',
+    color: '#800E20',
+    fontWeight: '700',
   },
 });

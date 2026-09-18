@@ -1,60 +1,70 @@
-﻿// TE CONNECT — Color System
+// TE CONNECT — Premium Wine/Burgundy Color System (Proton Vault / Luxury Grade)
 export const Colors = {
-  // Primary Red
-  primary: '#C91F2B',
-  primaryDark: '#A91420',
-  primaryAccent: '#E53935',
-  primaryLight: '#FDE8EA',
-  primaryMuted: '#FEF2F3',
+  // Deep Wine / Burgundy Primaries
+  primary: '#800E20',         // Rich Wine Red
+  primaryDark: '#4E0511',     // Deep Burgundy / Midnight Wine
+  primaryDeep: '#38030B',     // Darkest Wine
+  primaryAccent: '#B81D36',   // Radiant Ruby Accent
+  primaryLight: '#FBE8EC',    // Soft Rosé Tint
+  primaryMuted: '#FDF2F4',    // Lightest Rosé
+  primaryBorder: 'rgba(128, 14, 32, 0.12)',
 
-  // Background
-  background: '#F6F7F9',
+  // Gradients Reference
+  gradientStart: '#5E0B1A',
+  gradientMid: '#8A1428',
+  gradientEnd: '#B81D36',
+
+  // Backgrounds & Surface
+  background: '#F9F5F6',      // Warm Soft Rosé Neutral
+  surface: '#FFFFFF',
+  surfaceSubtle: '#FDFBFC',
   white: '#FFFFFF',
 
-  // Text
-  textPrimary: '#172033',
-  textSecondary: '#6B7280',
-  textMuted: '#9CA3AF',
+  // Text Hierarchy
+  textPrimary: '#1F0B10',     // Deep Velvet Dark
+  textSecondary: '#6B4E55',   // Warm Muted Burgundy/Slate
+  textMuted: '#A0858C',       // Soft Ash Rose
   textInverse: '#FFFFFF',
 
-  // Border
-  border: '#E5E7EB',
-  borderLight: '#F3F4F6',
+  // Border & Dividers
+  border: '#EEDCE1',
+  borderLight: '#F6EAEF',
+  borderDark: '#D4B8C1',
 
-  // Status
-  success: '#16A34A',
+  // Status & Feedback
+  success: '#15803D',
   successLight: '#DCFCE7',
   warning: '#D97706',
   warningLight: '#FEF3C7',
   error: '#DC2626',
   errorLight: '#FEE2E2',
-  info: '#2563EB',
-  infoLight: '#DBEAFE',
+  info: '#800E20',
+  infoLight: '#FBE8EC',
 
   // Slab Status
-  statusUpcoming: '#2563EB',
-  statusUpcomingBg: '#DBEAFE',
-  statusCompleted: '#16A34A',
+  statusUpcoming: '#800E20',
+  statusUpcomingBg: '#FBE8EC',
+  statusCompleted: '#15803D',
   statusCompletedBg: '#DCFCE7',
   statusCancelled: '#6B7280',
   statusCancelledBg: '#F3F4F6',
 
   // Meeting Type
-  meetingCustomer: '#7C3AED',
-  meetingCustomerBg: '#EDE9FE',
-  meetingContractor: '#EA580C',
-  meetingContractorBg: '#FFF7ED',
-  meetingOther: '#0891B2',
-  meetingOtherBg: '#E0F2FE',
+  meetingCustomer: '#800E20',
+  meetingCustomerBg: '#FBE8EC',
+  meetingContractor: '#C2410C',
+  meetingContractorBg: '#FFEDD5',
+  meetingOther: '#0F766E',
+  meetingOtherBg: '#CCFBF1',
 
-  // Shadow
-  shadow: 'rgba(0,0,0,0.08)',
-  shadowMedium: 'rgba(0,0,0,0.12)',
+  // Shadows
+  shadow: 'rgba(78, 5, 17, 0.08)',
+  shadowMedium: 'rgba(78, 5, 17, 0.14)',
+  shadowHeavy: 'rgba(78, 5, 17, 0.22)',
+  glow: 'rgba(184, 29, 54, 0.35)',
 
   // Overlay
-  overlay: 'rgba(0,0,0,0.4)',
-
-  // Transparent
+  overlay: 'rgba(31, 11, 16, 0.6)',
   transparent: 'transparent',
 };
 
