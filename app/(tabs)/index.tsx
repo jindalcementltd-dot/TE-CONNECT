@@ -9,10 +9,11 @@ import { Colors } from '../../src/theme/colors';
 import {
   apiGetTodaySummary, apiGetDealerSalesSummary,
   apiGetSlabs, apiGetMeetings, apiGetSettings, apiGetSales,
+  apiGetDealers, apiGetActiveTracker,
 } from '../../src/services/api';
 import { getUser } from '../../src/services/auth';
 import { getGreeting, currentMonthISO, bagsToMT, normalizeDate } from '../../src/utils/helpers';
-import { User } from '../../src/types';
+import { User, DealerSalesSummary } from '../../src/types';
 import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
 
 const { width } = Dimensions.get('window');
@@ -40,29 +41,34 @@ export default function HomeScreen() {
   });
 
   const { data: allSales, refetch: refetchSales } = useQuery({
-    queryKey: ['sales', month],
-    queryFn: () => apiGetSales({ month }),
+    queryKey: ['sales'],
+    queryFn: () => apiGetSales(),
   });
 
-  const { data: dealerSales, refetch: refetchDealerSales } = useQuery({
-    queryKey: ['dealerSalesSummary', month],
-    queryFn: () => apiGetDealerSalesSummary(month),
+  const { data: dealers, refetch: refetchDealers } = useQuery({
+    queryKey: ['dealers'],
+    queryFn: () => apiGetDealers(),
+  });
+
+  const { data: activeTrackers, refetch: refetchActive } = useQuery({
+    queryKey: ['activeTrackers'],
+    queryFn: () => apiGetActiveTracker(),
   });
 
   const { data: allSlabs, refetch: refetchSlabs } = useQuery({
-    queryKey: ['slabs', month],
-    queryFn: () => apiGetSlabs({ month }),
+    queryKey: ['slabs'],
+    queryFn: () => apiGetSlabs(),
   });
 
   const { data: allMeetings, refetch: refetchMeetings } = useQuery({
-    queryKey: ['meetings', month],
-    queryFn: () => apiGetMeetings({ month }),
+    queryKey: ['meetings'],
+    queryFn: () => apiGetMeetings(),
   });
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     await Promise.all([
-      refetchToday(), refetchSales(), refetchDealerSales(), refetchSlabs(), refetchMeetings()
+      refetchToday(), refetchSales(), refetchDealers(), refetchActive(), refetchSlabs(), refetchMeetings()
     ]);
     setRefreshing(false);
   }, []);
@@ -83,22 +89,58 @@ export default function HomeScreen() {
   const targetActiveSetting = Number(settings?.find(s => s.setting === 'active_target')?.value || 80);
 
   // Real Slabs & Meetings for today
-  const todaySlabsList = (allSlabs || []).filter(s => normalizeDate(s.slab_date) === today);
+  const allSlabsList = allSlabs || [];
+  const todaySlabsList = allSlabsList.filter(s => normalizeDate(s.slab_date) === today);
   const todayMeetingsList = (allMeetings || []).filter(m => normalizeDate(m.meeting_date) === today);
-  const todaySalesList = (allSales || []).filter(s => normalizeDate(s.sale_date) === today);
 
-  // Real Summary metrics
-  const realSlabsCount = todaySlabsList.length || (todaySummary?.slabs_today ?? 0);
-  const todayBagsFromList = todaySalesList.reduce((sum, s) => sum + (Number(s.quantity_bags) || 0), 0);
-  const realSalesBags = todayBagsFromList || (todaySummary?.sales_bags_today ?? 0);
-  const realSalesMT = bagsToMT(realSalesBags);
-  const realActivePercent = todaySummary?.active_percent ?? 0;
-  const realMeetingsCount = todayMeetingsList.length || (todaySummary?.meetings_today ?? 0);
-
-  // Monthly totals from Google Sheets
-  const monthlyTotalBags = (dealerSales || []).reduce((sum, d) => sum + (Number(d.total_bags) || 0), 0) || (allSales || []).reduce((sum, s) => sum + (Number(s.quantity_bags) || 0), 0);
+  // Real Sales Calculations
+  const allSalesList = allSales || [];
+  const monthlyTotalBags = allSalesList.reduce((sum, s) => sum + (Number(s.quantity_bags) || 0), 0);
   const monthlyTotalMT = (monthlyTotalBags / 20).toFixed(1);
-  const topDealersList = (dealerSales || []).filter(d => (Number(d.total_bags) || 0) > 0).slice(0, 5);
+
+  const todaySalesList = allSalesList.filter(s => normalizeDate(s.sale_date) === today);
+  const todayBagsFromList = todaySalesList.reduce((sum, s) => sum + (Number(s.quantity_bags) || 0), 0);
+  const realSalesBags = todayBagsFromList > 0 ? todayBagsFromList : monthlyTotalBags;
+  const realSalesMT = bagsToMT(realSalesBags);
+
+  // Punch & Active calculations
+  const totalPunchBags = (activeTrackers || []).reduce((sum, t) => sum + (Number(t.punched_quantity_bags) || 0), 0);
+  const realActivePercent = monthlyTotalBags > 0
+    ? Math.round((totalPunchBags / monthlyTotalBags) * 100)
+    : (todaySummary?.active_percent ?? 0);
+
+  const realSlabsCount = todaySlabsList.length || (todaySummary?.slabs_today ?? allSlabsList.length);
+  const realMeetingsCount = todayMeetingsList.length || (todaySummary?.meetings_today ?? (allMeetings || []).length);
+
+  // Live Leaderboard from allSalesList & dealers
+  const dealerMap: Record<string, { dealer_id: string; dealer_name: string; area: string; total_bags: number }> = {};
+  
+  (dealers || []).forEach(d => {
+    dealerMap[d.dealer_id] = {
+      dealer_id: d.dealer_id,
+      dealer_name: d.dealer_name,
+      area: d.area || territorySetting,
+      total_bags: 0,
+    };
+  });
+
+  allSalesList.forEach(s => {
+    const did = s.dealer_id || s.dealer_name;
+    if (!dealerMap[did]) {
+      dealerMap[did] = {
+        dealer_id: did,
+        dealer_name: s.dealer_name,
+        area: territorySetting,
+        total_bags: 0,
+      };
+    }
+    dealerMap[did].total_bags += Number(s.quantity_bags) || 0;
+  });
+
+  const topDealersList = Object.values(dealerMap)
+    .filter(d => d.total_bags > 0)
+    .sort((a, b) => b.total_bags - a.total_bags)
+    .slice(0, 5);
 
   return (
     <ScrollView
