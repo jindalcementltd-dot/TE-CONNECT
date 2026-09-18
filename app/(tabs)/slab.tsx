@@ -8,7 +8,7 @@ import { router } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { Colors } from '../../src/theme/colors';
 import { apiGetSlabs } from '../../src/services/api';
-import { currentMonthISO } from '../../src/utils/helpers';
+import { currentMonthISO, normalizeDate } from '../../src/utils/helpers';
 import { Slab } from '../../src/types';
 import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
 import { format } from 'date-fns';
@@ -85,14 +85,13 @@ function SlabCard({ slab, onPress }: { slab: Slab; onPress: () => void }) {
 }
 
 export default function SlabScreen() {
-  const today = new Date().toISOString().split('T')[0];
+  const today = normalizeDate(new Date());
   const [selectedDate, setSelectedDate] = useState(today);
-  const [currentMonth, setCurrentMonth] = useState(currentMonthISO());
   const [refreshing, setRefreshing] = useState(false);
 
   const { data: slabs, isLoading, refetch } = useQuery({
-    queryKey: ['slabs', currentMonth],
-    queryFn: () => apiGetSlabs({ month: currentMonth }),
+    queryKey: ['slabs'],
+    queryFn: () => apiGetSlabs(),
   });
 
   const onRefresh = useCallback(async () => {
@@ -105,8 +104,8 @@ export default function SlabScreen() {
   const markedDates: Record<string, any> = {};
   (slabs || []).forEach(slab => {
     if (!slab.slab_date) return;
-    const rawDate = String(slab.slab_date).trim();
-    const dateKey = rawDate.length >= 10 ? rawDate.substring(0, 10) : rawDate;
+    const dateKey = normalizeDate(slab.slab_date);
+    if (!dateKey) return;
     
     markedDates[dateKey] = {
       marked: true,
@@ -127,10 +126,7 @@ export default function SlabScreen() {
   };
 
   const selectedSlabs = (slabs || []).filter(s => {
-    if (!s.slab_date) return false;
-    const rawDate = String(s.slab_date).trim();
-    const dateKey = rawDate.length >= 10 ? rawDate.substring(0, 10) : rawDate;
-    return dateKey === selectedDate;
+    return normalizeDate(s.slab_date) === selectedDate;
   });
 
   const formattedSelectedDate = selectedDate
