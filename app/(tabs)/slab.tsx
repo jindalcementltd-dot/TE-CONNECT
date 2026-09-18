@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity,
   RefreshControl, ActivityIndicator, Platform,
@@ -11,7 +11,7 @@ import { apiGetSlabs } from '../../src/services/api';
 import { currentMonthISO, normalizeDate } from '../../src/utils/helpers';
 import { Slab } from '../../src/types';
 import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
-import { format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 
 function SlabStatusBadge({ status }: { status: Slab['status'] }) {
   const isComp = status === 'COMPLETED';
@@ -32,6 +32,14 @@ function SlabStatusBadge({ status }: { status: Slab['status'] }) {
 }
 
 function SlabCard({ slab, onPress }: { slab: Slab; onPress: () => void }) {
+  const normDate = normalizeDate(slab.slab_date);
+  let formattedDate = normDate;
+  try {
+    if (normDate) {
+      formattedDate = format(new Date(normDate + 'T00:00:00'), 'EEE, dd MMM yyyy');
+    }
+  } catch {}
+
   return (
     <TouchableOpacity style={cardStyles.card} onPress={onPress} activeOpacity={0.88}>
       <View style={cardStyles.header}>
@@ -49,6 +57,12 @@ function SlabCard({ slab, onPress }: { slab: Slab; onPress: () => void }) {
 
       <View style={cardStyles.divider} />
 
+      {/* Date Row */}
+      <View style={cardStyles.infoRow}>
+        <Ionicons name="calendar-outline" size={14} color="#800E20" style={{ marginRight: 6 }} />
+        <Text style={cardStyles.infoText}>Casting Date: <Text style={cardStyles.boldVal}>{formattedDate}</Text></Text>
+      </View>
+
       {slab.customer_name ? (
         <View style={cardStyles.infoRow}>
           <Feather name="home" size={14} color="#8A7277" style={{ marginRight: 6 }} />
@@ -58,7 +72,7 @@ function SlabCard({ slab, onPress }: { slab: Slab; onPress: () => void }) {
 
       <View style={cardStyles.infoRow}>
         <MaterialCommunityIcons name="package-variant" size={15} color="#8A7277" style={{ marginRight: 6 }} />
-        <Text style={cardStyles.infoText}>Expected: <Text style={cardStyles.boldVal}>{slab.expected_cement || 'Not specified'}</Text></Text>
+        <Text style={cardStyles.infoText}>Expected Cement: <Text style={cardStyles.boldVal}>{slab.expected_cement ? `${slab.expected_cement} Bags` : 'Not specified'}</Text></Text>
       </View>
 
       {slab.remark ? (
@@ -75,7 +89,7 @@ function SlabCard({ slab, onPress }: { slab: Slab; onPress: () => void }) {
 
         {(slab.latitude && slab.longitude) ? (
           <View style={cardStyles.gpsTag}>
-            <Ionicons name="location" size={12} color="#16A34A" style={{ marginRight: 4 }} />
+            <Ionicons name="location" size={12} color="#15803D" style={{ marginRight: 4 }} />
             <Text style={cardStyles.gpsTagText}>GPS Logged</Text>
           </View>
         ) : null}
@@ -87,6 +101,7 @@ function SlabCard({ slab, onPress }: { slab: Slab; onPress: () => void }) {
 export default function SlabScreen() {
   const today = normalizeDate(new Date());
   const [selectedDate, setSelectedDate] = useState(today);
+  const [currentMonth, setCurrentMonth] = useState(currentMonthISO());
   const [refreshing, setRefreshing] = useState(false);
 
   const { data: slabs, isLoading, refetch } = useQuery({
@@ -100,13 +115,18 @@ export default function SlabScreen() {
     setRefreshing(false);
   }, [refetch]);
 
+  const allSlabs = useMemo(() => slabs || [], [slabs]);
+
   // Robust date normalization for markings
   const markedDates: Record<string, any> = {};
-  (slabs || []).forEach(slab => {
+  const dateSlabCountMap: Record<string, number> = {};
+
+  allSlabs.forEach(slab => {
     if (!slab.slab_date) return;
     const dateKey = normalizeDate(slab.slab_date);
     if (!dateKey) return;
     
+    dateSlabCountMap[dateKey] = (dateSlabCountMap[dateKey] || 0) + 1;
     markedDates[dateKey] = {
       marked: true,
       dotColor: '#800E20',
@@ -125,13 +145,19 @@ export default function SlabScreen() {
     dotColor: '#FFFFFF',
   };
 
-  const selectedSlabs = (slabs || []).filter(s => {
+  const selectedSlabs = allSlabs.filter(s => {
     return normalizeDate(s.slab_date) === selectedDate;
   });
 
-  const formattedSelectedDate = selectedDate
-    ? format(new Date(selectedDate), 'EEEE, dd MMMM yyyy')
-    : '';
+  // List of distinct dates that have slabs scheduled
+  const scheduledDatesList = Object.keys(dateSlabCountMap).sort();
+
+  let formattedSelectedDate = selectedDate;
+  try {
+    if (selectedDate) {
+      formattedSelectedDate = format(new Date(selectedDate + 'T00:00:00'), 'EEEE, dd MMMM yyyy');
+    }
+  } catch {}
 
   return (
     <View style={styles.container}>
@@ -160,7 +186,7 @@ export default function SlabScreen() {
         {/* Calendar Card */}
         <View style={styles.calendarCard}>
           <Calendar
-            current={selectedDate}
+            current={selectedDate || today}
             onDayPress={(day) => setSelectedDate(day.dateString)}
             onMonthChange={(month) => setCurrentMonth(month.dateString.substring(0, 7))}
             markedDates={markedDates}
@@ -188,6 +214,42 @@ export default function SlabScreen() {
           />
         </View>
 
+        {/* Quick Date Jump Chips */}
+        {scheduledDatesList.length > 0 && (
+          <View style={styles.chipsSection}>
+            <Text style={styles.chipsSectionTitle}>📅 Scheduled Slab Dates (Tap to Jump):</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipsScroll}>
+              {scheduledDatesList.map(dateKey => {
+                const count = dateSlabCountMap[dateKey];
+                const isSelected = dateKey === selectedDate;
+                let label = dateKey;
+                try {
+                  label = format(new Date(dateKey + 'T00:00:00'), 'dd MMM (EEE)');
+                } catch {}
+
+                return (
+                  <TouchableOpacity
+                    key={dateKey}
+                    style={[styles.dateChip, isSelected && styles.dateChipSelected]}
+                    onPress={() => setSelectedDate(dateKey)}
+                    activeOpacity={0.8}
+                  >
+                    <View style={[styles.chipDot, isSelected && styles.chipDotSelected]} />
+                    <Text style={[styles.dateChipText, isSelected && styles.dateChipTextSelected]}>
+                      {dateKey === today ? '📍 Today: ' : ''}{label}
+                    </Text>
+                    <View style={[styles.chipCountBadge, isSelected && styles.chipCountBadgeSelected]}>
+                      <Text style={[styles.chipCountText, isSelected && styles.chipCountTextSelected]}>
+                        {count}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+        )}
+
         {/* Selected Date Header */}
         <View style={styles.sectionHeaderRow}>
           <View>
@@ -205,16 +267,16 @@ export default function SlabScreen() {
             <View style={styles.emptyIconCircle}>
               <MaterialCommunityIcons name="calendar-blank" size={32} color="#800E20" />
             </View>
-            <Text style={styles.emptyTitle}>No Slabs Scheduled on This Date</Text>
+            <Text style={styles.emptyTitle}>No Slabs Scheduled for this date</Text>
             <Text style={styles.emptySub}>
-              Tap the button below to schedule a new casting for {formattedSelectedDate}.
+              Tap below or select one of the highlighted dates in the calendar.
             </Text>
             <TouchableOpacity
               style={styles.emptyAddBtn}
               onPress={() => router.push('/slab/add')}
               activeOpacity={0.85}
             >
-              <Text style={styles.emptyAddBtnText}>+ Schedule Slab for This Date</Text>
+              <Text style={styles.emptyAddBtnText}>+ Schedule Slab for {formattedSelectedDate}</Text>
             </TouchableOpacity>
           </View>
         ) : (
@@ -230,21 +292,21 @@ export default function SlabScreen() {
         )}
 
         {/* Monthly All Slabs Overview */}
-        <View style={[styles.sectionHeaderRow, { marginTop: 24 }]}>
-          <Text style={styles.sectionTitle}>All Slabs This Month ({slabs?.length || 0})</Text>
+        <View style={[styles.sectionHeaderRow, { marginTop: 26 }]}>
+          <Text style={styles.sectionTitle}>All Recorded Slabs ({allSlabs.length})</Text>
           <TouchableOpacity onPress={() => onRefresh()}>
             <Text style={styles.refreshLink}>Refresh ⟳</Text>
           </TouchableOpacity>
         </View>
 
-        {(slabs || []).length === 0 ? (
+        {allSlabs.length === 0 ? (
           <View style={styles.emptyCard}>
             <Text style={styles.emptyTitle}>No Slabs in Google Sheet</Text>
             <Text style={styles.emptySub}>Add your first slab casting to see live calendar dots and records here.</Text>
           </View>
         ) : (
           <View style={styles.slabsList}>
-            {(slabs || []).map(slab => (
+            {allSlabs.map(slab => (
               <SlabCard
                 key={slab.slab_id}
                 slab={slab}
@@ -324,8 +386,71 @@ const styles = StyleSheet.create({
     shadowOpacity: 1,
     shadowRadius: 14,
     elevation: 4,
-    marginBottom: 20,
+    marginBottom: 16,
     overflow: 'hidden',
+  },
+  chipsSection: {
+    marginBottom: 18,
+  },
+  chipsSectionTitle: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#800E20',
+    marginBottom: 8,
+    letterSpacing: 0.2,
+  },
+  chipsScroll: {
+    flexDirection: 'row',
+  },
+  dateChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 14,
+    marginRight: 8,
+    borderWidth: 1.5,
+    borderColor: '#EEDCE1',
+    gap: 6,
+  },
+  dateChipSelected: {
+    backgroundColor: '#800E20',
+    borderColor: '#800E20',
+  },
+  chipDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#800E20',
+  },
+  chipDotSelected: {
+    backgroundColor: '#FFFFFF',
+  },
+  dateChipText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#1F0B10',
+  },
+  dateChipTextSelected: {
+    color: '#FFFFFF',
+  },
+  chipCountBadge: {
+    backgroundColor: '#FBE8EC',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
+  },
+  chipCountBadgeSelected: {
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+  },
+  chipCountText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#800E20',
+  },
+  chipCountTextSelected: {
+    color: '#FFFFFF',
   },
   sectionHeaderRow: {
     flexDirection: 'row',

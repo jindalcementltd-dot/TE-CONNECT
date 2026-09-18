@@ -199,7 +199,7 @@ export default function AddSlabScreen() {
 
   const filteredDealers = (dealers || []).filter(d => {
     const nameMatch = (d.dealer_name || '').toLowerCase().includes(dealerSearch.toLowerCase());
-    const isNotInactive = d.active === undefined || d.active === null || d.active === '' || String(d.active).toLowerCase() !== 'false';
+    const isNotInactive = d.active === undefined || d.active === null || String(d.active) === '' || String(d.active).toLowerCase() !== 'false';
     return nameMatch && isNotInactive;
   });
 

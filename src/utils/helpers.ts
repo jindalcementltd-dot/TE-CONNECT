@@ -42,27 +42,69 @@ export function formatMonthYear(dateStr: string): string {
 }
 
 export function currentDateISO(): string {
-  return format(new Date(), 'yyyy-MM-dd');
+  const now = new Date();
+  const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
+  const istDate = new Date(utc + (5.5 * 60 * 60 * 1000));
+  const y = istDate.getFullYear();
+  const m = String(istDate.getMonth() + 1).padStart(2, '0');
+  const d = String(istDate.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
 }
 
 export function currentMonthISO(): string {
-  return format(new Date(), 'yyyy-MM');
+  return currentDateISO().substring(0, 7);
 }
 
 export function normalizeDate(dateStr: any): string {
   if (!dateStr) return '';
-  const str = String(dateStr).trim();
-  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str;
-  try {
-    const d = new Date(str);
-    if (isNaN(d.getTime())) return str.substring(0, 10);
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${y}-${m}-${day}`;
-  } catch {
-    return str.substring(0, 10);
+  if (dateStr instanceof Date) {
+    const utc = dateStr.getTime() + (dateStr.getTimezoneOffset() * 60000);
+    const istDate = new Date(utc + (5.5 * 60 * 60 * 1000));
+    const y = istDate.getFullYear();
+    const m = String(istDate.getMonth() + 1).padStart(2, '0');
+    const d = String(istDate.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
   }
+  const str = String(dateStr).trim();
+
+  // If already pure YYYY-MM-DD
+  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str;
+
+  // If ISO string with T and Z / offset (e.g. 2026-09-18T18:30:00.000Z)
+  if (str.includes('T') || str.endsWith('Z')) {
+    try {
+      const utcDate = new Date(str);
+      if (!isNaN(utcDate.getTime())) {
+        // Convert to IST (UTC + 5:30)
+        const istOffsetMs = 5.5 * 60 * 60 * 1000;
+        const istDate = new Date(utcDate.getTime() + istOffsetMs);
+        const y = istDate.getUTCFullYear();
+        const m = String(istDate.getUTCMonth() + 1).padStart(2, '0');
+        const d = String(istDate.getUTCDate()).padStart(2, '0');
+        return `${y}-${m}-${d}`;
+      }
+    } catch {}
+  }
+
+  // Check DD/MM/YYYY or DD-MM-YYYY
+  const dmyMatch = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
+  if (dmyMatch) {
+    const day = dmyMatch[1].padStart(2, '0');
+    const month = dmyMatch[2].padStart(2, '0');
+    const year = dmyMatch[3];
+    return `${year}-${month}-${day}`;
+  }
+
+  // Check YYYY/MM/DD
+  const ymdMatch = str.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
+  if (ymdMatch) {
+    const year = ymdMatch[1];
+    const month = ymdMatch[2].padStart(2, '0');
+    const day = ymdMatch[3].padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
+  return str.substring(0, 10);
 }
 
 export function getGreeting(): string {

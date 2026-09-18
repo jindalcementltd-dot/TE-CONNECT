@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity, RefreshControl, Platform,
 } from 'react-native';
@@ -47,6 +47,14 @@ function MeetingStatusBadge({ status }: { status: Meeting['status'] }) {
 }
 
 function MeetingCard({ meeting, onPress }: { meeting: Meeting; onPress: () => void }) {
+  const normDate = normalizeDate(meeting.meeting_date);
+  let formattedDate = normDate;
+  try {
+    if (normDate) {
+      formattedDate = format(new Date(normDate + 'T00:00:00'), 'EEE, dd MMM yyyy');
+    }
+  } catch {}
+
   return (
     <TouchableOpacity style={cardStyles.card} onPress={onPress} activeOpacity={0.88}>
       <View style={cardStyles.header}>
@@ -55,6 +63,12 @@ function MeetingCard({ meeting, onPress }: { meeting: Meeting; onPress: () => vo
       </View>
       <Text style={cardStyles.name}>{meeting.meeting_name || meeting.meeting_type || 'Meeting'}</Text>
       
+      {/* Date Row */}
+      <View style={cardStyles.infoRow}>
+        <Ionicons name="calendar-outline" size={13} color="#800E20" style={{ marginRight: 6 }} />
+        <Text style={cardStyles.detail}>Date: <Text style={{ fontWeight: '700', color: '#1F0B10' }}>{formattedDate}</Text></Text>
+      </View>
+
       {meeting.location ? (
         <View style={cardStyles.infoRow}>
           <Feather name="map-pin" size={13} color="#8A7277" style={{ marginRight: 6 }} />
@@ -85,6 +99,7 @@ function MeetingCard({ meeting, onPress }: { meeting: Meeting; onPress: () => vo
 export default function MeetingScreen() {
   const today = normalizeDate(new Date());
   const [selectedDate, setSelectedDate] = useState(today);
+  const [currentMonth, setCurrentMonth] = useState(currentMonthISO());
   const [refreshing, setRefreshing] = useState(false);
 
   const { data: allMeetings, refetch: refetchMeetings } = useQuery({
@@ -98,14 +113,18 @@ export default function MeetingScreen() {
     setRefreshing(false);
   }, [refetchMeetings]);
 
-  const meetingsList = allMeetings || [];
+  const meetingsList = useMemo(() => allMeetings || [], [allMeetings]);
 
-  // Build marked dates for calendar
+  // Build marked dates for calendar & count map
   const markedDates: Record<string, any> = {};
+  const dateMeetingCountMap: Record<string, number> = {};
+
   meetingsList.forEach(m => {
     if (!m.meeting_date) return;
     const dateKey = normalizeDate(m.meeting_date);
     if (!dateKey) return;
+    
+    dateMeetingCountMap[dateKey] = (dateMeetingCountMap[dateKey] || 0) + 1;
     markedDates[dateKey] = {
       marked: true,
       dotColor: '#800E20',
@@ -127,8 +146,17 @@ export default function MeetingScreen() {
     normalizeDate(m.meeting_date) === selectedDate
   );
 
+  const scheduledDatesList = Object.keys(dateMeetingCountMap).sort();
+
   const customerMeetingsCount = meetingsList.filter(m => m.meeting_type === 'CUSTOMER').length;
   const contractorMeetingsCount = meetingsList.filter(m => m.meeting_type === 'CONTRACTOR').length;
+
+  let formattedSelectedDate = selectedDate;
+  try {
+    if (selectedDate) {
+      formattedSelectedDate = format(new Date(selectedDate + 'T00:00:00'), 'EEEE, dd MMMM yyyy');
+    }
+  } catch {}
 
   return (
     <View style={styles.container}>
@@ -172,8 +200,9 @@ export default function MeetingScreen() {
         {/* ── 2. CALENDAR ── */}
         <View style={styles.calendarCard}>
           <Calendar
-            current={selectedDate}
+            current={selectedDate || today}
             onDayPress={(day) => setSelectedDate(day.dateString)}
+            onMonthChange={(month) => setCurrentMonth(month.dateString.substring(0, 7))}
             markedDates={markedDates}
             theme={{
               backgroundColor: '#FFFFFF',
@@ -195,11 +224,47 @@ export default function MeetingScreen() {
           />
         </View>
 
+        {/* Quick Date Jump Chips */}
+        {scheduledDatesList.length > 0 && (
+          <View style={styles.chipsSection}>
+            <Text style={styles.chipsSectionTitle}>📅 Scheduled Meeting Dates (Tap to Jump):</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipsScroll}>
+              {scheduledDatesList.map(dateKey => {
+                const count = dateMeetingCountMap[dateKey];
+                const isSelected = dateKey === selectedDate;
+                let label = dateKey;
+                try {
+                  label = format(new Date(dateKey + 'T00:00:00'), 'dd MMM (EEE)');
+                } catch {}
+
+                return (
+                  <TouchableOpacity
+                    key={dateKey}
+                    style={[styles.dateChip, isSelected && styles.dateChipSelected]}
+                    onPress={() => setSelectedDate(dateKey)}
+                    activeOpacity={0.8}
+                  >
+                    <View style={[styles.chipDot, isSelected && styles.chipDotSelected]} />
+                    <Text style={[styles.dateChipText, isSelected && styles.dateChipTextSelected]}>
+                      {dateKey === today ? '📍 Today: ' : ''}{label}
+                    </Text>
+                    <View style={[styles.chipCountBadge, isSelected && styles.chipCountBadgeSelected]}>
+                      <Text style={[styles.chipCountText, isSelected && styles.chipCountTextSelected]}>
+                        {count}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+        )}
+
         {/* ── 3. MEETINGS FOR SELECTED DATE ── */}
         <View style={styles.sectionHeaderRow}>
           <View>
             <Text style={styles.sectionTitle}>Meetings on Selected Date</Text>
-            <Text style={styles.sectionDate}>{selectedDate}</Text>
+            <Text style={styles.sectionDate}>{formattedSelectedDate}</Text>
           </View>
           <View style={styles.countBadge}>
             <Text style={styles.countBadgeText}>{selectedMeetings.length} Meetings</Text>
@@ -214,7 +279,7 @@ export default function MeetingScreen() {
               style={styles.emptyAddBtn}
               onPress={() => router.push('/meeting/add')}
             >
-              <Text style={styles.emptyAddBtnText}>+ Schedule Meeting</Text>
+              <Text style={styles.emptyAddBtnText}>+ Schedule Meeting for {formattedSelectedDate}</Text>
             </TouchableOpacity>
           </View>
         ) : (
@@ -230,8 +295,8 @@ export default function MeetingScreen() {
         )}
 
         {/* ── 4. ALL MEETINGS OVERVIEW ── */}
-        <View style={[styles.sectionHeaderRow, { marginTop: 24 }]}>
-          <Text style={styles.sectionTitle}>All Meetings ({meetingsList.length})</Text>
+        <View style={[styles.sectionHeaderRow, { marginTop: 26 }]}>
+          <Text style={styles.sectionTitle}>All Recorded Meetings ({meetingsList.length})</Text>
           <TouchableOpacity onPress={() => onRefresh()}>
             <Text style={styles.refreshLink}>Refresh ⟳</Text>
           </TouchableOpacity>
@@ -311,8 +376,71 @@ const styles = StyleSheet.create({
     padding: 12,
     borderWidth: 1.5,
     borderColor: '#EEDCE1',
-    marginBottom: 20,
+    marginBottom: 16,
     overflow: 'hidden',
+  },
+  chipsSection: {
+    marginBottom: 18,
+  },
+  chipsSectionTitle: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#800E20',
+    marginBottom: 8,
+    letterSpacing: 0.2,
+  },
+  chipsScroll: {
+    flexDirection: 'row',
+  },
+  dateChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 14,
+    marginRight: 8,
+    borderWidth: 1.5,
+    borderColor: '#EEDCE1',
+    gap: 6,
+  },
+  dateChipSelected: {
+    backgroundColor: '#800E20',
+    borderColor: '#800E20',
+  },
+  chipDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#800E20',
+  },
+  chipDotSelected: {
+    backgroundColor: '#FFFFFF',
+  },
+  dateChipText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#1F0B10',
+  },
+  dateChipTextSelected: {
+    color: '#FFFFFF',
+  },
+  chipCountBadge: {
+    backgroundColor: '#FBE8EC',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
+  },
+  chipCountBadgeSelected: {
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+  },
+  chipCountText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#800E20',
+  },
+  chipCountTextSelected: {
+    color: '#FFFFFF',
   },
   sectionHeaderRow: {
     flexDirection: 'row',

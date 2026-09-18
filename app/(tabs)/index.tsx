@@ -109,8 +109,8 @@ export default function HomeScreen() {
     ? Math.round((totalPunchBags / monthlyTotalBags) * 100)
     : (todaySummary?.active_percent ?? 0);
 
-  const realSlabsCount = todaySlabsList.length || (todaySummary?.slabs_today ?? allSlabsList.length);
-  const realMeetingsCount = todayMeetingsList.length || (todaySummary?.meetings_today ?? (allMeetings || []).length);
+  const realSlabsCount = todaySlabsList.length > 0 ? todaySlabsList.length : allSlabsList.length;
+  const realMeetingsCount = todayMeetingsList.length > 0 ? todayMeetingsList.length : (allMeetings || []).length;
 
   // Live Leaderboard from allSalesList & dealers
   const dealerMap: Record<string, { dealer_id: string; dealer_name: string; area: string; total_bags: number }> = {};
@@ -313,7 +313,7 @@ export default function HomeScreen() {
           activeOpacity={0.85}
         >
           <View style={[styles.actionIconContainer, { backgroundColor: '#800E20' }]}>
-            <MaterialCommunityIcons name="office-building-plus" size={24} color="#FFFFFF" />
+            <MaterialCommunityIcons name="office-building-marker" size={24} color="#FFFFFF" />
           </View>
           <View style={styles.actionTextContainer}>
             <Text style={styles.actionTitleBig}>Add New Slab</Text>
