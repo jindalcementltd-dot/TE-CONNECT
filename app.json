@@ -50,7 +50,8 @@
         {
           "cameraPermission": "TE CONNECT needs camera access."
         }
-      ]
+      ],
+      "expo-font"
     ],
     "scheme": "teconnect",
     "extra": {

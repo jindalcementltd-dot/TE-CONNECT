@@ -1,4 +1,4 @@
-﻿import { APPS_SCRIPT_URL, API_TIMEOUT } from '../config/api';
+import { APPS_SCRIPT_URL, API_TIMEOUT } from '../config/api';
 import {
   ApiResponse, User, Dealer, Contractor, Slab, Sale,
   ActiveTracker, Meeting, Target, Setting,
@@ -48,7 +48,7 @@ async function post<T>(action: string, body: Record<string, any>): Promise<ApiRe
 
   const response = await fetchWithTimeout(url.toString(), {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
     body: JSON.stringify({ action, ...body }),
   });
   if (!response.ok) throw new ApiError(`Server error: ${response.status}`);

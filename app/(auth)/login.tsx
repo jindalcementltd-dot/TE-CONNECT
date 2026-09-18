@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   KeyboardAvoidingView, Platform, ScrollView, ActivityIndicator, Image,
@@ -6,6 +6,7 @@ import {
 import { router } from 'expo-router';
 import { Colors } from '../../src/theme/colors';
 import { login } from '../../src/services/auth';
+import { apiGetSettings } from '../../src/services/api';
 import Toast from 'react-native-toast-message';
 
 export default function LoginScreen() {
@@ -13,6 +14,25 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [serverStatus, setServerStatus] = useState<'checking' | 'connected' | 'error'>('checking');
+
+  useEffect(() => {
+    checkServer();
+  }, []);
+
+  const checkServer = async () => {
+    setServerStatus('checking');
+    try {
+      const res = await apiGetSettings();
+      if (res && res.length > 0) {
+        setServerStatus('connected');
+      } else {
+        setServerStatus('error');
+      }
+    } catch {
+      setServerStatus('error');
+    }
+  };
 
   const handleLogin = async () => {
     if (!loginId.trim() || !password.trim()) {
@@ -51,9 +71,12 @@ export default function LoginScreen() {
           </View>
           <Text style={styles.appName}>TE CONNECT</Text>
           <Text style={styles.appTagline}>Field Management System</Text>
-          <View style={styles.teamBadge}>
-            <Text style={styles.teamBadgeText}>TEAM JAJPUR</Text>
-          </View>
+          
+          <TouchableOpacity onPress={checkServer} style={styles.teamBadge}>
+            {serverStatus === 'checking' && <Text style={styles.teamBadgeText}>🔄 Checking Connection...</Text>}
+            {serverStatus === 'connected' && <Text style={styles.teamBadgeText}>🟢 API Connected</Text>}
+            {serverStatus === 'error' && <Text style={styles.teamBadgeText}>🔴 API Disconnected</Text>}
+          </TouchableOpacity>
         </View>
 
         {/* Login Card */}
