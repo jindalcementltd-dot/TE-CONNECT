@@ -1,33 +1,35 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity,
-  RefreshControl, Dimensions, Platform, Image,
+  RefreshControl, Dimensions, Platform,
 } from 'react-native';
 import { router } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { Colors } from '../../src/theme/colors';
-import { Spacing, BorderRadius } from '../../src/theme/spacing';
 import {
   apiGetTodaySummary, apiGetDealerSalesSummary,
-  apiGetSlabs, apiGetMeetings, apiGetTEActiveSummary,
+  apiGetSlabs, apiGetMeetings, apiGetSettings,
 } from '../../src/services/api';
 import { getUser } from '../../src/services/auth';
-import { getGreeting, formatDate, currentMonthISO, bagsToMT } from '../../src/utils/helpers';
+import { getGreeting, currentMonthISO, bagsToMT } from '../../src/utils/helpers';
 import { User } from '../../src/types';
 import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
-
-const { width } = Dimensions.get('window');
 
 export default function HomeScreen() {
   const [user, setUser] = useState<User | null>(null);
   const [refreshing, setRefreshing] = useState(false);
-  const [selectedMonth, setSelectedMonth] = useState('September 2026');
   const month = currentMonthISO();
   const today = new Date().toISOString().split('T')[0];
 
   useEffect(() => {
     getUser().then(setUser);
   }, []);
+
+  // 100% Live Google Sheets Queries
+  const { data: settings } = useQuery({
+    queryKey: ['settings'],
+    queryFn: () => apiGetSettings(),
+  });
 
   const { data: todaySummary, refetch: refetchToday } = useQuery({
     queryKey: ['todaySummary', user?.name],
@@ -40,14 +42,14 @@ export default function HomeScreen() {
     queryFn: () => apiGetDealerSalesSummary(month),
   });
 
-  const { data: todaySlabs, refetch: refetchSlabs } = useQuery({
-    queryKey: ['slabs', today],
+  const { data: allSlabs, refetch: refetchSlabs } = useQuery({
+    queryKey: ['slabs', month],
     queryFn: () => apiGetSlabs({ month }),
   });
 
-  const { data: todayMeetings, refetch: refetchMeetings } = useQuery({
-    queryKey: ['meetings', today],
-    queryFn: () => apiGetMeetings({ date: today }),
+  const { data: allMeetings, refetch: refetchMeetings } = useQuery({
+    queryKey: ['meetings', month],
+    queryFn: () => apiGetMeetings({ month }),
   });
 
   const onRefresh = useCallback(async () => {
@@ -60,17 +62,34 @@ export default function HomeScreen() {
 
   const greeting = getGreeting();
   
-  // Format formatted date string: e.g. "Tue, 17 Sep 2026"
+  // Format current date: e.g. "Tuesday, 19 Sep 2026"
   const now = new Date();
-  const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  const formattedToday = `${days[now.getDay()]}, ${now.getDate()} ${months[now.getMonth()]} ${now.getFullYear()}`;
+  const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const fullMonthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  const formattedDate = `${dayNames[now.getDay()]}, ${now.getDate()} ${monthNames[now.getMonth()]} ${now.getFullYear()}`;
+  const currentMonthLabel = `${fullMonthNames[now.getMonth()]} ${now.getFullYear()}`;
 
-  // Default values matching mockup with fallback to live data
-  const slabsCount = todaySummary?.slabs_today ?? 2;
-  const salesBags = todaySummary?.sales_bags_today ? todaySummary.sales_bags_today : 400;
-  const activePercent = todaySummary?.active_percent ? todaySummary.active_percent : 80;
-  const meetingsCount = todaySummary?.meetings_today ?? 1;
+  // Live Sheet Data calculations
+  const territorySetting = settings?.find(s => s.setting === 'territory')?.value || user?.territory || 'Jajpur';
+  const teamSetting = settings?.find(s => s.setting === 'team')?.value || user?.team || 'Team Jajpur';
+  const targetActiveSetting = Number(settings?.find(s => s.setting === 'active_target')?.value || 80);
+
+  // Real Slabs & Meetings for today
+  const todaySlabsList = (allSlabs || []).filter(s => String(s.slab_date).startsWith(today));
+  const todayMeetingsList = (allMeetings || []).filter(m => String(m.meeting_date).startsWith(today));
+
+  // Real Summary metrics
+  const realSlabsCount = todaySummary?.slabs_today ?? todaySlabsList.length;
+  const realSalesBags = todaySummary?.sales_bags_today ?? 0;
+  const realSalesMT = bagsToMT(realSalesBags);
+  const realActivePercent = todaySummary?.active_percent ?? 0;
+  const realMeetingsCount = todaySummary?.meetings_today ?? todayMeetingsList.length;
+
+  // Monthly totals from Google Sheets
+  const monthlyTotalBags = (dealerSales || []).reduce((sum, d) => sum + (Number(d.total_bags) || 0), 0);
+  const monthlyTotalMT = (monthlyTotalBags / 20).toFixed(1);
+  const topDealersList = (dealerSales || []).filter(d => (Number(d.total_bags) || 0) > 0).slice(0, 5);
 
   return (
     <ScrollView
@@ -79,376 +98,334 @@ export default function HomeScreen() {
       showsVerticalScrollIndicator={false}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary} />}
     >
-      {/* ── TOP HEADER ── */}
+      {/* ── 1. PROTON-GRADE TOP HEADER (BIG & LUXURY) ── */}
       <View style={styles.topHeader}>
         <View style={styles.headerLeft}>
-          <Text style={styles.greetingText}>{greeting},</Text>
-          <View style={styles.nameRow}>
-            <Text style={styles.userName}>{user?.name || 'Rehan'}</Text>
-            <Text style={styles.handWave}> 👋</Text>
+          <Text style={styles.greetingSubtitle}>{greeting},</Text>
+          <Text style={styles.userNameBig}>{user?.name || 'Administrator'}</Text>
+          <View style={styles.badgePill}>
+            <View style={styles.greenLiveDot} />
+            <Text style={styles.badgePillText}>{teamSetting} • {territorySetting}</Text>
           </View>
-          <Text style={styles.teamTerritory}>Team Jajpur • Jajpur Territory</Text>
         </View>
 
         <View style={styles.headerRight}>
-          {/* Notification Bell with Badge */}
-          <TouchableOpacity style={styles.notificationBtn} activeOpacity={0.8}>
-            <Ionicons name="notifications-outline" size={22} color={Colors.textPrimary} />
+          <TouchableOpacity style={styles.notificationBtn} activeOpacity={0.8} onPress={() => onRefresh()}>
+            <Ionicons name="notifications-outline" size={24} color="#1F0B10" />
             <View style={styles.notifBadge}>
-              <Text style={styles.notifBadgeText}>3</Text>
+              <Text style={styles.notifBadgeText}>0</Text>
             </View>
           </TouchableOpacity>
 
-          {/* User Avatar */}
           <TouchableOpacity style={styles.avatarWrap} activeOpacity={0.8}>
             <View style={styles.avatarCircle}>
-              <Text style={styles.avatarInitials}>
-                {user?.name ? user.name.charAt(0).toUpperCase() : 'R'}
+              <Text style={styles.avatarLetter}>
+                {user?.name ? user.name.charAt(0).toUpperCase() : 'A'}
               </Text>
             </View>
           </TouchableOpacity>
         </View>
       </View>
 
-      {/* ── HERO BANNER CARD ── */}
-      <View style={styles.heroCard}>
-        {/* Background glow & subtle overlay */}
-        <View style={styles.heroOverlayLeft}>
-          <View style={styles.brandTitleRow}>
-            <Text style={styles.heroBrandTE}>TE </Text>
-            <Text style={styles.heroBrandCONNECT}>CONNECT</Text>
-          </View>
-          <Text style={styles.heroTeamJajpur}>TEAM JAJPUR</Text>
-
-          <View style={styles.heroTaglineContainer}>
-            <Text style={styles.heroTagline}>STRONGER SITES</Text>
-            <Text style={styles.heroTagline}>STRONGER TOMORROW</Text>
-          </View>
-        </View>
-
-        {/* Right side cement bags & badge graphic */}
-        <View style={styles.heroRightGraphic}>
-          <View style={styles.heroSubBadge}>
-            <Text style={styles.heroSubBadgeText}>BUILD</Text>
-            <Text style={styles.heroSubBadgeText}>CONNECT</Text>
-            <Text style={styles.heroSubBadgeText}>GROW</Text>
-          </View>
-
-          <View style={styles.cementBagsRow}>
-            {/* ACC F2R Bag mockup */}
-            <View style={[styles.cementBag, styles.f2rBag]}>
-              <Text style={styles.bagBrand}>ACC</Text>
-              <Text style={styles.bagModel}>F2R</Text>
+      {/* ── 2. BIG HERO CARD (PROTON VAULT WINE GRADIENT) ── */}
+      <View style={styles.heroCardBig}>
+        <View style={styles.heroTopRow}>
+          <View>
+            <View style={styles.brandTitleRow}>
+              <Text style={styles.heroBrandTE}>TE </Text>
+              <Text style={styles.heroBrandCONNECT}>CONNECT</Text>
             </View>
-            {/* ACC GOLD Bag mockup */}
-            <View style={[styles.cementBag, styles.goldBag]}>
-              <Text style={styles.bagBrand}>ACC</Text>
-              <Text style={styles.bagModelGold}>GOLD</Text>
-            </View>
+            <Text style={styles.heroTeamSubtitle}>{teamSetting.toUpperCase()} COMMAND CENTER</Text>
+          </View>
+          <View style={styles.securityShieldCircle}>
+            <MaterialCommunityIcons name="shield-check" size={32} color="#FFFFFF" />
+          </View>
+        </View>
+
+        <View style={styles.heroDivider} />
+
+        <View style={styles.heroBottomRow}>
+          <View style={styles.heroStatItem}>
+            <Text style={styles.heroStatLabel}>MONTH SALES</Text>
+            <Text style={styles.heroStatValue}>{monthlyTotalMT} <Text style={styles.heroStatUnit}>MT</Text></Text>
+          </View>
+          <View style={styles.heroStatSeparator} />
+          <View style={styles.heroStatItem}>
+            <Text style={styles.heroStatLabel}>ACTIVE TARGET</Text>
+            <Text style={styles.heroStatValue}>{targetActiveSetting}%</Text>
+          </View>
+          <View style={styles.heroStatSeparator} />
+          <View style={styles.heroStatItem}>
+            <Text style={styles.heroStatLabel}>SLABS (MTD)</Text>
+            <Text style={styles.heroStatValue}>{allSlabs?.length || 0}</Text>
           </View>
         </View>
       </View>
 
-      {/* Carousel Pagination Dots */}
-      <View style={styles.dotsContainer}>
-        <View style={[styles.dot, styles.activeDot]} />
-        <View style={styles.dot} />
-        <View style={styles.dot} />
-      </View>
-
-      {/* ── TODAY SECTION ── */}
-      <View style={styles.sectionHeaderRow}>
-        <Text style={styles.sectionTitleMain}>Today</Text>
-        <View style={styles.dateChip}>
-          <Ionicons name="calendar-outline" size={14} color={Colors.textSecondary} style={{ marginRight: 4 }} />
-          <Text style={styles.dateChipText}>{formattedToday}</Text>
+      {/* ── 3. DATE BAR ── */}
+      <View style={styles.dateBarRow}>
+        <Text style={styles.sectionHeaderTitle}>Today's Live Metrics</Text>
+        <View style={styles.dateBadge}>
+          <Ionicons name="calendar" size={14} color="#800E20" style={{ marginRight: 6 }} />
+          <Text style={styles.dateBadgeText}>{formattedDate}</Text>
         </View>
       </View>
 
-      {/* 4 Metrics Cards */}
-      <View style={styles.metricsGrid}>
-        {/* Slabs */}
-        <View style={styles.metricCard}>
-          <View style={styles.metricIconBox}>
-            <MaterialCommunityIcons name="office-building" size={20} color={Colors.primary} />
-          </View>
-          <Text style={styles.metricValue}>{slabsCount}</Text>
-          <Text style={styles.metricLabel}>Slabs</Text>
-          <View style={styles.trendRow}>
-            <Feather name="arrow-up" size={12} color="#16A34A" />
-            <Text style={styles.trendTextGreen}>+100%</Text>
-          </View>
-        </View>
-
-        {/* Sales */}
-        <View style={styles.metricCard}>
-          <View style={styles.metricIconBox}>
-            <MaterialCommunityIcons name="package-variant-closed" size={20} color={Colors.primary} />
-          </View>
-          <Text style={styles.metricValue}>{salesBags}</Text>
-          <Text style={styles.metricLabel}>Sales (Bags)</Text>
-          <View style={styles.trendRow}>
-            <Feather name="arrow-up" size={12} color="#16A34A" />
-            <Text style={styles.trendTextGreen}>+12%</Text>
-          </View>
-        </View>
-
-        {/* Active */}
-        <View style={styles.metricCard}>
-          <View style={styles.metricIconBox}>
-            <MaterialCommunityIcons name="target" size={20} color={Colors.primary} />
-          </View>
-          <Text style={styles.metricValue}>{activePercent}%</Text>
-          <Text style={styles.metricLabel}>Active</Text>
-          <View style={styles.trendRow}>
-            <Feather name="arrow-up" size={12} color="#16A34A" />
-            <Text style={styles.trendTextGreen}>+5%</Text>
-          </View>
-        </View>
-
-        {/* Meetings */}
-        <View style={styles.metricCard}>
-          <View style={styles.metricIconBox}>
-            <Ionicons name="people" size={20} color={Colors.primary} />
-          </View>
-          <Text style={styles.metricValue}>{meetingsCount}</Text>
-          <Text style={styles.metricLabel}>Meetings</Text>
-          <View style={styles.trendRow}>
-            <Feather name="arrow-down" size={12} color="#DC2626" />
-            <Text style={styles.trendTextRed}>-50%</Text>
-          </View>
-        </View>
-      </View>
-
-      {/* ── QUICK ACTIONS ── */}
-      <View style={styles.sectionHeaderRow}>
-        <Text style={styles.sectionTitle}>Quick Actions</Text>
-        <TouchableOpacity onPress={() => router.push('/(tabs)/plus')}>
-          <Text style={styles.seeAllLink}>See All ›</Text>
-        </TouchableOpacity>
-      </View>
-
-      <View style={styles.quickActionsRow}>
+      {/* ── 4. BIG 2x2 METRICS GRID (BOLD & SPACIOUS) ── */}
+      <View style={styles.bigMetricsGrid}>
+        {/* Card 1: Slabs */}
         <TouchableOpacity
-          style={styles.qaCard}
-          onPress={() => router.push('/slab/add')}
-          activeOpacity={0.8}
-        >
-          <View style={styles.qaIconCircle}>
-            <MaterialCommunityIcons name="office-building" size={22} color={Colors.primary} />
-          </View>
-          <View style={styles.qaTextWrap}>
-            <Text style={styles.qaTitle}>Add Slab</Text>
-            <Text style={styles.qaSub}>Log new slab</Text>
-          </View>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.qaCard}
-          onPress={() => router.push('/sale/add')}
-          activeOpacity={0.8}
-        >
-          <View style={styles.qaIconCircle}>
-            <MaterialCommunityIcons name="package-variant-closed" size={22} color={Colors.primary} />
-          </View>
-          <View style={styles.qaTextWrap}>
-            <Text style={styles.qaTitle}>Add Sale</Text>
-            <Text style={styles.qaSub}>Record sales</Text>
-          </View>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.qaCard}
-          onPress={() => router.push('/meeting/add')}
-          activeOpacity={0.8}
-        >
-          <View style={styles.qaIconCircle}>
-            <Ionicons name="people" size={22} color={Colors.primary} />
-          </View>
-          <View style={styles.qaTextWrap}>
-            <Text style={styles.qaTitle}>Add Meeting</Text>
-            <Text style={styles.qaSub}>Plan or log</Text>
-          </View>
-        </TouchableOpacity>
-      </View>
-
-      {/* ── TODAY'S SCHEDULE ── */}
-      <View style={styles.sectionHeaderRow}>
-        <Text style={styles.sectionTitle}>Today's Schedule</Text>
-        <TouchableOpacity onPress={() => router.push('/(tabs)/slab')}>
-          <Text style={styles.seeAllLink}>View All ›</Text>
-        </TouchableOpacity>
-      </View>
-
-      <View style={styles.scheduleRow}>
-        {/* Left Schedule Card: Slabs Today */}
-        <TouchableOpacity
-          style={styles.scheduleCard}
+          style={styles.bigMetricCard}
           onPress={() => router.push('/(tabs)/slab')}
-          activeOpacity={0.9}
+          activeOpacity={0.85}
         >
-          <View style={styles.scheduleHeader}>
-            <View style={styles.scheduleIconWrap}>
-              <MaterialCommunityIcons name="office-building" size={18} color={Colors.primary} />
+          <View style={styles.cardHeaderRow}>
+            <View style={[styles.largeIconBox, { backgroundColor: '#FBE8EC' }]}>
+              <MaterialCommunityIcons name="office-building" size={26} color="#800E20" />
             </View>
-            <View style={{ flex: 1, marginLeft: 8 }}>
-              <Text style={styles.scheduleTitle}>Slabs Today</Text>
-              <Text style={styles.scheduleSubTitle}>2 Scheduled</Text>
-            </View>
-            <Feather name="chevron-right" size={16} color={Colors.textMuted} />
-          </View>
-
-          <View style={styles.scheduleItem}>
-            <View style={styles.scheduleItemIcon}>
-              <MaterialCommunityIcons name="home-city-outline" size={16} color={Colors.primary} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.scheduleItemName} numberOfLines={1}>Maa Mangala Store</Text>
-              <Text style={styles.scheduleItemDetail}>9 bags • Ramesh Contractor</Text>
+            <View style={styles.trendPill}>
+              <Text style={styles.trendPillText}>{realSlabsCount > 0 ? `${realSlabsCount} Active` : '0 Today'}</Text>
             </View>
           </View>
-
-          <View style={styles.scheduleItem}>
-            <View style={styles.scheduleItemIcon}>
-              <MaterialCommunityIcons name="home-city-outline" size={16} color={Colors.primary} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.scheduleItemName} numberOfLines={1}>Shree Traders</Text>
-              <Text style={styles.scheduleItemDetail}>12 bags • S.K. Construction</Text>
-            </View>
-          </View>
+          <Text style={styles.bigMetricNumber}>{realSlabsCount}</Text>
+          <Text style={styles.bigMetricLabel}>Slabs Scheduled</Text>
         </TouchableOpacity>
 
-        {/* Right Schedule Card: Meetings Today */}
+        {/* Card 2: Sales */}
         <TouchableOpacity
-          style={styles.scheduleCard}
-          onPress={() => router.push('/(tabs)/meeting')}
-          activeOpacity={0.9}
+          style={styles.bigMetricCard}
+          onPress={() => router.push('/(tabs)/sales')}
+          activeOpacity={0.85}
         >
-          <View style={styles.scheduleHeader}>
-            <View style={styles.scheduleIconWrap}>
-              <Ionicons name="people" size={18} color={Colors.primary} />
+          <View style={styles.cardHeaderRow}>
+            <View style={[styles.largeIconBox, { backgroundColor: '#FEF3C7' }]}>
+              <MaterialCommunityIcons name="package-variant-closed" size={26} color="#D97706" />
             </View>
-            <View style={{ flex: 1, marginLeft: 8 }}>
-              <Text style={styles.scheduleTitle}>Meetings Today</Text>
-              <Text style={styles.scheduleSubTitle}>1 Scheduled</Text>
+            <View style={[styles.trendPill, { backgroundColor: '#FEF3C7' }]}>
+              <Text style={[styles.trendPillText, { color: '#B45309' }]}>{realSalesMT.toFixed(1)} MT</Text>
             </View>
-            <Feather name="chevron-right" size={16} color={Colors.textMuted} />
           </View>
+          <Text style={styles.bigMetricNumber}>{realSalesBags}</Text>
+          <Text style={styles.bigMetricLabel}>Sales (Bags Today)</Text>
+        </TouchableOpacity>
 
-          <View style={styles.scheduleItem}>
-            <View style={styles.scheduleItemIcon}>
-              <MaterialCommunityIcons name="account-group-outline" size={16} color={Colors.primary} />
+        {/* Card 3: Active % */}
+        <TouchableOpacity
+          style={styles.bigMetricCard}
+          onPress={() => router.push('/(tabs)/sales')}
+          activeOpacity={0.85}
+        >
+          <View style={styles.cardHeaderRow}>
+            <View style={[styles.largeIconBox, { backgroundColor: '#DCFCE7' }]}>
+              <MaterialCommunityIcons name="target" size={26} color="#15803D" />
             </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.scheduleItemName} numberOfLines={1}>Meeting with Contractor</Text>
-              <Text style={styles.scheduleItemDetail}>Brahmapur Road</Text>
-              <Text style={styles.scheduleItemDetail}>2:00 PM • 5 People</Text>
+            <View style={[styles.trendPill, { backgroundColor: '#DCFCE7' }]}>
+              <Text style={[styles.trendPillText, { color: '#15803D' }]}>Target {targetActiveSetting}%</Text>
             </View>
+          </View>
+          <Text style={styles.bigMetricNumber}>{realActivePercent}%</Text>
+          <Text style={styles.bigMetricLabel}>Active Punching</Text>
+        </TouchableOpacity>
+
+        {/* Card 4: Meetings */}
+        <TouchableOpacity
+          style={styles.bigMetricCard}
+          onPress={() => router.push('/(tabs)/meeting')}
+          activeOpacity={0.85}
+        >
+          <View style={styles.cardHeaderRow}>
+            <View style={[styles.largeIconBox, { backgroundColor: '#EDE9FE' }]}>
+              <Ionicons name="people" size={26} color="#7C3AED" />
+            </View>
+            <View style={[styles.trendPill, { backgroundColor: '#EDE9FE' }]}>
+              <Text style={[styles.trendPillText, { color: '#6D28D9' }]}>{allMeetings?.length || 0} Month</Text>
+            </View>
+          </View>
+          <Text style={styles.bigMetricNumber}>{realMeetingsCount}</Text>
+          <Text style={styles.bigMetricLabel}>Meetings Today</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* ── 5. PROTON-GRADE QUICK ACTIONS (BIG BUTTONS) ── */}
+      <View style={styles.sectionHeaderRow}>
+        <Text style={styles.sectionHeaderTitle}>Quick Field Actions</Text>
+        <TouchableOpacity onPress={() => router.push('/(tabs)/plus')}>
+          <Text style={styles.seeAllText}>All Actions ›</Text>
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.quickActionCardsCol}>
+        {/* Button 1: Add Slab */}
+        <TouchableOpacity
+          style={styles.actionBigButton}
+          onPress={() => router.push('/slab/add')}
+          activeOpacity={0.85}
+        >
+          <View style={[styles.actionIconContainer, { backgroundColor: '#800E20' }]}>
+            <MaterialCommunityIcons name="office-building-plus" size={24} color="#FFFFFF" />
+          </View>
+          <View style={styles.actionTextContainer}>
+            <Text style={styles.actionTitleBig}>Add New Slab</Text>
+            <Text style={styles.actionSubtitle}>Schedule casting, site & contractor</Text>
+          </View>
+          <View style={styles.actionChevronCircle}>
+            <Feather name="arrow-up-right" size={18} color="#800E20" />
+          </View>
+        </TouchableOpacity>
+
+        {/* Button 2: Add Sale / Punch */}
+        <TouchableOpacity
+          style={styles.actionBigButton}
+          onPress={() => router.push('/sale/add')}
+          activeOpacity={0.85}
+        >
+          <View style={[styles.actionIconContainer, { backgroundColor: '#4A0611' }]}>
+            <MaterialCommunityIcons name="cart-plus" size={24} color="#FFFFFF" />
+          </View>
+          <View style={styles.actionTextContainer}>
+            <Text style={styles.actionTitleBig}>Record Sale & Punch</Text>
+            <Text style={styles.actionSubtitle}>Log ACC F2R / GOLD bags or punch volume</Text>
+          </View>
+          <View style={styles.actionChevronCircle}>
+            <Feather name="arrow-up-right" size={18} color="#800E20" />
+          </View>
+        </TouchableOpacity>
+
+        {/* Button 3: Add Meeting */}
+        <TouchableOpacity
+          style={styles.actionBigButton}
+          onPress={() => router.push('/meeting/add')}
+          activeOpacity={0.85}
+        >
+          <View style={[styles.actionIconContainer, { backgroundColor: '#6B1224' }]}>
+            <MaterialCommunityIcons name="account-multiple-plus" size={24} color="#FFFFFF" />
+          </View>
+          <View style={styles.actionTextContainer}>
+            <Text style={styles.actionTitleBig}>Schedule Meeting</Text>
+            <Text style={styles.actionSubtitle}>Log customer, contractor or site meet</Text>
+          </View>
+          <View style={styles.actionChevronCircle}>
+            <Feather name="arrow-up-right" size={18} color="#800E20" />
           </View>
         </TouchableOpacity>
       </View>
 
-      {/* ── MONTHLY PERFORMANCE ── */}
+      {/* ── 6. REAL LIVE SCHEDULE (TODAY'S SLABS & MEETINGS) ── */}
       <View style={styles.sectionHeaderRow}>
-        <Text style={styles.sectionTitle}>Monthly Performance</Text>
-        <TouchableOpacity style={styles.dropdownBtn}>
-          <Text style={styles.dropdownBtnText}>{selectedMonth}</Text>
-          <Feather name="chevron-down" size={14} color={Colors.textSecondary} />
+        <Text style={styles.sectionHeaderTitle}>Today's Live Schedule</Text>
+        <TouchableOpacity onPress={() => router.push('/(tabs)/slab')}>
+          <Text style={styles.seeAllText}>View Calendar ›</Text>
         </TouchableOpacity>
       </View>
 
-      <View style={styles.performanceRow}>
-        {/* Sales Progress */}
-        <View style={styles.perfCard}>
-          <View style={styles.perfHeader}>
-            <MaterialCommunityIcons name="chart-bar" size={16} color={Colors.primary} />
-            <Text style={styles.perfLabel}>Sales</Text>
+      {todaySlabsList.length === 0 && todayMeetingsList.length === 0 ? (
+        <View style={styles.emptyStateCard}>
+          <View style={styles.emptyIconCircle}>
+            <Ionicons name="calendar-outline" size={32} color="#800E20" />
           </View>
-          <Text style={styles.perfRatio}><Text style={styles.perfBold}>8,400</Text> / 10,000</Text>
-          <View style={styles.progressBarBg}>
-            <View style={[styles.progressBarFill, { width: '84%' }]} />
-          </View>
-          <Text style={styles.perfPercent}>84%</Text>
+          <Text style={styles.emptyStateTitle}>No Slabs or Meetings Today</Text>
+          <Text style={styles.emptyStateSub}>
+            Everything is clean in Google Sheets. Tap any action button above to schedule your next activity!
+          </Text>
         </View>
+      ) : (
+        <View style={styles.scheduleListCol}>
+          {todaySlabsList.map((slab) => (
+            <TouchableOpacity
+              key={slab.slab_id}
+              style={styles.realScheduleCard}
+              onPress={() => router.push(`/slab/${slab.slab_id}` as any)}
+              activeOpacity={0.85}
+            >
+              <View style={[styles.realScheduleIcon, { backgroundColor: '#FBE8EC' }]}>
+                <MaterialCommunityIcons name="office-building" size={22} color="#800E20" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <View style={styles.rowBetween}>
+                  <Text style={styles.scheduleDealerTitle}>{slab.dealer_name}</Text>
+                  <View style={styles.statusBadgeSmall}>
+                    <Text style={styles.statusBadgeText}>{slab.status}</Text>
+                  </View>
+                </View>
+                <Text style={styles.scheduleMetaText}>
+                  {slab.contractor_name || 'No contractor'} • {slab.expected_cement || 'Cement unassigned'}
+                </Text>
+              </View>
+            </TouchableOpacity>
+          ))}
 
-        {/* Active Punch Progress */}
-        <View style={styles.perfCard}>
-          <View style={styles.perfHeader}>
-            <MaterialCommunityIcons name="pulse" size={16} color={Colors.primary} />
-            <Text style={styles.perfLabel}>Active Punch</Text>
-          </View>
-          <Text style={styles.perfRatio}><Text style={styles.perfBold}>6,720</Text> / 8,400</Text>
-          <View style={styles.progressBarBg}>
-            <View style={[styles.progressBarFill, { width: '80%' }]} />
-          </View>
-          <Text style={styles.perfPercent}>80%</Text>
+          {todayMeetingsList.map((mtg) => (
+            <TouchableOpacity
+              key={mtg.meeting_id}
+              style={styles.realScheduleCard}
+              onPress={() => router.push(`/meeting/${mtg.meeting_id}` as any)}
+              activeOpacity={0.85}
+            >
+              <View style={[styles.realScheduleIcon, { backgroundColor: '#EDE9FE' }]}>
+                <Ionicons name="people" size={22} color="#7C3AED" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <View style={styles.rowBetween}>
+                  <Text style={styles.scheduleDealerTitle}>{mtg.meeting_name || mtg.meeting_type}</Text>
+                  <View style={[styles.statusBadgeSmall, { backgroundColor: '#EDE9FE' }]}>
+                    <Text style={[styles.statusBadgeText, { color: '#7C3AED' }]}>{mtg.status}</Text>
+                  </View>
+                </View>
+                <Text style={styles.scheduleMetaText}>
+                  {mtg.location || 'Location unassigned'} • {mtg.meeting_type}
+                </Text>
+              </View>
+            </TouchableOpacity>
+          ))}
         </View>
+      )}
 
-        {/* Meetings Progress */}
-        <View style={styles.perfCard}>
-          <View style={styles.perfHeader}>
-            <Ionicons name="people" size={16} color={Colors.primary} />
-            <Text style={styles.perfLabel}>Meetings</Text>
-          </View>
-          <Text style={styles.perfRatio}><Text style={styles.perfBold}>28</Text> / 50</Text>
-          <View style={styles.progressBarBg}>
-            <View style={[styles.progressBarFill, { width: '56%' }]} />
-          </View>
-          <Text style={styles.perfPercent}>56%</Text>
-        </View>
-      </View>
-
-      {/* ── DEALER SALES LEADERBOARD (MTD) ── */}
+      {/* ── 7. REAL LIVE DEALER LEADERBOARD (FROM SHEET) ── */}
       <View style={styles.sectionHeaderRow}>
-        <Text style={styles.sectionTitle}>Dealer Sales Leaderboard (MTD)</Text>
+        <Text style={styles.sectionHeaderTitle}>Dealer Leaderboard ({currentMonthLabel})</Text>
         <TouchableOpacity onPress={() => router.push('/(tabs)/sales')}>
-          <Text style={styles.seeAllLink}>View All ›</Text>
+          <Text style={styles.seeAllText}>Sales Screen ›</Text>
         </TouchableOpacity>
       </View>
 
-      <View style={styles.leaderboardCard}>
-        {/* Row 1 - Gold */}
-        <View style={styles.leaderRow}>
-          <View style={[styles.rankCircle, styles.goldCircle]}>
-            <Text style={styles.rankNumberGold}>1</Text>
+      {topDealersList.length === 0 ? (
+        <View style={styles.emptyStateCard}>
+          <View style={styles.emptyIconCircle}>
+            <MaterialCommunityIcons name="trophy-outline" size={32} color="#800E20" />
           </View>
-          <Text style={styles.dealerLeaderName}>Maa Mangala Store</Text>
-          <Text style={styles.dealerBags}>1,250 Bags</Text>
-          <View style={styles.trendRowGreen}>
-            <Feather name="arrow-up" size={12} color="#16A34A" />
-            <Text style={styles.trendPercentGreen}>12%</Text>
-          </View>
+          <Text style={styles.emptyStateTitle}>No Sales Recorded This Month</Text>
+          <Text style={styles.emptyStateSub}>
+            As soon as sales are recorded in Google Sheets, the top dealers will automatically rank here with their MT volume!
+          </Text>
+          <TouchableOpacity
+            style={styles.emptyStateBtn}
+            onPress={() => router.push('/sale/add')}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.emptyStateBtnText}>+ Log First Sale</Text>
+          </TouchableOpacity>
         </View>
-
-        {/* Row 2 - Silver */}
-        <View style={styles.leaderRow}>
-          <View style={[styles.rankCircle, styles.silverCircle]}>
-            <Text style={styles.rankNumberSilver}>2</Text>
-          </View>
-          <Text style={styles.dealerLeaderName}>Shree Traders</Text>
-          <Text style={styles.dealerBags}>980 Bags</Text>
-          <View style={styles.trendRowGreen}>
-            <Feather name="arrow-up" size={12} color="#16A34A" />
-            <Text style={styles.trendPercentGreen}>8%</Text>
-          </View>
+      ) : (
+        <View style={styles.leaderboardContainer}>
+          {topDealersList.map((dealer, idx) => (
+            <View key={dealer.dealer_id} style={[styles.leaderRowItem, idx === topDealersList.length - 1 && { borderBottomWidth: 0 }]}>
+              <View style={[styles.rankBadgeCircle, idx === 0 ? styles.rankGold : idx === 1 ? styles.rankSilver : styles.rankBronze]}>
+                <Text style={styles.rankBadgeText}>{idx + 1}</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.leaderDealerName}>{dealer.dealer_name}</Text>
+                <Text style={styles.leaderDealerArea}>{dealer.area || territorySetting}</Text>
+              </View>
+              <View style={{ alignItems: 'flex-end' }}>
+                <Text style={styles.leaderDealerMT}>{(dealer.total_bags / 20).toFixed(1)} MT</Text>
+                <Text style={styles.leaderDealerBags}>{dealer.total_bags} bags</Text>
+              </View>
+            </View>
+          ))}
         </View>
+      )}
 
-        {/* Row 3 - Bronze */}
-        <View style={[styles.leaderRow, { borderBottomWidth: 0 }]}>
-          <View style={[styles.rankCircle, styles.bronzeCircle]}>
-            <Text style={styles.rankNumberBronze}>3</Text>
-          </View>
-          <Text style={styles.dealerLeaderName}>Jajpur Cement House</Text>
-          <Text style={styles.dealerBags}>850 Bags</Text>
-          <View style={styles.trendRowGreen}>
-            <Feather name="arrow-up" size={12} color="#16A34A" />
-            <Text style={styles.trendPercentGreen}>5%</Text>
-          </View>
-        </View>
-      </View>
-
-      <View style={{ height: 40 }} />
+      <View style={{ height: 60 }} />
     </ScrollView>
   );
 }
@@ -456,75 +433,87 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9F5F6',
+    backgroundColor: '#F9F5F6', // Soft luxury rosé background
   },
   content: {
-    paddingHorizontal: 16,
-    paddingTop: Platform.OS === 'ios' ? 54 : 44,
-    paddingBottom: 30,
+    paddingHorizontal: 18,
+    paddingTop: Platform.OS === 'ios' ? 60 : 48,
+    paddingBottom: 40,
   },
 
-  // Top Header
+  // 1. Top Header
   topHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 20,
   },
   headerLeft: {
     flex: 1,
   },
-  greetingText: {
-    fontSize: 13,
+  greetingSubtitle: {
+    fontSize: 14,
     color: '#8A7277',
-    fontWeight: '500',
+    fontWeight: '600',
+    letterSpacing: 0.3,
   },
-  nameRow: {
+  userNameBig: {
+    fontSize: 26,
+    fontWeight: '900',
+    color: '#1F0B10',
+    letterSpacing: -0.5,
+    marginTop: 2,
+  },
+  badgePill: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 1,
+    backgroundColor: '#F2E4E7',
+    alignSelf: 'flex-start',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginTop: 6,
+    borderWidth: 1,
+    borderColor: '#E8D5DA',
   },
-  userName: {
-    fontSize: 22,
-    fontWeight: '800',
-    color: '#1F0B10',
-    letterSpacing: -0.3,
+  greenLiveDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#16A34A',
+    marginRight: 6,
   },
-  handWave: {
-    fontSize: 20,
-  },
-  teamTerritory: {
-    fontSize: 12,
+  badgePillText: {
+    fontSize: 11,
+    fontWeight: '700',
     color: '#800E20',
-    fontWeight: '600',
-    marginTop: 2,
   },
   headerRight: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 12,
   },
   notificationBtn: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
+    width: 46,
+    height: 46,
+    borderRadius: 23,
     backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: 'rgba(78, 5, 17, 0.1)',
-    shadowOffset: { width: 0, height: 2 },
+    borderWidth: 1.5,
+    borderColor: '#EEDCE1',
+    shadowColor: 'rgba(78, 5, 17, 0.08)',
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 1,
-    shadowRadius: 6,
+    shadowRadius: 10,
     elevation: 3,
-    borderWidth: 1,
-    borderColor: '#F0E2E5',
     position: 'relative',
   },
   notifBadge: {
     position: 'absolute',
     top: 6,
     right: 6,
-    backgroundColor: '#DC2626',
+    backgroundColor: '#800E20',
     width: 16,
     height: 16,
     borderRadius: 8,
@@ -540,517 +529,424 @@ const styles = StyleSheet.create({
   },
   avatarWrap: {
     padding: 2,
-    borderRadius: 23,
-    borderWidth: 1.5,
-    borderColor: '#E8D5DA',
+    borderRadius: 25,
+    borderWidth: 2,
+    borderColor: '#800E20',
   },
   avatarCircle: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: '#800E20',
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: '#4A0611',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  avatarInitials: {
+  avatarLetter: {
     color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '700',
+    fontSize: 18,
+    fontWeight: '800',
   },
 
-  // Hero Card
-  heroCard: {
-    backgroundColor: '#4A0611',
-    borderRadius: 24,
-    padding: 20,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    position: 'relative',
-    overflow: 'hidden',
-    shadowColor: 'rgba(78, 5, 17, 0.3)',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 1,
-    shadowRadius: 16,
-    elevation: 8,
+  // 2. Big Hero Card
+  heroCardBig: {
+    backgroundColor: '#4A0611', // Deep Wine
+    borderRadius: 28,
+    padding: 22,
+    marginBottom: 24,
+    shadowColor: '#4A0611',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.35,
+    shadowRadius: 20,
+    elevation: 10,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.15)',
   },
-  heroOverlayLeft: {
-    flex: 1.2,
-    zIndex: 2,
+  heroTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
   brandTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   heroBrandTE: {
-    fontSize: 24,
+    fontSize: 26,
     fontWeight: '900',
     color: '#FFFFFF',
-    letterSpacing: 0.5,
+    letterSpacing: 1,
   },
   heroBrandCONNECT: {
-    fontSize: 24,
+    fontSize: 26,
     fontWeight: '900',
     color: '#E53935',
-    letterSpacing: 0.5,
+    letterSpacing: 1,
   },
-  heroTeamJajpur: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: 'rgba(255, 255, 255, 0.9)',
-    letterSpacing: 1.5,
-    marginTop: 2,
-  },
-  heroTaglineContainer: {
-    marginTop: 14,
-  },
-  heroTagline: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: 'rgba(255, 255, 255, 0.75)',
-    letterSpacing: 0.8,
-  },
-
-  heroRightGraphic: {
-    flex: 1,
-    alignItems: 'flex-end',
-    justifyContent: 'center',
-  },
-  heroSubBadge: {
-    alignItems: 'flex-end',
-    marginBottom: 8,
-  },
-  heroSubBadgeText: {
-    fontSize: 8,
+  heroTeamSubtitle: {
+    fontSize: 11,
     fontWeight: '800',
-    color: 'rgba(255, 255, 255, 0.85)',
-    letterSpacing: 1.2,
-    textAlign: 'right',
+    color: 'rgba(255, 255, 255, 0.75)',
+    letterSpacing: 1.5,
+    marginTop: 3,
   },
-  cementBagsRow: {
-    flexDirection: 'row',
-    gap: 6,
-  },
-  cementBag: {
-    width: 44,
+  securityShieldCircle: {
+    width: 52,
     height: 52,
-    borderRadius: 6,
+    borderRadius: 26,
+    backgroundColor: 'rgba(255, 255, 255, 0.12)',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
+    borderColor: 'rgba(255, 255, 255, 0.25)',
   },
-  f2rBag: {
-    backgroundColor: '#C91F2B',
+  heroDivider: {
+    height: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.12)',
+    marginVertical: 18,
   },
-  goldBag: {
-    backgroundColor: '#8B1528',
-    borderColor: '#D4AF37',
-  },
-  bagBrand: {
-    color: '#FFFFFF',
-    fontSize: 9,
-    fontWeight: '900',
-  },
-  bagModel: {
-    color: '#FFFFFF',
-    fontSize: 10,
-    fontWeight: '800',
-    marginTop: 2,
-  },
-  bagModelGold: {
-    color: '#FFD700',
-    fontSize: 9,
-    fontWeight: '800',
-    marginTop: 2,
-  },
-
-  // Dots
-  dotsContainer: {
+  heroBottomRow: {
     flexDirection: 'row',
-    justifyContent: 'center',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    gap: 6,
-    marginTop: 12,
-    marginBottom: 16,
   },
-  dot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#E8D5DA',
+  heroStatItem: {
+    flex: 1,
+    alignItems: 'center',
   },
-  activeDot: {
-    width: 18,
-    backgroundColor: '#800E20',
+  heroStatLabel: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: 'rgba(255, 255, 255, 0.65)',
+    letterSpacing: 1,
+    marginBottom: 4,
+  },
+  heroStatValue: {
+    fontSize: 20,
+    fontWeight: '900',
+    color: '#FFFFFF',
+  },
+  heroStatUnit: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#E53935',
+  },
+  heroStatSeparator: {
+    width: 1,
+    height: 28,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
   },
 
-  // Section Headers
-  sectionHeaderRow: {
+  // 3. Date Bar
+  dateBarRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 14,
+  },
+  sectionHeaderTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#1F0B10',
+    letterSpacing: -0.3,
+  },
+  dateBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#EEDCE1',
+  },
+  dateBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#554246',
+  },
+
+  // 4. Big 2x2 Metrics Grid
+  bigMetricsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    marginBottom: 24,
+  },
+  bigMetricCard: {
+    width: (width - 48) / 2,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    padding: 16,
+    borderWidth: 1.5,
+    borderColor: '#EEDCE1',
+    shadowColor: 'rgba(78, 5, 17, 0.06)',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 1,
+    shadowRadius: 12,
+    elevation: 3,
+  },
+  cardHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 12,
-    marginTop: 10,
   },
-  sectionTitleMain: {
-    fontSize: 18,
+  largeIconBox: {
+    width: 44,
+    height: 44,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  trendPill: {
+    backgroundColor: '#FBE8EC',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 10,
+  },
+  trendPillText: {
+    fontSize: 10,
     fontWeight: '800',
-    color: '#1F0B10',
+    color: '#800E20',
   },
-  sectionTitle: {
+  bigMetricNumber: {
+    fontSize: 28,
+    fontWeight: '900',
+    color: '#1F0B10',
+    letterSpacing: -0.5,
+  },
+  bigMetricLabel: {
+    fontSize: 12,
+    color: '#8A7277',
+    fontWeight: '600',
+    marginTop: 4,
+  },
+
+  // 5. Quick Actions
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 14,
+    marginTop: 6,
+  },
+  seeAllText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#800E20',
+  },
+  quickActionCardsCol: {
+    gap: 12,
+    marginBottom: 24,
+  },
+  actionBigButton: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 22,
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: '#EEDCE1',
+    shadowColor: 'rgba(78, 5, 17, 0.06)',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 1,
+    shadowRadius: 10,
+    elevation: 3,
+  },
+  actionIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 14,
+    shadowColor: '#4A0611',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+  },
+  actionTextContainer: {
+    flex: 1,
+  },
+  actionTitleBig: {
     fontSize: 16,
     fontWeight: '800',
     color: '#1F0B10',
   },
-  dateChip: {
-    flexDirection: 'row',
+  actionSubtitle: {
+    fontSize: 12,
+    color: '#8A7277',
+    fontWeight: '500',
+    marginTop: 2,
+  },
+  actionChevronCircle: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#FAF0F2',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 14,
+    justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#F0E2E5',
-  },
-  dateChipText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#554246',
-  },
-  seeAllLink: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#800E20',
+    borderColor: '#EEDCE1',
   },
 
-  // 4 Metrics Grid
-  metricsGrid: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 8,
+  // 6. Schedule List & Empty States
+  emptyStateCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    padding: 24,
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: '#EEDCE1',
+    marginBottom: 24,
+    shadowColor: 'rgba(78, 5, 17, 0.05)',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 1,
+    shadowRadius: 10,
+    elevation: 2,
+  },
+  emptyIconCircle: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: '#FBE8EC',
+    alignItems: 'center',
+    justifyContent: 'center',
     marginBottom: 14,
   },
-  metricCard: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 18,
-    padding: 10,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#F0E2E5',
-    shadowColor: 'rgba(78, 5, 17, 0.05)',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 1,
-    shadowRadius: 6,
-    elevation: 2,
-  },
-  metricIconBox: {
-    width: 36,
-    height: 36,
-    borderRadius: 12,
-    backgroundColor: '#FBE8EC',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 6,
-  },
-  metricValue: {
-    fontSize: 17,
+  emptyStateTitle: {
+    fontSize: 16,
     fontWeight: '800',
     color: '#1F0B10',
-  },
-  metricLabel: {
-    fontSize: 10,
-    color: '#8A7277',
-    fontWeight: '600',
-    marginTop: 2,
+    marginBottom: 6,
     textAlign: 'center',
   },
-  trendRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 4,
-    gap: 2,
-  },
-  trendTextGreen: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#16A34A',
-  },
-  trendTextRed: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#DC2626',
-  },
-
-  // Quick Actions Row
-  quickActionsRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 16,
-  },
-  qaCard: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 18,
-    padding: 10,
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#F0E2E5',
-    shadowColor: 'rgba(78, 5, 17, 0.05)',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 1,
-    shadowRadius: 6,
-    elevation: 2,
-  },
-  qaIconCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#FBE8EC',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 6,
-  },
-  qaTextWrap: {
-    flex: 1,
-  },
-  qaTitle: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#1F0B10',
-  },
-  qaSub: {
-    fontSize: 9,
+  emptyStateSub: {
+    fontSize: 13,
     color: '#8A7277',
-    marginTop: 1,
+    textAlign: 'center',
+    lineHeight: 19,
   },
-
-  // Today's Schedule Row
-  scheduleRow: {
-    flexDirection: 'row',
+  emptyStateBtn: {
+    backgroundColor: '#800E20',
+    borderRadius: 14,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    marginTop: 16,
+  },
+  emptyStateBtnText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  scheduleListCol: {
     gap: 10,
-    marginBottom: 16,
+    marginBottom: 24,
   },
-  scheduleCard: {
-    flex: 1,
+  realScheduleCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 20,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: '#F0E2E5',
+    padding: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: '#EEDCE1',
     shadowColor: 'rgba(78, 5, 17, 0.05)',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 1,
-    shadowRadius: 6,
+    shadowRadius: 8,
     elevation: 2,
   },
-  scheduleHeader: {
+  realScheduleIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  rowBetween: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  scheduleDealerTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#1F0B10',
+  },
+  statusBadgeSmall: {
+    backgroundColor: '#FBE8EC',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+  },
+  statusBadgeText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#800E20',
+  },
+  scheduleMetaText: {
+    fontSize: 12,
+    color: '#8A7277',
+    marginTop: 3,
+  },
+
+  // 7. Leaderboard
+  leaderboardContainer: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderWidth: 1.5,
+    borderColor: '#EEDCE1',
+    marginBottom: 24,
+    shadowColor: 'rgba(78, 5, 17, 0.05)',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 1,
+    shadowRadius: 10,
+    elevation: 2,
+  },
+  leaderRowItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 10,
-    paddingBottom: 8,
+    paddingVertical: 14,
     borderBottomWidth: 1,
     borderBottomColor: '#F7EFF1',
   },
-  scheduleIconWrap: {
+  rankBadgeCircle: {
     width: 30,
     height: 30,
-    borderRadius: 10,
-    backgroundColor: '#FBE8EC',
+    borderRadius: 15,
     alignItems: 'center',
     justifyContent: 'center',
+    marginRight: 12,
   },
-  scheduleTitle: {
-    fontSize: 12,
-    fontWeight: '700',
+  rankGold: { backgroundColor: '#FBBF24' },
+  rankSilver: { backgroundColor: '#CBD5E1' },
+  rankBronze: { backgroundColor: '#FDBA74' },
+  rankBadgeText: {
+    fontSize: 13,
+    fontWeight: '900',
     color: '#1F0B10',
   },
-  scheduleSubTitle: {
-    fontSize: 9,
+  leaderDealerName: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#1F0B10',
+  },
+  leaderDealerArea: {
+    fontSize: 12,
     color: '#8A7277',
-  },
-  scheduleItem: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginBottom: 8,
-  },
-  scheduleItemIcon: {
-    width: 22,
-    height: 22,
-    borderRadius: 6,
-    backgroundColor: '#FDF2F4',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 6,
     marginTop: 2,
   },
-  scheduleItemName: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#1F0B10',
+  leaderDealerMT: {
+    fontSize: 15,
+    fontWeight: '900',
+    color: '#800E20',
   },
-  scheduleItemDetail: {
-    fontSize: 9,
+  leaderDealerBags: {
+    fontSize: 11,
     color: '#8A7277',
-    marginTop: 1,
-  },
-
-  // Monthly Performance Row
-  dropdownBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#F0E2E5',
-    gap: 4,
-  },
-  dropdownBtnText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#1F0B10',
-  },
-  performanceRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 16,
-  },
-  perfCard: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 18,
-    padding: 10,
-    borderWidth: 1,
-    borderColor: '#F0E2E5',
-    shadowColor: 'rgba(78, 5, 17, 0.05)',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 1,
-    shadowRadius: 6,
-    elevation: 2,
-  },
-  perfHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    marginBottom: 6,
-  },
-  perfLabel: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#1F0B10',
-  },
-  perfRatio: {
-    fontSize: 10,
-    color: '#8A7277',
-    marginBottom: 6,
-  },
-  perfBold: {
-    fontSize: 12,
-    fontWeight: '800',
-    color: '#1F0B10',
-  },
-  progressBarBg: {
-    height: 6,
-    backgroundColor: '#F5E8EB',
-    borderRadius: 3,
-    overflow: 'hidden',
-    marginBottom: 4,
-  },
-  progressBarFill: {
-    height: '100%',
-    backgroundColor: '#800E20',
-    borderRadius: 3,
-  },
-  perfPercent: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: '#1F0B10',
-    textAlign: 'right',
-  },
-
-  // Dealer Sales Leaderboard
-  leaderboardCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderWidth: 1,
-    borderColor: '#F0E2E5',
-    shadowColor: 'rgba(78, 5, 17, 0.05)',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 1,
-    shadowRadius: 6,
-    elevation: 2,
-  },
-  leaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F7EFF1',
-  },
-  rankCircle: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 10,
-  },
-  goldCircle: {
-    backgroundColor: '#FBBF24',
-  },
-  silverCircle: {
-    backgroundColor: '#CBD5E1',
-  },
-  bronzeCircle: {
-    backgroundColor: '#FDBA74',
-  },
-  rankNumberGold: {
-    fontSize: 12,
-    fontWeight: '800',
-    color: '#78350F',
-  },
-  rankNumberSilver: {
-    fontSize: 12,
-    fontWeight: '800',
-    color: '#334155',
-  },
-  rankNumberBronze: {
-    fontSize: 12,
-    fontWeight: '800',
-    color: '#7C2D12',
-  },
-  dealerLeaderName: {
-    flex: 1,
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#1F0B10',
-  },
-  dealerBags: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#6B4E55',
-    marginRight: 8,
-  },
-  trendRowGreen: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 2,
-  },
-  trendPercentGreen: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#16A34A',
   },
 });
