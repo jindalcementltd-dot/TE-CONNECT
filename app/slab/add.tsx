@@ -16,6 +16,7 @@ import {
 import { getUser } from '../../src/services/auth';
 import { currentDateISO } from '../../src/utils/helpers';
 import { User, Dealer, Contractor } from '../../src/types';
+import { FontFamily } from '../../src/theme/typography';
 import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
 
 export default function AddSlabScreen() {
@@ -597,6 +598,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
   },
   title: {
+    fontFamily: FontFamily.displayBold,
     fontSize: 18,
     fontWeight: '800',
     color: '#1F0B10',
@@ -615,6 +617,7 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   label: {
+    fontFamily: FontFamily.sansBold,
     fontSize: 13,
     fontWeight: '700',
     color: '#1F0B10',
@@ -624,16 +627,19 @@ const styles = StyleSheet.create({
     color: '#DC2626',
   },
   optional: {
+    fontFamily: FontFamily.sansRegular,
     color: '#8A7277',
     fontWeight: '400',
     fontSize: 11,
   },
   quickAddLink: {
+    fontFamily: FontFamily.sansBold,
     fontSize: 12,
     fontWeight: '700',
     color: '#800E20',
   },
   input: {
+    fontFamily: FontFamily.sansMedium,
     borderWidth: 1.5,
     borderColor: '#EEDCE1',
     borderRadius: 14,
@@ -660,12 +666,14 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
   },
   pickerSelected: {
+    fontFamily: FontFamily.sansBold,
     fontSize: 15,
     color: '#1F0B10',
     fontWeight: '600',
     flex: 1,
   },
   pickerPlaceholder: {
+    fontFamily: FontFamily.sansRegular,
     fontSize: 15,
     color: '#A0858C',
     flex: 1,
@@ -686,6 +694,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#DCFCE7',
   },
   locationBtnText: {
+    fontFamily: FontFamily.sansBold,
     fontSize: 14,
     fontWeight: '700',
     color: '#800E20',
@@ -706,6 +715,7 @@ const styles = StyleSheet.create({
     opacity: 0.7,
   },
   submitBtnText: {
+    fontFamily: FontFamily.sansBold,
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '800',
@@ -733,11 +743,13 @@ const pickerStyles = StyleSheet.create({
     marginBottom: 14,
   },
   title: {
+    fontFamily: FontFamily.displayBold,
     fontSize: 18,
     fontWeight: '800',
     color: '#1F0B10',
   },
   search: {
+    fontFamily: FontFamily.sansMedium,
     borderWidth: 1.5,
     borderColor: '#EEDCE1',
     borderRadius: 14,
@@ -760,6 +772,7 @@ const pickerStyles = StyleSheet.create({
     borderColor: '#E8D5DA',
   },
   addNewPromptText: {
+    fontFamily: FontFamily.sansBold,
     fontSize: 13,
     fontWeight: '800',
     color: '#800E20',
@@ -770,11 +783,13 @@ const pickerStyles = StyleSheet.create({
     borderBottomColor: '#F7EFF1',
   },
   itemName: {
+    fontFamily: FontFamily.sansBold,
     fontSize: 15,
     fontWeight: '700',
     color: '#1F0B10',
   },
   itemSub: {
+    fontFamily: FontFamily.sansRegular,
     fontSize: 12,
     color: '#8A7277',
     marginTop: 2,
@@ -783,12 +798,14 @@ const pickerStyles = StyleSheet.create({
     marginBottom: 12,
   },
   formLabel: {
+    fontFamily: FontFamily.sansBold,
     fontSize: 12,
     fontWeight: '700',
     color: '#1F0B10',
     marginBottom: 4,
   },
   formInput: {
+    fontFamily: FontFamily.sansMedium,
     borderWidth: 1.5,
     borderColor: '#EEDCE1',
     borderRadius: 12,
@@ -806,6 +823,7 @@ const pickerStyles = StyleSheet.create({
     marginTop: 10,
   },
   submitModalBtnText: {
+    fontFamily: FontFamily.sansBold,
     color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '800',
@@ -816,6 +834,7 @@ const pickerStyles = StyleSheet.create({
     marginTop: 6,
   },
   switchModeText: {
+    fontFamily: FontFamily.sansBold,
     color: '#800E20',
     fontSize: 13,
     fontWeight: '700',

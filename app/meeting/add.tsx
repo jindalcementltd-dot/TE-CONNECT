@@ -10,6 +10,7 @@ import { apiCreateMeeting } from '../../src/services/api';
 import { getUser } from '../../src/services/auth';
 import { currentDateISO } from '../../src/utils/helpers';
 import { User, MeetingType } from '../../src/types';
+import { FontFamily } from '../../src/theme/typography';
 import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
 
 export default function AddMeetingScreen() {
@@ -256,6 +257,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
   },
   title: {
+    fontFamily: FontFamily.displayBold,
     fontSize: 18,
     fontWeight: '800',
     color: '#1F0B10',
@@ -280,6 +282,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   label: {
+    fontFamily: FontFamily.sansBold,
     fontSize: 13,
     fontWeight: '700',
     color: '#1F0B10',
@@ -289,6 +292,7 @@ const styles = StyleSheet.create({
     color: '#DC2626',
   },
   optional: {
+    fontFamily: FontFamily.sansRegular,
     color: '#8A7277',
     fontWeight: '400',
     fontSize: 11,
@@ -310,11 +314,13 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   typeBtnText: {
+    fontFamily: FontFamily.sansBold,
     fontSize: 13,
     fontWeight: '600',
     color: '#6B4E55',
   },
   input: {
+    fontFamily: FontFamily.sansMedium,
     borderWidth: 1.5,
     borderColor: '#EEDCE1',
     borderRadius: 14,
@@ -349,6 +355,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   submitText: {
+    fontFamily: FontFamily.sansBold,
     color: '#FFFFFF',
     fontSize: 15,
     fontWeight: '800',

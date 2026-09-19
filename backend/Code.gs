@@ -251,11 +251,33 @@ function handleLogin(data) {
 
   const sheet = getSheet(SHEETS.USERS);
   const users = sheetToObjects(sheet);
-  const user = users.find(u => String(u.login_id).trim().toLowerCase() === String(login_id).trim().toLowerCase());
+  const cleanLogin = String(login_id).trim().toLowerCase();
+  const user = users.find(u => String(u.login_id).trim().toLowerCase() === cleanLogin);
 
   if (!user) return error('Invalid login ID or password.');
-  if (!user.active || String(user.active).toLowerCase() === 'false') return error('Your account is inactive. Please contact your manager.');
-  if (String(user.password_hash).trim().toLowerCase() !== String(password).trim().toLowerCase()) return error('Invalid login ID or password.');
+  
+  // Check active status - only block if explicitly false
+  const activeStr = String(user.active !== undefined ? user.active : '').trim().toLowerCase();
+  if (activeStr === 'false') return error('Your account is inactive. Please contact your manager.');
+
+  const userPw = String(user.password_hash || '').trim();
+  const inputPw = String(password || '').trim();
+
+  let inputHash = '';
+  try {
+    const rawBytes = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, inputPw, Utilities.Charset.UTF_8);
+    inputHash = rawBytes.map(b => {
+      const byte = b < 0 ? b + 256 : b;
+      return (byte < 16 ? '0' : '') + byte.toString(16);
+    }).join('');
+  } catch(e) {}
+
+  const isPlainMatch = userPw.toLowerCase() === inputPw.toLowerCase();
+  const isHashMatch = inputHash && userPw.toLowerCase() === inputHash.toLowerCase();
+
+  if (!isPlainMatch && !isHashMatch) {
+    return error('Invalid login ID or password.');
+  }
 
   // Never return password_hash to client
   const safeUser = {
@@ -267,7 +289,7 @@ function handleLogin(data) {
     district: user.district,
     territory: user.territory,
     phone: user.phone,
-    active: user.active,
+    active: user.active !== false && String(user.active).toLowerCase() !== 'false',
     photo_url: user.photo_url || '',
     created_at: user.created_at,
   };

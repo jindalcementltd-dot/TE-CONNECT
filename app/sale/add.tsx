@@ -11,6 +11,7 @@ import { apiGetDealers, apiCreateSale, apiAddPunch, apiGetUsers } from '../../sr
 import { getUser } from '../../src/services/auth';
 import { currentDateISO, normalizeDate } from '../../src/utils/helpers';
 import { User, Dealer, Product } from '../../src/types';
+import { FontFamily } from '../../src/theme/typography';
 import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
 
 type Mode = 'sale' | 'punch';
@@ -406,6 +407,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
   },
   title: {
+    fontFamily: FontFamily.displayBold,
     fontSize: 18,
     fontWeight: '800',
     color: '#1F0B10',
@@ -433,6 +435,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#800E20',
   },
   modeBtnText: {
+    fontFamily: FontFamily.sansBold,
     fontSize: 13,
     fontWeight: '700',
     color: '#8A7277',
@@ -460,6 +463,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   label: {
+    fontFamily: FontFamily.sansBold,
     fontSize: 13,
     fontWeight: '700',
     color: '#1F0B10',
@@ -469,6 +473,7 @@ const styles = StyleSheet.create({
     color: '#DC2626',
   },
   input: {
+    fontFamily: FontFamily.sansMedium,
     borderWidth: 1.5,
     borderColor: '#EEDCE1',
     borderRadius: 14,
@@ -493,6 +498,7 @@ const styles = StyleSheet.create({
     borderColor: '#E8D5DA',
   },
   mtBadgeText: {
+    fontFamily: FontFamily.sansBold,
     fontSize: 14,
     fontWeight: '800',
     color: '#800E20',
@@ -513,12 +519,14 @@ const styles = StyleSheet.create({
     backgroundColor: '#FAF6F7',
   },
   pickerSelected: {
+    fontFamily: FontFamily.sansBold,
     fontSize: 15,
     color: '#1F0B10',
     fontWeight: '700',
     flex: 1,
   },
   pickerPlaceholder: {
+    fontFamily: FontFamily.sansRegular,
     fontSize: 15,
     color: '#A0858C',
     flex: 1,
@@ -549,6 +557,7 @@ const styles = StyleSheet.create({
     borderRadius: 5,
   },
   productBtnText: {
+    fontFamily: FontFamily.sansBold,
     fontSize: 14,
     fontWeight: '700',
     color: '#6B4E55',
@@ -577,6 +586,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   submitText: {
+    fontFamily: FontFamily.sansBold,
     color: '#FFFFFF',
     fontSize: 15,
     fontWeight: '800',
@@ -604,11 +614,13 @@ const pickerStyles = StyleSheet.create({
     marginBottom: 14,
   },
   title: {
+    fontFamily: FontFamily.displayBold,
     fontSize: 18,
     fontWeight: '800',
     color: '#1F0B10',
   },
   search: {
+    fontFamily: FontFamily.sansMedium,
     borderWidth: 1.5,
     borderColor: '#EEDCE1',
     borderRadius: 14,
@@ -625,11 +637,13 @@ const pickerStyles = StyleSheet.create({
     borderBottomColor: '#F7EFF1',
   },
   itemName: {
+    fontFamily: FontFamily.sansBold,
     fontSize: 15,
     fontWeight: '700',
     color: '#1F0B10',
   },
   itemSub: {
+    fontFamily: FontFamily.sansRegular,
     fontSize: 12,
     color: '#8A7277',
     marginTop: 2,

@@ -8,6 +8,7 @@ import { useQuery } from '@tanstack/react-query';
 import { apiGetUsers, apiGetDealers, apiGetSettings } from '../../src/services/api';
 import { getUser, logout } from '../../src/services/auth';
 import { User } from '../../src/types';
+import { FontFamily } from '../../src/theme/typography';
 import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
 
 export default function AdminScreen() {
@@ -26,22 +27,10 @@ export default function AdminScreen() {
     ]);
   };
 
-  if (user?.role !== 'ADMIN' && user?.role !== 'MANAGER') {
-    return (
-      <View style={styles.center}>
-        <View style={styles.lockIconCircle}>
-          <MaterialCommunityIcons name="shield-lock-outline" size={48} color="#800E20" />
-        </View>
-        <Text style={styles.notAllowed}>Access Restricted</Text>
-        <Text style={styles.notAllowedSub}>Admin / Manager executive access only.</Text>
-      </View>
-    );
-  }
-
-  const activeUsers = (users || []).filter(u => u.active).length;
+  const activeUsers = (users || []).filter(u => u.active !== false && String(u.active).toLowerCase() !== 'false').length;
   const activeDealers = (dealers || []).filter(d => d.active).length;
-  const territory = settings?.find(s => s.setting === 'territory')?.value || 'Jajpur';
-  const team = settings?.find(s => s.setting === 'team')?.value || 'Team Jajpur';
+  const territory = settings?.find(s => s.setting === 'territory')?.value || user?.territory || 'Jajpur';
+  const team = settings?.find(s => s.setting === 'team')?.value || user?.team || 'Team Jajpur';
   const activeTarget = settings?.find(s => s.setting === 'active_target')?.value || '80';
 
   return (
@@ -51,7 +40,7 @@ export default function AdminScreen() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={24} color="#1F0B10" />
         </TouchableOpacity>
-        <Text style={styles.title}>Admin Settings</Text>
+        <Text style={styles.title}>Team Profile & Settings</Text>
         <TouchableOpacity onPress={handleLogout} style={styles.logoutBtn}>
           <Ionicons name="log-out-outline" size={24} color="#DC2626" />
         </TouchableOpacity>
@@ -61,12 +50,12 @@ export default function AdminScreen() {
         {/* ── 1. CURRENT USER HERO CARD ── */}
         <View style={styles.userHeroCard}>
           <View style={styles.userAvatar}>
-            <Text style={styles.userAvatarText}>{user?.name?.charAt(0)?.toUpperCase() || 'A'}</Text>
+            <Text style={styles.userAvatarText}>{user?.name?.charAt(0)?.toUpperCase() || 'U'}</Text>
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={styles.userName}>{user?.name || 'Administrator'}</Text>
-            <Text style={styles.userRole}>{user?.role} • {user?.team || team}</Text>
-            <Text style={styles.userLoginId}>ID: {user?.login_id || 'admin'}</Text>
+            <Text style={styles.userName}>{user?.name || 'Field Officer'}</Text>
+            <Text style={styles.userRole}>{user?.role || 'TE'} • {user?.team || team}</Text>
+            <Text style={styles.userLoginId}>Login ID: {user?.login_id || 'user'}</Text>
           </View>
         </View>
 
@@ -74,7 +63,7 @@ export default function AdminScreen() {
         <View style={styles.statsRow}>
           <View style={styles.statCard}>
             <Text style={styles.statValue}>{activeUsers}</Text>
-            <Text style={styles.statLabel}>Active TEs</Text>
+            <Text style={styles.statLabel}>Active Officers</Text>
           </View>
           <View style={styles.statCard}>
             <Text style={styles.statValue}>{activeDealers}</Text>
@@ -91,26 +80,29 @@ export default function AdminScreen() {
           <Text style={styles.cardTitle}>Live Configuration (Google Sheet)</Text>
           <SettingRow label="Territory" value={territory} />
           <SettingRow label="Team Title" value={team} />
-          <SettingRow label="Volume Target" value={`${activeTarget}%`} />
-          <SettingRow label="Total Users" value={String((users || []).length)} />
+          <SettingRow label="Volume Punch Target" value={`${activeTarget}%`} />
+          <SettingRow label="Registered Users" value={String((users || []).length)} />
           <SettingRow label="Total Dealers" value={String((dealers || []).length)} />
         </View>
 
         {/* ── 4. TEAM MEMBERS ── */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>Team Members ({(users || []).length})</Text>
-          {(users || []).map(u => (
-            <View key={u.user_id} style={styles.userRow}>
-              <View style={[styles.roleTag, { backgroundColor: u.role === 'ADMIN' ? '#FBE8EC' : '#DCFCE7' }]}>
-                <Text style={[styles.roleTagText, { color: u.role === 'ADMIN' ? '#800E20' : '#15803D' }]}>{u.role}</Text>
+          <Text style={styles.cardTitle}>Team Members & Officers ({(users || []).length})</Text>
+          {(users || []).map(u => {
+            const isActive = u.active !== false && String(u.active).toLowerCase() !== 'false';
+            return (
+              <View key={u.user_id || u.login_id} style={styles.userRow}>
+                <View style={[styles.roleTag, { backgroundColor: u.role === 'ADMIN' ? '#FBE8EC' : '#DCFCE7' }]}>
+                  <Text style={[styles.roleTagText, { color: u.role === 'ADMIN' ? '#800E20' : '#15803D' }]}>{u.role || 'TE'}</Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.memberName}>{u.name}</Text>
+                  <Text style={styles.memberLogin}>@{u.login_id} • {u.territory || territory}</Text>
+                </View>
+                <View style={[styles.activeDot, { backgroundColor: isActive ? '#15803D' : '#DC2626' }]} />
               </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.memberName}>{u.name}</Text>
-                <Text style={styles.memberLogin}>@{u.login_id}</Text>
-              </View>
-              <View style={[styles.activeDot, { backgroundColor: u.active ? '#15803D' : '#DC2626' }]} />
-            </View>
-          ))}
+            );
+          })}
         </View>
 
         {/* ── 5. DEALERS LIST ── */}
@@ -125,7 +117,7 @@ export default function AdminScreen() {
             >
               <View style={{ flex: 1 }}>
                 <Text style={styles.memberName}>{d.dealer_name}</Text>
-                <Text style={styles.memberLogin}>{d.area || 'Jajpur'} • TE: {d.assigned_te || 'Team'}</Text>
+                <Text style={styles.memberLogin}>{d.area || territory} • TE: {d.assigned_te || 'Team'}</Text>
               </View>
               <View style={styles.qrBadgeCircle}>
                 <Ionicons name="qr-code" size={18} color="#800E20" />
@@ -163,33 +155,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#F9F5F6',
   },
-  center: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 32,
-    backgroundColor: '#F9F5F6',
-  },
-  lockIconCircle: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: '#FBE8EC',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 16,
-  },
-  notAllowed: {
-    fontSize: 22,
-    fontWeight: '800',
-    color: '#1F0B10',
-    marginBottom: 6,
-  },
-  notAllowedSub: {
-    fontSize: 14,
-    color: '#8A7277',
-    textAlign: 'center',
-  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -205,6 +170,7 @@ const styles = StyleSheet.create({
     width: 36,
   },
   title: {
+    fontFamily: FontFamily.displayBold,
     fontSize: 18,
     fontWeight: '800',
     color: '#1F0B10',
@@ -246,22 +212,26 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.25)',
   },
   userAvatarText: {
+    fontFamily: FontFamily.displayBlack,
     fontSize: 26,
     fontWeight: '900',
     color: '#FFFFFF',
   },
   userName: {
+    fontFamily: FontFamily.displayBold,
     fontSize: 20,
     fontWeight: '900',
     color: '#FFFFFF',
   },
   userRole: {
+    fontFamily: FontFamily.sansSemiBold,
     fontSize: 13,
     color: 'rgba(255,255,255,0.8)',
     marginTop: 2,
     fontWeight: '600',
   },
   userLoginId: {
+    fontFamily: FontFamily.sansRegular,
     fontSize: 11,
     color: 'rgba(255,255,255,0.55)',
     marginTop: 2,
@@ -288,11 +258,13 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   statValue: {
+    fontFamily: FontFamily.displayBlack,
     fontSize: 24,
     fontWeight: '900',
     color: '#800E20',
   },
   statLabel: {
+    fontFamily: FontFamily.sansBold,
     fontSize: 11,
     color: '#8A7277',
     fontWeight: '700',
@@ -315,6 +287,7 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   cardTitle: {
+    fontFamily: FontFamily.displayBold,
     fontSize: 15,
     fontWeight: '800',
     color: '#1F0B10',
@@ -334,16 +307,19 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   roleTagText: {
+    fontFamily: FontFamily.sansBold,
     fontSize: 10,
     fontWeight: '800',
     letterSpacing: 0.5,
   },
   memberName: {
+    fontFamily: FontFamily.displayBold,
     fontSize: 14,
     fontWeight: '800',
     color: '#1F0B10',
   },
   memberLogin: {
+    fontFamily: FontFamily.sansRegular,
     fontSize: 12,
     color: '#8A7277',
     marginTop: 2,
@@ -369,6 +345,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   moreText: {
+    fontFamily: FontFamily.sansSemiBold,
     fontSize: 12,
     color: '#8A7277',
     marginTop: 10,
@@ -393,6 +370,7 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   logoutText: {
+    fontFamily: FontFamily.displayBold,
     fontSize: 15,
     fontWeight: '800',
     color: '#DC2626',
@@ -409,11 +387,13 @@ const settingStyles = StyleSheet.create({
     borderBottomColor: '#F7EFF1',
   },
   label: {
+    fontFamily: FontFamily.sansSemiBold,
     fontSize: 13,
     color: '#8A7277',
     fontWeight: '600',
   },
   value: {
+    fontFamily: FontFamily.sansBold,
     fontSize: 14,
     color: '#1F0B10',
     fontWeight: '800',

@@ -7,7 +7,7 @@ import { router } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { Colors } from '../../src/theme/colors';
 import {
-  apiGetSales, apiGetDealers, apiGetActiveTracker, apiGetSettings, apiGetContractors,
+  apiGetSales, apiGetDealers, apiGetActiveTracker, apiGetSettings, apiGetContractors, apiGetUsers,
 } from '../../src/services/api';
 import {
   bagsToMT, currentMonthISO, formatPercent,
@@ -17,6 +17,7 @@ import {
   calcRequiredActiveContractors,
 } from '../../src/utils/helpers';
 import { Sale, DealerSalesSummary } from '../../src/types';
+import { FontFamily } from '../../src/theme/typography';
 import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
 
 const { width } = Dimensions.get('window');
@@ -24,6 +25,7 @@ const { width } = Dimensions.get('window');
 const PRESET_BAG_RATES = [50, 80, 90, 100, 120];
 
 export default function SalesScreen() {
+  const [selectedTE, setSelectedTE] = useState<string>('ALL');
   const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState<'ALL' | 'TODAY'>('ALL');
   const [selectedBagRate, setSelectedBagRate] = useState<number>(100);
@@ -35,6 +37,11 @@ export default function SalesScreen() {
   const { data: settings } = useQuery({
     queryKey: ['settings'],
     queryFn: apiGetSettings,
+  });
+
+  const { data: usersList, refetch: refetchUsers } = useQuery({
+    queryKey: ['users'],
+    queryFn: () => apiGetUsers(),
   });
 
   const { data: allSales, refetch: refetchSales } = useQuery({
@@ -60,17 +67,39 @@ export default function SalesScreen() {
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     await Promise.all([
+      refetchUsers(),
       refetchSales(),
       refetchDealers(),
       refetchContractors(),
       refetchTrackers(),
     ]);
     setRefreshing(false);
-  }, [refetchSales, refetchDealers, refetchContractors, refetchTrackers]);
+  }, [refetchUsers, refetchSales, refetchDealers, refetchContractors, refetchTrackers]);
 
-  const salesList = useMemo(() => allSales || [], [allSales]);
+  // Build unique team list for filter
+  const uniqueTeamList = useMemo(() => {
+    const set = new Set<string>();
+    (usersList || []).forEach(u => {
+      if (u.name && u.name.trim()) set.add(u.name.trim());
+    });
+    (allSales || []).forEach(s => {
+      if (s.assigned_te && s.assigned_te.trim()) set.add(s.assigned_te.trim());
+    });
+    (activeTrackers || []).forEach(t => {
+      if (t.te && t.te.trim()) set.add(t.te.trim());
+    });
+    return Array.from(set).filter(Boolean);
+  }, [usersList, allSales, activeTrackers]);
 
-  // Filter sales
+  const salesList = useMemo(() => {
+    const list = allSales || [];
+    if (selectedTE === 'ALL') return list;
+    return list.filter(s => 
+      String(s.assigned_te || s.created_by || '').toLowerCase() === selectedTE.toLowerCase()
+    );
+  }, [allSales, selectedTE]);
+
+  // Filter sales (Today vs All)
   const filteredSales = filter === 'TODAY'
     ? salesList.filter(s => normalizeDate(s.sale_date) === today)
     : salesList;
@@ -83,7 +112,14 @@ export default function SalesScreen() {
 
   // 2. Volume (Bag) Punch calculations (80% Target)
   const totalSalesBagsAll = salesList.reduce((sum, s) => sum + (Number(s.quantity_bags) || 0), 0);
-  const totalPunchBags = (activeTrackers || []).reduce((sum, t) => sum + (Number(t.punched_quantity_bags) || 0), 0);
+  
+  const filteredActiveTrackers = useMemo(() => {
+    const list = activeTrackers || [];
+    if (selectedTE === 'ALL') return list;
+    return list.filter(t => String(t.te || '').toLowerCase() === selectedTE.toLowerCase());
+  }, [activeTrackers, selectedTE]);
+
+  const totalPunchBags = filteredActiveTrackers.reduce((sum, t) => sum + (Number(t.punched_quantity_bags) || 0), 0);
   
   const required80PercentPunchBags = calcRequiredPunch(totalSalesBagsAll, PUNCH_VOLUME_TARGET_PERCENT);
   const punchVolumePercent = totalSalesBagsAll > 0
@@ -92,13 +128,12 @@ export default function SalesScreen() {
   const punchGapBags = calcGap(required80PercentPunchBags, totalPunchBags);
 
   // 3. Contractor Active % calculations (40% Minimum Target)
-  // Total contractors from Sheet or contractors list
-  const sheetTotalContractors = (activeTrackers || []).reduce((max, t) => Math.max(max, Number(t.total_contractors) || 0), 0);
+  const sheetTotalContractors = filteredActiveTrackers.reduce((max, t) => Math.max(max, Number(t.total_contractors) || 0), 0);
   const totalContractorsCount = sheetTotalContractors > 0
     ? sheetTotalContractors
-    : Math.max((contractors || []).length, 10); // Default to live contractors or base 10
+    : Math.max((contractors || []).length, 10);
 
-  const sheetActiveContractors = (activeTrackers || []).reduce((sum, t) => sum + (Number(t.active_contractors) || 0), 0);
+  const sheetActiveContractors = filteredActiveTrackers.reduce((sum, t) => sum + (Number(t.active_contractors) || 0), 0);
   const activeContractorsCount = sheetActiveContractors > 0
     ? sheetActiveContractors
     : (totalPunchBags > 0 ? Math.ceil(totalPunchBags / 100) : 0);
@@ -161,8 +196,10 @@ export default function SalesScreen() {
       {/* Header */}
       <View style={styles.header}>
         <View>
-          <Text style={styles.headerTitle}>Sales & Active</Text>
-          <Text style={styles.headerSub}>Team Jajpur Performance Command</Text>
+          <Text style={styles.headerTitle}>Sales & Target Command</Text>
+          <Text style={styles.headerSub}>
+            {selectedTE === 'ALL' ? 'Team Jajpur • Consolidated' : `${selectedTE} • Field Sales`}
+          </Text>
         </View>
         <TouchableOpacity
           style={styles.addSaleBtn}
@@ -180,6 +217,59 @@ export default function SalesScreen() {
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#800E20" />}
       >
+        {/* ── TEAM MEMBER SELECTOR CHIP BAR ("SARE USER KA DATA") ── */}
+        <View style={styles.teamFilterContainer}>
+          <View style={styles.teamFilterHeaderRow}>
+            <View style={styles.teamFilterTitleWrap}>
+              <MaterialCommunityIcons name="account-group-outline" size={18} color="#800E20" />
+              <Text style={styles.teamFilterHeading}>Team Visibility</Text>
+            </View>
+            {selectedTE !== 'ALL' && (
+              <TouchableOpacity onPress={() => setSelectedTE('ALL')} style={styles.resetFilterBtn}>
+                <Text style={styles.resetFilterBtnText}>Show All Team ✕</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.teamFilterScroll}>
+            <TouchableOpacity
+              style={[styles.teamSelectChip, selectedTE === 'ALL' && styles.teamSelectChipActive]}
+              onPress={() => setSelectedTE('ALL')}
+              activeOpacity={0.8}
+            >
+              <MaterialCommunityIcons
+                name="account-multiple"
+                size={15}
+                color={selectedTE === 'ALL' ? '#FFFFFF' : '#800E20'}
+                style={{ marginRight: 6 }}
+              />
+              <Text style={[styles.teamSelectChipText, selectedTE === 'ALL' && styles.teamSelectChipTextActive]}>
+                All Team (Consolidated)
+              </Text>
+            </TouchableOpacity>
+
+            {uniqueTeamList.map((member) => {
+              const isSelected = selectedTE === member;
+              return (
+                <TouchableOpacity
+                  key={member}
+                  style={[styles.teamSelectChip, isSelected && styles.teamSelectChipActive]}
+                  onPress={() => setSelectedTE(member)}
+                  activeOpacity={0.8}
+                >
+                  <Feather
+                    name="user"
+                    size={13}
+                    color={isSelected ? '#FFFFFF' : '#800E20'}
+                    style={{ marginRight: 5 }}
+                  />
+                  <Text style={[styles.teamSelectChipText, isSelected && styles.teamSelectChipTextActive]}>
+                    {member}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        </View>
         {/* ── 1. PROTON VAULT WINE GLASS HERO CARD ── */}
         <View style={styles.heroCard}>
           <View style={styles.heroTop}>
@@ -550,12 +640,14 @@ const styles = StyleSheet.create({
     borderBottomColor: '#F0E2E5',
   },
   headerTitle: {
+    fontFamily: FontFamily.displayBlack,
     fontSize: 22,
     fontWeight: '900',
     color: '#1F0B10',
     letterSpacing: -0.5,
   },
   headerSub: {
+    fontFamily: FontFamily.sansMedium,
     fontSize: 12,
     color: '#8A7277',
     fontWeight: '500',
@@ -576,6 +668,7 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   addSaleBtnText: {
+    fontFamily: FontFamily.sansBold,
     color: '#FFFFFF',
     fontSize: 13,
     fontWeight: '800',
@@ -585,6 +678,77 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: 16,
+  },
+
+  // Team Filter Bar
+  teamFilterContainer: {
+    marginBottom: 16,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 14,
+    borderWidth: 1.5,
+    borderColor: '#EEDCE1',
+    shadowColor: 'rgba(78, 5, 17, 0.05)',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 1,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  teamFilterHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  teamFilterTitleWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  teamFilterHeading: {
+    fontFamily: FontFamily.displayBold,
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#1F0B10',
+    marginLeft: 6,
+  },
+  resetFilterBtn: {
+    backgroundColor: '#FAF0F2',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+  },
+  resetFilterBtnText: {
+    fontFamily: FontFamily.sansBold,
+    fontSize: 11,
+    color: '#800E20',
+    fontWeight: '700',
+  },
+  teamFilterScroll: {
+    gap: 8,
+    paddingRight: 10,
+  },
+  teamSelectChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FAF0F2',
+    paddingHorizontal: 13,
+    paddingVertical: 8,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#EEDCE1',
+  },
+  teamSelectChipActive: {
+    backgroundColor: '#800E20',
+    borderColor: '#800E20',
+  },
+  teamSelectChipText: {
+    fontFamily: FontFamily.sansSemiBold,
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#800E20',
+  },
+  teamSelectChipTextActive: {
+    color: '#FFFFFF',
   },
 
   // 1. Hero Card
@@ -607,32 +771,36 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   heroLabel: {
+    fontFamily: FontFamily.sansBold,
     fontSize: 10,
     fontWeight: '800',
     color: 'rgba(255, 255, 255, 0.7)',
     letterSpacing: 1,
   },
   heroValueMT: {
+    fontFamily: FontFamily.displayBlack,
     fontSize: 32,
     fontWeight: '900',
     color: '#FFFFFF',
     marginTop: 2,
   },
   heroUnit: {
+    fontFamily: FontFamily.displayBold,
     fontSize: 18,
     fontWeight: '700',
     color: '#E53935',
   },
   heroBagsSub: {
+    fontFamily: FontFamily.sansMedium,
     fontSize: 12,
     color: 'rgba(255, 255, 255, 0.8)',
     fontWeight: '600',
     marginTop: 2,
   },
   heroBadgeIcon: {
-    width: 54,
-    height: 54,
-    borderRadius: 27,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
     backgroundColor: 'rgba(255, 255, 255, 0.12)',
     alignItems: 'center',
     justifyContent: 'center',
@@ -666,11 +834,13 @@ const styles = StyleSheet.create({
     borderRadius: 5,
   },
   productLabel: {
+    fontFamily: FontFamily.sansBold,
     fontSize: 11,
     fontWeight: '800',
     color: '#FFFFFF',
   },
   productValue: {
+    fontFamily: FontFamily.sansMedium,
     fontSize: 11,
     color: 'rgba(255, 255, 255, 0.75)',
     fontWeight: '600',
@@ -715,16 +885,19 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   targetBadgeText: {
+    fontFamily: FontFamily.sansBold,
     fontSize: 10,
     fontWeight: '800',
     color: '#800E20',
   },
   targetCardTitle: {
+    fontFamily: FontFamily.displayBold,
     fontSize: 14,
     fontWeight: '800',
     color: '#1F0B10',
   },
   targetCardSub: {
+    fontFamily: FontFamily.sansMedium,
     fontSize: 10,
     color: '#8A7277',
     marginBottom: 8,
@@ -736,10 +909,12 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   targetScoreVal: {
+    fontFamily: FontFamily.displayBlack,
     fontSize: 22,
     fontWeight: '900',
   },
   targetScoreSub: {
+    fontFamily: FontFamily.sansBold,
     fontSize: 10,
     fontWeight: '700',
     color: '#8A7277',
@@ -756,6 +931,7 @@ const styles = StyleSheet.create({
     borderRadius: 3,
   },
   targetGapText: {
+    fontFamily: FontFamily.sansBold,
     fontSize: 10,
     fontWeight: '700',
   },
@@ -789,11 +965,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   simTitle: {
+    fontFamily: FontFamily.displayBold,
     fontSize: 16,
     fontWeight: '900',
     color: '#1F0B10',
   },
   simSub: {
+    fontFamily: FontFamily.sansRegular,
     fontSize: 11,
     color: '#8A7277',
     marginTop: 2,
@@ -803,6 +981,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   presetLabel: {
+    fontFamily: FontFamily.sansBold,
     fontSize: 12,
     fontWeight: '700',
     color: '#1F0B10',
@@ -826,6 +1005,7 @@ const styles = StyleSheet.create({
     borderColor: '#800E20',
   },
   presetChipText: {
+    fontFamily: FontFamily.sansSemiBold,
     fontSize: 12,
     fontWeight: '700',
     color: '#1F0B10',
@@ -840,11 +1020,13 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   customInputLabel: {
+    fontFamily: FontFamily.sansSemiBold,
     fontSize: 12,
     fontWeight: '600',
     color: '#800E20',
   },
   customInput: {
+    fontFamily: FontFamily.sansBold,
     borderWidth: 1.5,
     borderColor: '#800E20',
     borderRadius: 10,
@@ -871,11 +1053,13 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   simResultHeading: {
+    fontFamily: FontFamily.displayBold,
     fontSize: 13,
     fontWeight: '800',
     color: '#1F0B10',
   },
   simResultSub: {
+    fontFamily: FontFamily.sansMedium,
     fontSize: 11,
     color: '#8A7277',
     marginTop: 2,
@@ -892,6 +1076,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FEF3C7',
   },
   simStatusPillText: {
+    fontFamily: FontFamily.sansBold,
     fontSize: 10,
     fontWeight: '800',
   },
@@ -909,11 +1094,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   simMetricValue: {
+    fontFamily: FontFamily.displayBlack,
     fontSize: 18,
     fontWeight: '900',
     color: '#1F0B10',
   },
   simMetricLabel: {
+    fontFamily: FontFamily.sansSemiBold,
     fontSize: 10,
     color: '#8A7277',
     fontWeight: '600',
@@ -934,6 +1121,7 @@ const styles = StyleSheet.create({
     borderColor: '#EEDCE1',
   },
   distVisualTitle: {
+    fontFamily: FontFamily.sansBold,
     fontSize: 11,
     fontWeight: '800',
     color: '#800E20',
@@ -952,6 +1140,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#800E20',
   },
   distText: {
+    fontFamily: FontFamily.sansMedium,
     fontSize: 12,
     color: '#554246',
   },
@@ -964,11 +1153,13 @@ const styles = StyleSheet.create({
     borderTopColor: '#F7EFF1',
   },
   distTotalLabel: {
+    fontFamily: FontFamily.sansBold,
     fontSize: 11,
     fontWeight: '800',
     color: '#1F0B10',
   },
   distTotalVal: {
+    fontFamily: FontFamily.displayBold,
     fontSize: 11,
     fontWeight: '800',
     color: '#800E20',
@@ -987,6 +1178,7 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   simActionBtnText: {
+    fontFamily: FontFamily.sansBold,
     color: '#FFFFFF',
     fontSize: 13,
     fontWeight: '800',
@@ -1012,6 +1204,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#800E20',
   },
   filterTabText: {
+    fontFamily: FontFamily.sansBold,
     fontSize: 13,
     fontWeight: '700',
     color: '#8A7277',
@@ -1028,17 +1221,20 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   sectionHeaderTitle: {
+    fontFamily: FontFamily.displayBold,
     fontSize: 17,
     fontWeight: '800',
     color: '#1F0B10',
     letterSpacing: -0.3,
   },
   sectionHeaderCount: {
+    fontFamily: FontFamily.sansBold,
     fontSize: 12,
     fontWeight: '700',
     color: '#800E20',
   },
   refreshLink: {
+    fontFamily: FontFamily.sansBold,
     fontSize: 13,
     fontWeight: '700',
     color: '#800E20',
@@ -1078,26 +1274,31 @@ const styles = StyleSheet.create({
   rankSilver: { backgroundColor: '#CBD5E1' },
   rankBronze: { backgroundColor: '#FDBA74' },
   rankBadgeText: {
+    fontFamily: FontFamily.displayBlack,
     fontSize: 13,
     fontWeight: '900',
     color: '#1F0B10',
   },
   dealerName: {
+    fontFamily: FontFamily.displayBold,
     fontSize: 15,
     fontWeight: '800',
     color: '#1F0B10',
   },
   dealerArea: {
+    fontFamily: FontFamily.sansMedium,
     fontSize: 12,
     color: '#8A7277',
     marginTop: 2,
   },
   dealerMT: {
+    fontFamily: FontFamily.displayBold,
     fontSize: 15,
     fontWeight: '900',
     color: '#800E20',
   },
   dealerBags: {
+    fontFamily: FontFamily.sansRegular,
     fontSize: 11,
     color: '#8A7277',
   },
@@ -1130,26 +1331,31 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   saleDealer: {
+    fontFamily: FontFamily.displayBold,
     fontSize: 14,
     fontWeight: '800',
     color: '#1F0B10',
   },
   saleProduct: {
+    fontFamily: FontFamily.sansMedium,
     fontSize: 12,
     color: '#6B4E55',
     marginTop: 2,
   },
   saleDateText: {
+    fontFamily: FontFamily.sansRegular,
     fontSize: 10,
     color: '#8A7277',
     marginTop: 2,
   },
   saleQuantity: {
+    fontFamily: FontFamily.displayBlack,
     fontSize: 15,
     fontWeight: '900',
     color: '#800E20',
   },
   saleMT: {
+    fontFamily: FontFamily.sansSemiBold,
     fontSize: 11,
     color: '#8A7277',
   },
@@ -1163,11 +1369,13 @@ const styles = StyleSheet.create({
     borderColor: '#EEDCE1',
   },
   emptyTitle: {
+    fontFamily: FontFamily.displayBold,
     fontSize: 14,
     fontWeight: '800',
     color: '#1F0B10',
   },
   emptySub: {
+    fontFamily: FontFamily.sansRegular,
     fontSize: 12,
     color: '#8A7277',
     marginTop: 4,

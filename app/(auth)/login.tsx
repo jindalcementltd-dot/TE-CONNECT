@@ -181,6 +181,8 @@ export default function LoginScreen() {
   );
 }
 
+import { FontFamily } from '../../src/theme/typography';
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -224,18 +226,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   appNameTE: {
-    fontSize: 30,
+    fontFamily: FontFamily.displayBlack,
+    fontSize: 32,
     fontWeight: '900',
     color: '#FFFFFF',
     letterSpacing: 1,
   },
   appNameCONNECT: {
-    fontSize: 30,
+    fontFamily: FontFamily.displayBlack,
+    fontSize: 32,
     fontWeight: '900',
     color: '#E53935',
     letterSpacing: 1,
   },
   appTagline: {
+    fontFamily: FontFamily.sansMedium,
     fontSize: 13,
     color: 'rgba(255, 255, 255, 0.75)',
     marginTop: 4,
@@ -245,7 +250,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.12)',
     borderRadius: 20,
     paddingHorizontal: 16,
-    paddingVertical: 7,
+    paddingVertical: 8,
     marginTop: 14,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.2)',
@@ -269,6 +274,7 @@ const styles = StyleSheet.create({
     marginRight: 6,
   },
   teamBadgeText: {
+    fontFamily: FontFamily.sansSemiBold,
     color: '#FFFFFF',
     fontSize: 12,
     fontWeight: '700',
@@ -285,12 +291,14 @@ const styles = StyleSheet.create({
     elevation: 12,
   },
   cardTitle: {
-    fontSize: 22,
+    fontFamily: FontFamily.displayBold,
+    fontSize: 24,
     fontWeight: '800',
     color: '#1F0B10',
     marginBottom: 4,
   },
   cardSubtitle: {
+    fontFamily: FontFamily.sansRegular,
     fontSize: 13,
     color: '#6B4E55',
     marginBottom: 20,
@@ -300,6 +308,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   inputLabel: {
+    fontFamily: FontFamily.sansBold,
     fontSize: 13,
     fontWeight: '700',
     color: '#1F0B10',
@@ -318,6 +327,7 @@ const styles = StyleSheet.create({
     marginRight: 10,
   },
   input: {
+    fontFamily: FontFamily.sansMedium,
     flex: 1,
     paddingVertical: 14,
     fontSize: 15,
@@ -349,6 +359,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   loginBtnText: {
+    fontFamily: FontFamily.displayBold,
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '800',
@@ -364,12 +375,14 @@ const styles = StyleSheet.create({
     borderColor: '#F0D5DA',
   },
   helpText: {
+    fontFamily: FontFamily.sansRegular,
     textAlign: 'center',
     color: '#6B4E55',
     fontSize: 11,
     fontWeight: '500',
   },
   boldText: {
+    fontFamily: FontFamily.sansBold,
     fontWeight: '800',
     color: '#800E20',
   },
@@ -378,12 +391,14 @@ const styles = StyleSheet.create({
     marginTop: 28,
   },
   footerText: {
+    fontFamily: FontFamily.sansBold,
     color: 'rgba(255, 255, 255, 0.7)',
     fontSize: 11,
     fontWeight: '700',
     letterSpacing: 1,
   },
   footerSub: {
+    fontFamily: FontFamily.sansRegular,
     color: 'rgba(255, 255, 255, 0.45)',
     fontSize: 10,
     marginTop: 2,

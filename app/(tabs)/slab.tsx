@@ -7,9 +7,10 @@ import { Calendar } from 'react-native-calendars';
 import { router } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { Colors } from '../../src/theme/colors';
-import { apiGetSlabs } from '../../src/services/api';
+import { apiGetSlabs, apiGetUsers } from '../../src/services/api';
 import { currentMonthISO, normalizeDate } from '../../src/utils/helpers';
 import { Slab } from '../../src/types';
+import { FontFamily } from '../../src/theme/typography';
 import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
 import { format, parseISO } from 'date-fns';
 
@@ -100,9 +101,15 @@ function SlabCard({ slab, onPress }: { slab: Slab; onPress: () => void }) {
 
 export default function SlabScreen() {
   const today = normalizeDate(new Date());
+  const [selectedTE, setSelectedTE] = useState<string>('ALL');
   const [selectedDate, setSelectedDate] = useState(today);
   const [currentMonth, setCurrentMonth] = useState(currentMonthISO());
   const [refreshing, setRefreshing] = useState(false);
+
+  const { data: usersList } = useQuery({
+    queryKey: ['users'],
+    queryFn: () => apiGetUsers(),
+  });
 
   const { data: slabs, isLoading, refetch } = useQuery({
     queryKey: ['slabs'],
@@ -115,7 +122,27 @@ export default function SlabScreen() {
     setRefreshing(false);
   }, [refetch]);
 
-  const allSlabs = useMemo(() => slabs || [], [slabs]);
+  // Unique team list
+  const uniqueTeamList = useMemo(() => {
+    const set = new Set<string>();
+    (usersList || []).forEach(u => {
+      if (u.name && u.name.trim()) set.add(u.name.trim());
+    });
+    (slabs || []).forEach(s => {
+      if (s.assigned_te && s.assigned_te.trim()) set.add(s.assigned_te.trim());
+    });
+    return Array.from(set).filter(Boolean);
+  }, [usersList, slabs]);
+
+  const rawSlabs = useMemo(() => slabs || [], [slabs]);
+
+  // Filter slabs by team member
+  const allSlabs = useMemo(() => {
+    if (selectedTE === 'ALL') return rawSlabs;
+    return rawSlabs.filter(s => 
+      String(s.assigned_te || s.created_by || '').toLowerCase() === selectedTE.toLowerCase()
+    );
+  }, [rawSlabs, selectedTE]);
 
   // Robust date normalization for markings
   const markedDates: Record<string, any> = {};
@@ -161,11 +188,13 @@ export default function SlabScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Top Header */}
+      {/* Header */}
       <View style={styles.header}>
         <View>
-          <Text style={styles.headerTitle}>Slabs Calendar</Text>
-          <Text style={styles.headerSub}>Team Jajpur Casting Schedule</Text>
+          <Text style={styles.headerTitle}>Slab Castings</Text>
+          <Text style={styles.headerSub}>
+            {selectedTE === 'ALL' ? 'Team Jajpur • All Slabs' : `${selectedTE} • Scheduled Slabs`}
+          </Text>
         </View>
         <TouchableOpacity
           style={styles.addBtn}
@@ -173,7 +202,7 @@ export default function SlabScreen() {
           activeOpacity={0.85}
         >
           <Ionicons name="add" size={20} color="#FFFFFF" />
-          <Text style={styles.addBtnText}>Add Slab</Text>
+          <Text style={styles.addBtnText}>Schedule</Text>
         </TouchableOpacity>
       </View>
 
@@ -183,6 +212,60 @@ export default function SlabScreen() {
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#800E20" />}
       >
+        {/* ── TEAM MEMBER SELECTOR CHIP BAR ("SARE USER KA DATA") ── */}
+        <View style={styles.teamFilterContainer}>
+          <View style={styles.teamFilterHeaderRow}>
+            <View style={styles.teamFilterTitleWrap}>
+              <MaterialCommunityIcons name="account-group-outline" size={18} color="#800E20" />
+              <Text style={styles.teamFilterHeading}>Team Visibility</Text>
+            </View>
+            {selectedTE !== 'ALL' && (
+              <TouchableOpacity onPress={() => setSelectedTE('ALL')} style={styles.resetFilterBtn}>
+                <Text style={styles.resetFilterBtnText}>Show All Team ✕</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.teamFilterScroll}>
+            <TouchableOpacity
+              style={[styles.teamSelectChip, selectedTE === 'ALL' && styles.teamSelectChipActive]}
+              onPress={() => setSelectedTE('ALL')}
+              activeOpacity={0.8}
+            >
+              <MaterialCommunityIcons
+                name="account-multiple"
+                size={15}
+                color={selectedTE === 'ALL' ? '#FFFFFF' : '#800E20'}
+                style={{ marginRight: 6 }}
+              />
+              <Text style={[styles.teamSelectChipText, selectedTE === 'ALL' && styles.teamSelectChipTextActive]}>
+                All Team (Consolidated)
+              </Text>
+            </TouchableOpacity>
+
+            {uniqueTeamList.map((member) => {
+              const isSelected = selectedTE === member;
+              return (
+                <TouchableOpacity
+                  key={member}
+                  style={[styles.teamSelectChip, isSelected && styles.teamSelectChipActive]}
+                  onPress={() => setSelectedTE(member)}
+                  activeOpacity={0.8}
+                >
+                  <Feather
+                    name="user"
+                    size={13}
+                    color={isSelected ? '#FFFFFF' : '#800E20'}
+                    style={{ marginRight: 5 }}
+                  />
+                  <Text style={[styles.teamSelectChipText, isSelected && styles.teamSelectChipTextActive]}>
+                    {member}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        </View>
+
         {/* Calendar Card */}
         <View style={styles.calendarCard}>
           <Calendar
@@ -339,12 +422,14 @@ const styles = StyleSheet.create({
     borderBottomColor: '#F0E2E5',
   },
   headerTitle: {
+    fontFamily: FontFamily.displayBlack,
     fontSize: 22,
     fontWeight: '900',
     color: '#1F0B10',
     letterSpacing: -0.5,
   },
   headerSub: {
+    fontFamily: FontFamily.sansMedium,
     fontSize: 12,
     color: '#8A7277',
     fontWeight: '500',
@@ -365,6 +450,7 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   addBtnText: {
+    fontFamily: FontFamily.sansBold,
     color: '#FFFFFF',
     fontSize: 13,
     fontWeight: '800',
@@ -375,6 +461,78 @@ const styles = StyleSheet.create({
   scrollContent: {
     padding: 16,
   },
+
+  // Team Filter Bar
+  teamFilterContainer: {
+    marginBottom: 16,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 14,
+    borderWidth: 1.5,
+    borderColor: '#EEDCE1',
+    shadowColor: 'rgba(78, 5, 17, 0.05)',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 1,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  teamFilterHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  teamFilterTitleWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  teamFilterHeading: {
+    fontFamily: FontFamily.displayBold,
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#1F0B10',
+    marginLeft: 6,
+  },
+  resetFilterBtn: {
+    backgroundColor: '#FAF0F2',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+  },
+  resetFilterBtnText: {
+    fontFamily: FontFamily.sansBold,
+    fontSize: 11,
+    color: '#800E20',
+    fontWeight: '700',
+  },
+  teamFilterScroll: {
+    gap: 8,
+    paddingRight: 10,
+  },
+  teamSelectChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FAF0F2',
+    paddingHorizontal: 13,
+    paddingVertical: 8,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#EEDCE1',
+  },
+  teamSelectChipActive: {
+    backgroundColor: '#800E20',
+    borderColor: '#800E20',
+  },
+  teamSelectChipText: {
+    fontFamily: FontFamily.sansSemiBold,
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#800E20',
+  },
+  teamSelectChipTextActive: {
+    color: '#FFFFFF',
+  },
+
   calendarCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 24,
@@ -393,6 +551,7 @@ const styles = StyleSheet.create({
     marginBottom: 18,
   },
   chipsSectionTitle: {
+    fontFamily: FontFamily.sansBold,
     fontSize: 12,
     fontWeight: '800',
     color: '#800E20',
@@ -428,6 +587,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
   },
   dateChipText: {
+    fontFamily: FontFamily.sansBold,
     fontSize: 12,
     fontWeight: '700',
     color: '#1F0B10',
@@ -445,6 +605,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.25)',
   },
   chipCountText: {
+    fontFamily: FontFamily.sansBold,
     fontSize: 10,
     fontWeight: '800',
     color: '#800E20',
@@ -459,12 +620,14 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   sectionTitle: {
+    fontFamily: FontFamily.displayBold,
     fontSize: 17,
     fontWeight: '800',
     color: '#1F0B10',
     letterSpacing: -0.3,
   },
   sectionDateText: {
+    fontFamily: FontFamily.sansSemiBold,
     fontSize: 12,
     color: '#800E20',
     fontWeight: '600',
@@ -479,11 +642,13 @@ const styles = StyleSheet.create({
     borderColor: '#E8D5DA',
   },
   countBadgeText: {
+    fontFamily: FontFamily.sansBold,
     fontSize: 12,
     fontWeight: '800',
     color: '#800E20',
   },
   refreshLink: {
+    fontFamily: FontFamily.sansBold,
     fontSize: 13,
     fontWeight: '700',
     color: '#800E20',
@@ -513,6 +678,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   emptyTitle: {
+    fontFamily: FontFamily.displayBold,
     fontSize: 15,
     fontWeight: '800',
     color: '#1F0B10',
@@ -520,6 +686,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   emptySub: {
+    fontFamily: FontFamily.sansRegular,
     fontSize: 12,
     color: '#8A7277',
     textAlign: 'center',
@@ -533,6 +700,7 @@ const styles = StyleSheet.create({
     marginTop: 14,
   },
   emptyAddBtnText: {
+    fontFamily: FontFamily.sansBold,
     color: '#FFFFFF',
     fontSize: 13,
     fontWeight: '800',
@@ -566,11 +734,13 @@ const cardStyles = StyleSheet.create({
     marginRight: 12,
   },
   dealer: {
+    fontFamily: FontFamily.displayBold,
     fontSize: 16,
     fontWeight: '800',
     color: '#1F0B10',
   },
   contractor: {
+    fontFamily: FontFamily.sansMedium,
     fontSize: 13,
     color: '#6B4E55',
     fontWeight: '600',
@@ -587,11 +757,13 @@ const cardStyles = StyleSheet.create({
     marginBottom: 6,
   },
   infoText: {
+    fontFamily: FontFamily.sansMedium,
     fontSize: 13,
     color: '#8A7277',
     fontWeight: '500',
   },
   boldVal: {
+    fontFamily: FontFamily.sansBold,
     fontWeight: '700',
     color: '#1F0B10',
   },
@@ -605,6 +777,7 @@ const cardStyles = StyleSheet.create({
     borderColor: '#F0D5DA',
   },
   remarkText: {
+    fontFamily: FontFamily.sansRegular,
     fontSize: 12,
     color: '#6B4E55',
     fontWeight: '500',
@@ -624,6 +797,7 @@ const cardStyles = StyleSheet.create({
     borderRadius: 8,
   },
   teTagText: {
+    fontFamily: FontFamily.sansBold,
     fontSize: 11,
     fontWeight: '700',
     color: '#800E20',
@@ -637,6 +811,7 @@ const cardStyles = StyleSheet.create({
     borderRadius: 8,
   },
   gpsTagText: {
+    fontFamily: FontFamily.sansBold,
     fontSize: 11,
     fontWeight: '700',
     color: '#15803D',
@@ -650,6 +825,7 @@ const badgeStyles = StyleSheet.create({
     borderRadius: 10,
   },
   text: {
+    fontFamily: FontFamily.sansBold,
     fontSize: 11,
     fontWeight: '800',
     letterSpacing: 0.5,

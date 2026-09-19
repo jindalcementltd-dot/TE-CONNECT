@@ -8,7 +8,7 @@ import { useQuery } from '@tanstack/react-query';
 import {
   apiGetTodaySummary, apiGetDealerSalesSummary,
   apiGetSlabs, apiGetMeetings, apiGetSettings, apiGetSales,
-  apiGetDealers, apiGetActiveTracker, apiGetContractors,
+  apiGetDealers, apiGetActiveTracker, apiGetContractors, apiGetUsers,
 } from '../../src/services/api';
 import { getUser } from '../../src/services/auth';
 import {
@@ -18,6 +18,7 @@ import {
   calcRequiredPunch,
 } from '../../src/utils/helpers';
 import { User, DealerSalesSummary } from '../../src/types';
+import { FontFamily } from '../../src/theme/typography';
 import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
 import { format } from 'date-fns';
 
@@ -25,6 +26,7 @@ const { width } = Dimensions.get('window');
 
 export default function HomeScreen() {
   const [user, setUser] = useState<User | null>(null);
+  const [selectedTE, setSelectedTE] = useState<string>('ALL');
   const [refreshing, setRefreshing] = useState(false);
   const today = normalizeDate(new Date());
 
@@ -36,6 +38,11 @@ export default function HomeScreen() {
   const { data: settings } = useQuery({
     queryKey: ['settings'],
     queryFn: () => apiGetSettings(),
+  });
+
+  const { data: usersList, refetch: refetchUsers } = useQuery({
+    queryKey: ['users'],
+    queryFn: () => apiGetUsers(),
   });
 
   const { data: allSales, refetch: refetchSales } = useQuery({
@@ -71,10 +78,31 @@ export default function HomeScreen() {
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     await Promise.all([
-      refetchSales(), refetchDealers(), refetchContractors(), refetchActive(), refetchSlabs(), refetchMeetings()
+      refetchUsers(), refetchSales(), refetchDealers(), refetchContractors(), refetchActive(), refetchSlabs(), refetchMeetings()
     ]);
     setRefreshing(false);
-  }, [refetchSales, refetchDealers, refetchContractors, refetchActive, refetchSlabs, refetchMeetings]);
+  }, [refetchUsers, refetchSales, refetchDealers, refetchContractors, refetchActive, refetchSlabs, refetchMeetings]);
+
+  // Build unique team list for filter
+  const uniqueTeamList = useMemo(() => {
+    const set = new Set<string>();
+    (usersList || []).forEach(u => {
+      if (u.name && u.name.trim()) set.add(u.name.trim());
+    });
+    (allSales || []).forEach(s => {
+      if (s.assigned_te && s.assigned_te.trim()) set.add(s.assigned_te.trim());
+    });
+    (allSlabs || []).forEach(s => {
+      if (s.assigned_te && s.assigned_te.trim()) set.add(s.assigned_te.trim());
+    });
+    (allMeetings || []).forEach(m => {
+      if (m.te && m.te.trim()) set.add(m.te.trim());
+    });
+    (activeTrackers || []).forEach(t => {
+      if (t.te && t.te.trim()) set.add(t.te.trim());
+    });
+    return Array.from(set).filter(Boolean);
+  }, [usersList, allSales, allSlabs, allMeetings, activeTrackers]);
 
   const greeting = getGreeting();
   
@@ -92,14 +120,36 @@ export default function HomeScreen() {
   const territorySetting = settings?.find(s => s.setting === 'territory')?.value || user?.territory || 'Jajpur';
   const teamSetting = settings?.find(s => s.setting === 'team')?.value || user?.team || 'Team Jajpur';
 
-  // Slabs & Meetings for today
-  const allSlabsList = allSlabs || [];
+  // Apply Team Filter
+  const allSlabsList = useMemo(() => {
+    const list = allSlabs || [];
+    if (selectedTE === 'ALL') return list;
+    return list.filter(s => 
+      String(s.assigned_te || s.created_by || '').toLowerCase() === selectedTE.toLowerCase()
+    );
+  }, [allSlabs, selectedTE]);
+
   const todaySlabsList = allSlabsList.filter(s => normalizeDate(s.slab_date) === today);
-  const allMeetingsList = allMeetings || [];
+
+  const allMeetingsList = useMemo(() => {
+    const list = allMeetings || [];
+    if (selectedTE === 'ALL') return list;
+    return list.filter(m => 
+      String(m.te || m.created_by || '').toLowerCase() === selectedTE.toLowerCase()
+    );
+  }, [allMeetings, selectedTE]);
+
   const todayMeetingsList = allMeetingsList.filter(m => normalizeDate(m.meeting_date) === today);
 
   // Sales Calculations
-  const allSalesList = allSales || [];
+  const allSalesList = useMemo(() => {
+    const list = allSales || [];
+    if (selectedTE === 'ALL') return list;
+    return list.filter(s => 
+      String(s.assigned_te || s.created_by || '').toLowerCase() === selectedTE.toLowerCase()
+    );
+  }, [allSales, selectedTE]);
+
   const monthlyTotalBags = allSalesList.reduce((sum, s) => sum + (Number(s.quantity_bags) || 0), 0);
   const monthlyTotalMT = (monthlyTotalBags / 20).toFixed(1);
 
@@ -108,19 +158,25 @@ export default function HomeScreen() {
   const displaySalesBags = todaySalesBags > 0 ? todaySalesBags : monthlyTotalBags;
 
   // 80% Bag Punch Calculation
-  const totalPunchBags = (activeTrackers || []).reduce((sum, t) => sum + (Number(t.punched_quantity_bags) || 0), 0);
+  const filteredActiveTrackers = useMemo(() => {
+    const list = activeTrackers || [];
+    if (selectedTE === 'ALL') return list;
+    return list.filter(t => String(t.te || '').toLowerCase() === selectedTE.toLowerCase());
+  }, [activeTrackers, selectedTE]);
+
+  const totalPunchBags = filteredActiveTrackers.reduce((sum, t) => sum + (Number(t.punched_quantity_bags) || 0), 0);
   const required80PercentPunch = calcRequiredPunch(monthlyTotalBags, PUNCH_VOLUME_TARGET_PERCENT);
   const punchVolumePercent = monthlyTotalBags > 0
     ? Math.round((totalPunchBags / monthlyTotalBags) * 1000) / 10
     : 0;
 
   // 40% Contractor Active Base Calculation
-  const sheetTotalContractors = (activeTrackers || []).reduce((max, t) => Math.max(max, Number(t.total_contractors) || 0), 0);
+  const sheetTotalContractors = filteredActiveTrackers.reduce((max, t) => Math.max(max, Number(t.total_contractors) || 0), 0);
   const totalContractorsCount = sheetTotalContractors > 0
     ? sheetTotalContractors
     : Math.max((contractors || []).length, 10);
 
-  const sheetActiveContractors = (activeTrackers || []).reduce((sum, t) => sum + (Number(t.active_contractors) || 0), 0);
+  const sheetActiveContractors = filteredActiveTrackers.reduce((sum, t) => sum + (Number(t.active_contractors) || 0), 0);
   const activeContractorsCount = sheetActiveContractors > 0
     ? sheetActiveContractors
     : (totalPunchBags > 0 ? Math.ceil(totalPunchBags / 100) : 0);
@@ -186,12 +242,66 @@ export default function HomeScreen() {
             </View>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.avatarCircle} activeOpacity={0.8}>
+          <TouchableOpacity style={styles.avatarCircle} activeOpacity={0.8} onPress={() => router.push('/admin')}>
             <Text style={styles.avatarLetter}>
               {user?.name ? user.name.charAt(0).toUpperCase() : 'R'}
             </Text>
           </TouchableOpacity>
         </View>
+      </View>
+
+      {/* ── DYNAMIC TEAM MEMBER SELECTOR CHIP BAR ("SARE USER KA DATA") ── */}
+      <View style={styles.teamFilterContainer}>
+        <View style={styles.teamFilterHeaderRow}>
+          <View style={styles.teamFilterTitleWrap}>
+            <MaterialCommunityIcons name="account-group-outline" size={18} color="#800E20" />
+            <Text style={styles.teamFilterHeading}>Team Visibility</Text>
+          </View>
+          {selectedTE !== 'ALL' && (
+            <TouchableOpacity onPress={() => setSelectedTE('ALL')} style={styles.resetFilterBtn}>
+              <Text style={styles.resetFilterBtnText}>Show All Team ✕</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.teamFilterScroll}>
+          <TouchableOpacity
+            style={[styles.teamSelectChip, selectedTE === 'ALL' && styles.teamSelectChipActive]}
+            onPress={() => setSelectedTE('ALL')}
+            activeOpacity={0.8}
+          >
+            <MaterialCommunityIcons
+              name="account-multiple"
+              size={15}
+              color={selectedTE === 'ALL' ? '#FFFFFF' : '#800E20'}
+              style={{ marginRight: 6 }}
+            />
+            <Text style={[styles.teamSelectChipText, selectedTE === 'ALL' && styles.teamSelectChipTextActive]}>
+              All Team (Consolidated)
+            </Text>
+          </TouchableOpacity>
+
+          {uniqueTeamList.map((member) => {
+            const isSelected = selectedTE === member;
+            return (
+              <TouchableOpacity
+                key={member}
+                style={[styles.teamSelectChip, isSelected && styles.teamSelectChipActive]}
+                onPress={() => setSelectedTE(member)}
+                activeOpacity={0.8}
+              >
+                <Feather
+                  name="user"
+                  size={13}
+                  color={isSelected ? '#FFFFFF' : '#800E20'}
+                  style={{ marginRight: 5 }}
+                />
+                <Text style={[styles.teamSelectChipText, isSelected && styles.teamSelectChipTextActive]}>
+                  {member}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
       </View>
 
       {/* ── 2. BIG EXECUTIVE COMMAND HERO CARD (PROTON VAULT WINE) ── */}
@@ -202,10 +312,12 @@ export default function HomeScreen() {
               <Text style={styles.heroBrandTE}>TE </Text>
               <Text style={styles.heroBrandCONNECT}>CONNECT</Text>
             </View>
-            <Text style={styles.heroTeamSubtitle}>{teamSetting.toUpperCase()} COMMAND CENTER</Text>
+            <Text style={styles.heroTeamSubtitle}>
+              {selectedTE === 'ALL' ? `${teamSetting.toUpperCase()} • CONSOLIDATED` : `${selectedTE.toUpperCase()} • FIELD METRICS`}
+            </Text>
           </View>
           <View style={styles.securityShieldCircle}>
-            <MaterialCommunityIcons name="shield-check" size={32} color="#FFFFFF" />
+            <MaterialCommunityIcons name="shield-check" size={30} color="#FFFFFF" />
           </View>
         </View>
 
@@ -241,7 +353,7 @@ export default function HomeScreen() {
 
       {/* ── 3. DATE BAR ── */}
       <View style={styles.dateBarRow}>
-        <Text style={styles.sectionHeaderTitle}>Today's Live Metrics</Text>
+        <Text style={styles.sectionHeaderTitle}>Live Field Metrics</Text>
         <View style={styles.dateBadge}>
           <Ionicons name="calendar" size={15} color="#800E20" style={{ marginRight: 6 }} />
           <Text style={styles.dateBadgeText}>{formattedDate}</Text>
@@ -497,17 +609,19 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: 16,
   },
   headerLeft: {
     flex: 1,
   },
   greetingSubtitle: {
+    fontFamily: FontFamily.sansSemiBold,
     fontSize: 14,
     color: '#8A7277',
     fontWeight: '600',
   },
   userNameBig: {
+    fontFamily: FontFamily.displayBlack,
     fontSize: 28,
     fontWeight: '900',
     color: '#1F0B10',
@@ -534,6 +648,7 @@ const styles = StyleSheet.create({
     marginRight: 6,
   },
   liveTeamText: {
+    fontFamily: FontFamily.sansBold,
     fontSize: 11,
     fontWeight: '800',
     color: '#800E20',
@@ -573,6 +688,7 @@ const styles = StyleSheet.create({
     borderColor: '#FFFFFF',
   },
   notifBadgeText: {
+    fontFamily: FontFamily.displayBold,
     color: '#FFFFFF',
     fontSize: 10,
     fontWeight: '900',
@@ -588,9 +704,81 @@ const styles = StyleSheet.create({
     borderColor: '#FBE8EC',
   },
   avatarLetter: {
+    fontFamily: FontFamily.displayBold,
     color: '#FFFFFF',
     fontSize: 19,
     fontWeight: '900',
+  },
+
+  // Team Filter Bar
+  teamFilterContainer: {
+    marginBottom: 20,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 14,
+    borderWidth: 1.5,
+    borderColor: '#EEDCE1',
+    shadowColor: 'rgba(78, 5, 17, 0.05)',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 1,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  teamFilterHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  teamFilterTitleWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  teamFilterHeading: {
+    fontFamily: FontFamily.displayBold,
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#1F0B10',
+    marginLeft: 6,
+  },
+  resetFilterBtn: {
+    backgroundColor: '#FAF0F2',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+  },
+  resetFilterBtnText: {
+    fontFamily: FontFamily.sansBold,
+    fontSize: 11,
+    color: '#800E20',
+    fontWeight: '700',
+  },
+  teamFilterScroll: {
+    gap: 8,
+    paddingRight: 10,
+  },
+  teamSelectChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FAF0F2',
+    paddingHorizontal: 13,
+    paddingVertical: 8,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#EEDCE1',
+  },
+  teamSelectChipActive: {
+    backgroundColor: '#800E20',
+    borderColor: '#800E20',
+  },
+  teamSelectChipText: {
+    fontFamily: FontFamily.sansSemiBold,
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#800E20',
+  },
+  teamSelectChipTextActive: {
+    color: '#FFFFFF',
   },
 
   // 2. Big Hero Command Card
@@ -617,18 +805,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   heroBrandTE: {
+    fontFamily: FontFamily.displayBlack,
     fontSize: 26,
     fontWeight: '900',
     color: '#FFFFFF',
     letterSpacing: 1,
   },
   heroBrandCONNECT: {
+    fontFamily: FontFamily.displayBlack,
     fontSize: 26,
     fontWeight: '900',
     color: '#E53935',
     letterSpacing: 1,
   },
   heroTeamSubtitle: {
+    fontFamily: FontFamily.sansBold,
     fontSize: 11,
     fontWeight: '800',
     color: 'rgba(255, 255, 255, 0.75)',
@@ -636,9 +827,9 @@ const styles = StyleSheet.create({
     marginTop: 3,
   },
   securityShieldCircle: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     backgroundColor: 'rgba(255, 255, 255, 0.12)',
     alignItems: 'center',
     justifyContent: 'center',
@@ -649,6 +840,7 @@ const styles = StyleSheet.create({
     marginTop: 18,
   },
   heroMainMetricLabel: {
+    fontFamily: FontFamily.sansBold,
     fontSize: 10,
     fontWeight: '800',
     color: 'rgba(255, 255, 255, 0.7)',
@@ -661,12 +853,14 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   heroMainMetricMT: {
+    fontFamily: FontFamily.displayBlack,
     fontSize: 38,
     fontWeight: '900',
     color: '#FFFFFF',
     letterSpacing: -1,
   },
   heroMainMetricUnit: {
+    fontFamily: FontFamily.displayBold,
     fontSize: 20,
     fontWeight: '800',
     color: '#E53935',
@@ -679,6 +873,7 @@ const styles = StyleSheet.create({
     marginLeft: 'auto',
   },
   heroBagsPillText: {
+    fontFamily: FontFamily.sansBold,
     fontSize: 12,
     fontWeight: '800',
     color: '#FFFFFF',
@@ -696,18 +891,21 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   heroTargetLabel: {
+    fontFamily: FontFamily.sansBold,
     fontSize: 9,
     fontWeight: '800',
     color: 'rgba(255, 255, 255, 0.65)',
     letterSpacing: 0.8,
   },
   heroTargetVal: {
+    fontFamily: FontFamily.displayBold,
     fontSize: 16,
     fontWeight: '900',
     color: '#FFFFFF',
     marginTop: 3,
   },
   heroTargetSub: {
+    fontFamily: FontFamily.sansMedium,
     fontSize: 10,
     fontWeight: '600',
     color: 'rgba(255, 255, 255, 0.75)',
@@ -727,6 +925,7 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   sectionHeaderTitle: {
+    fontFamily: FontFamily.displayBold,
     fontSize: 18,
     fontWeight: '900',
     color: '#1F0B10',
@@ -743,6 +942,7 @@ const styles = StyleSheet.create({
     borderColor: '#EEDCE1',
   },
   dateBadgeText: {
+    fontFamily: FontFamily.sansSemiBold,
     fontSize: 12,
     fontWeight: '700',
     color: '#554246',
@@ -789,17 +989,20 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   trendPillText: {
+    fontFamily: FontFamily.sansBold,
     fontSize: 10,
     fontWeight: '800',
     color: '#800E20',
   },
   bigMetricNumber: {
+    fontFamily: FontFamily.displayBlack,
     fontSize: 32,
     fontWeight: '900',
     color: '#1F0B10',
     letterSpacing: -0.5,
   },
   bigMetricLabel: {
+    fontFamily: FontFamily.sansBold,
     fontSize: 12,
     color: '#8A7277',
     fontWeight: '700',
@@ -814,6 +1017,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   seeAllText: {
+    fontFamily: FontFamily.sansBold,
     fontSize: 13,
     fontWeight: '800',
     color: '#800E20',
@@ -852,11 +1056,13 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   actionTitleBig: {
+    fontFamily: FontFamily.displayBold,
     fontSize: 16,
     fontWeight: '800',
     color: '#1F0B10',
   },
   actionSubtitle: {
+    fontFamily: FontFamily.sansMedium,
     fontSize: 12,
     color: '#8A7277',
     fontWeight: '500',
@@ -893,12 +1099,14 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   emptyStateTitle: {
+    fontFamily: FontFamily.displayBold,
     fontSize: 15,
     fontWeight: '800',
     color: '#1F0B10',
     marginBottom: 4,
   },
   emptyStateSub: {
+    fontFamily: FontFamily.sansRegular,
     fontSize: 12,
     color: '#8A7277',
     textAlign: 'center',
@@ -935,6 +1143,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   scheduleDealerTitle: {
+    fontFamily: FontFamily.displayBold,
     fontSize: 16,
     fontWeight: '800',
     color: '#1F0B10',
@@ -954,10 +1163,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#F3F4F6',
   },
   statusBadgeText: {
+    fontFamily: FontFamily.sansBold,
     fontSize: 11,
     fontWeight: '800',
   },
   scheduleMetaText: {
+    fontFamily: FontFamily.sansMedium,
     fontSize: 13,
     color: '#6B4E55',
     marginTop: 4,
@@ -998,26 +1209,31 @@ const styles = StyleSheet.create({
   rankSilver: { backgroundColor: '#CBD5E1' },
   rankBronze: { backgroundColor: '#FDBA74' },
   rankBadgeText: {
+    fontFamily: FontFamily.displayBlack,
     fontSize: 14,
     fontWeight: '900',
     color: '#1F0B10',
   },
   leaderDealerName: {
+    fontFamily: FontFamily.displayBold,
     fontSize: 15,
     fontWeight: '800',
     color: '#1F0B10',
   },
   leaderDealerArea: {
+    fontFamily: FontFamily.sansMedium,
     fontSize: 12,
     color: '#8A7277',
     marginTop: 2,
   },
   leaderDealerMT: {
+    fontFamily: FontFamily.displayBold,
     fontSize: 16,
     fontWeight: '900',
     color: '#800E20',
   },
   leaderDealerBags: {
+    fontFamily: FontFamily.sansRegular,
     fontSize: 11,
     color: '#8A7277',
   },

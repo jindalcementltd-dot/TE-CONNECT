@@ -57,11 +57,24 @@ export async function hashPassword(password: string): Promise<string> {
 }
 
 export async function login(login_id: string, password: string): Promise<{ user: User; token: string }> {
-  const hashed = await hashPassword(password);
-  const result = await apiLogin(login_id, hashed);
+  const cleanLoginId = login_id.trim();
+  const cleanPassword = password.trim();
+
+  let result = await apiLogin(cleanLoginId, cleanPassword);
+
+  // If plain password fails, attempt SHA-256 hashed password fallback
   if (!result.success || !result.data) {
-    throw new Error(result.message || 'Login failed');
+    const hashed = await hashPassword(cleanPassword);
+    const hashResult = await apiLogin(cleanLoginId, hashed);
+    if (hashResult.success && hashResult.data) {
+      result = hashResult;
+    }
   }
+
+  if (!result.success || !result.data) {
+    throw new Error(result.message || 'Invalid login ID or password.');
+  }
+
   const session: AuthSession = {
     user: result.data.user,
     token: result.data.token,

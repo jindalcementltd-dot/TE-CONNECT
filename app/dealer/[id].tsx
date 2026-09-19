@@ -8,6 +8,7 @@ import { useQuery } from '@tanstack/react-query';
 import QRCode from 'react-native-qrcode-svg';
 import Toast from 'react-native-toast-message';
 import { apiGetDealer } from '../../src/services/api';
+import { FontFamily } from '../../src/theme/typography';
 import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
 
 export default function DealerQRScreen() {
@@ -173,12 +174,14 @@ const styles = StyleSheet.create({
     backgroundColor: '#F9F5F6',
   },
   notFoundTitle: {
+    fontFamily: FontFamily.displayBold,
     fontSize: 18,
     fontWeight: '800',
     color: '#1F0B10',
     marginTop: 12,
   },
   notFoundSub: {
+    fontFamily: FontFamily.sansRegular,
     fontSize: 13,
     color: '#8A7277',
     marginTop: 4,
@@ -192,6 +195,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   backButtonText: {
+    fontFamily: FontFamily.sansBold,
     color: '#FFFFFF',
     fontWeight: '700',
   },
@@ -210,6 +214,7 @@ const styles = StyleSheet.create({
     width: 36,
   },
   title: {
+    fontFamily: FontFamily.displayBold,
     fontSize: 18,
     fontWeight: '800',
     color: '#1F0B10',
@@ -246,17 +251,20 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.25)',
   },
   heroIconText: {
+    fontFamily: FontFamily.displayBlack,
     fontSize: 30,
     fontWeight: '900',
     color: '#FFFFFF',
   },
   heroDealerName: {
+    fontFamily: FontFamily.displayBold,
     fontSize: 22,
     fontWeight: '900',
     color: '#FFFFFF',
     textAlign: 'center',
   },
   heroDealerArea: {
+    fontFamily: FontFamily.sansSemiBold,
     fontSize: 13,
     color: 'rgba(255,255,255,0.75)',
     marginTop: 3,
@@ -269,6 +277,7 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   activeText: {
+    fontFamily: FontFamily.sansBold,
     fontSize: 11,
     fontWeight: '900',
     letterSpacing: 0.5,
@@ -290,12 +299,14 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   qrTitle: {
+    fontFamily: FontFamily.displayBold,
     fontSize: 16,
     fontWeight: '800',
     color: '#1F0B10',
     marginBottom: 4,
   },
   qrSub: {
+    fontFamily: FontFamily.sansRegular,
     fontSize: 12,
     color: '#8A7277',
     marginBottom: 18,
@@ -319,12 +330,14 @@ const styles = StyleSheet.create({
     paddingVertical: 24,
   },
   noQRText: {
+    fontFamily: FontFamily.displayBold,
     fontSize: 15,
     fontWeight: '800',
     color: '#1F0B10',
     marginTop: 8,
   },
   noQRSub: {
+    fontFamily: FontFamily.sansRegular,
     fontSize: 12,
     color: '#8A7277',
     marginTop: 4,
@@ -367,6 +380,7 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   actionText: {
+    fontFamily: FontFamily.sansBold,
     fontSize: 13,
     fontWeight: '800',
     color: '#FFFFFF',
@@ -383,6 +397,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
   },
   actionTextOutline: {
+    fontFamily: FontFamily.sansBold,
     fontSize: 13,
     fontWeight: '800',
     color: '#800E20',
@@ -403,6 +418,7 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   detailCardHeader: {
+    fontFamily: FontFamily.displayBold,
     fontSize: 15,
     fontWeight: '800',
     color: '#1F0B10',
@@ -428,11 +444,13 @@ const detailStyles = StyleSheet.create({
     justifyContent: 'center',
   },
   label: {
+    fontFamily: FontFamily.sansSemiBold,
     fontSize: 11,
     color: '#8A7277',
     fontWeight: '600',
   },
   value: {
+    fontFamily: FontFamily.sansBold,
     fontSize: 14,
     color: '#1F0B10',
     fontWeight: '700',

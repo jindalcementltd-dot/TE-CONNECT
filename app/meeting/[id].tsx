@@ -11,6 +11,7 @@ import { apiGetMeetings, apiUpdateMeeting } from '../../src/services/api';
 import { getUser } from '../../src/services/auth';
 import { normalizeDate } from '../../src/utils/helpers';
 import { Meeting, MeetingStatus } from '../../src/types';
+import { FontFamily } from '../../src/theme/typography';
 import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
 import { format } from 'date-fns';
 
@@ -355,12 +356,14 @@ const styles = StyleSheet.create({
     backgroundColor: '#F9F5F6',
   },
   notFoundTitle: {
+    fontFamily: FontFamily.displayBold,
     fontSize: 18,
     fontWeight: '800',
     color: '#1F0B10',
     marginTop: 12,
   },
   notFoundSub: {
+    fontFamily: FontFamily.sansRegular,
     fontSize: 13,
     color: '#8A7277',
     marginTop: 4,
@@ -374,6 +377,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   backButtonText: {
+    fontFamily: FontFamily.sansBold,
     color: '#FFFFFF',
     fontWeight: '700',
   },
@@ -392,6 +396,7 @@ const styles = StyleSheet.create({
     width: 36,
   },
   title: {
+    fontFamily: FontFamily.displayBold,
     fontSize: 18,
     fontWeight: '800',
     color: '#1F0B10',
@@ -421,12 +426,14 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
   },
   heroSubtitle: {
+    fontFamily: FontFamily.sansBold,
     fontSize: 10,
     fontWeight: '800',
     color: 'rgba(255,255,255,0.7)',
     letterSpacing: 1.5,
   },
   heroTitle: {
+    fontFamily: FontFamily.displayBlack,
     fontSize: 22,
     fontWeight: '900',
     color: '#FFFFFF',
@@ -451,6 +458,7 @@ const styles = StyleSheet.create({
     borderColor: '#E5E7EB',
   },
   heroStatusBadgeText: {
+    fontFamily: FontFamily.sansBold,
     fontSize: 11,
     fontWeight: '900',
     letterSpacing: 0.5,
@@ -465,6 +473,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   heroDateText: {
+    fontFamily: FontFamily.sansBold,
     fontSize: 14,
     color: '#FFFFFF',
     fontWeight: '700',
@@ -485,11 +494,13 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   sectionHeading: {
+    fontFamily: FontFamily.displayBold,
     fontSize: 15,
     fontWeight: '800',
     color: '#1F0B10',
   },
   sectionSubHeading: {
+    fontFamily: FontFamily.sansRegular,
     fontSize: 11,
     color: '#8A7277',
     marginTop: 2,
@@ -524,6 +535,7 @@ const styles = StyleSheet.create({
     borderColor: '#4B5563',
   },
   statusSelectBtnText: {
+    fontFamily: FontFamily.sansBold,
     fontSize: 12,
     fontWeight: '800',
     color: '#800E20',
@@ -539,6 +551,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   updatingText: {
+    fontFamily: FontFamily.sansMedium,
     fontSize: 12,
     fontWeight: '600',
     color: '#800E20',
@@ -559,6 +572,7 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   completeFormTitle: {
+    fontFamily: FontFamily.displayBold,
     fontSize: 15,
     fontWeight: '800',
     color: '#800E20',
@@ -568,12 +582,14 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   inputLabel: {
+    fontFamily: FontFamily.sansBold,
     fontSize: 12,
     fontWeight: '700',
     color: '#1F0B10',
     marginBottom: 4,
   },
   input: {
+    fontFamily: FontFamily.sansMedium,
     borderWidth: 1.5,
     borderColor: '#EEDCE1',
     borderRadius: 12,
@@ -596,6 +612,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   submitCompleteBtnText: {
+    fontFamily: FontFamily.sansBold,
     color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '800',
@@ -606,6 +623,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   cancelCompleteBtnText: {
+    fontFamily: FontFamily.sansSemiBold,
     color: '#8A7277',
     fontSize: 13,
     fontWeight: '600',
@@ -626,6 +644,7 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   detailsCardHeader: {
+    fontFamily: FontFamily.displayBold,
     fontSize: 15,
     fontWeight: '800',
     color: '#1F0B10',
@@ -641,12 +660,14 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   remarkLabel: {
+    fontFamily: FontFamily.sansBold,
     fontSize: 11,
     fontWeight: '800',
     color: '#800E20',
     marginBottom: 4,
   },
   remarkValue: {
+    fontFamily: FontFamily.sansRegular,
     fontSize: 13,
     color: '#1F0B10',
     lineHeight: 18,
@@ -660,6 +681,7 @@ const styles = StyleSheet.create({
     borderTopColor: '#F7EFF1',
   },
   metaText: {
+    fontFamily: FontFamily.sansRegular,
     fontSize: 11,
     color: '#A0858C',
   },
@@ -683,17 +705,20 @@ const detailStyles = StyleSheet.create({
     justifyContent: 'center',
   },
   label: {
+    fontFamily: FontFamily.sansSemiBold,
     fontSize: 11,
     color: '#8A7277',
     fontWeight: '600',
   },
   value: {
+    fontFamily: FontFamily.sansBold,
     fontSize: 14,
     color: '#1F0B10',
     fontWeight: '700',
     marginTop: 2,
   },
   highlightValue: {
+    fontFamily: FontFamily.sansBold,
     color: '#800E20',
     fontWeight: '900',
     fontSize: 15,
