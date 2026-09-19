@@ -9,10 +9,15 @@ import { Colors } from '../../src/theme/colors';
 import {
   apiGetTodaySummary, apiGetDealerSalesSummary,
   apiGetSlabs, apiGetMeetings, apiGetSettings, apiGetSales,
-  apiGetDealers, apiGetActiveTracker,
+  apiGetDealers, apiGetActiveTracker, apiGetContractors,
 } from '../../src/services/api';
 import { getUser } from '../../src/services/auth';
-import { getGreeting, currentMonthISO, bagsToMT, normalizeDate } from '../../src/utils/helpers';
+import {
+  getGreeting, currentMonthISO, bagsToMT, normalizeDate,
+  PUNCH_VOLUME_TARGET_PERCENT, CONTRACTOR_ACTIVE_MIN_TARGET_PERCENT,
+  simulateContractorPunchDistribution, calcContractorActivePercent,
+  calcRequiredPunch,
+} from '../../src/utils/helpers';
 import { User, DealerSalesSummary } from '../../src/types';
 import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
 
@@ -50,6 +55,11 @@ export default function HomeScreen() {
     queryFn: () => apiGetDealers(),
   });
 
+  const { data: contractors, refetch: refetchContractors } = useQuery({
+    queryKey: ['contractors'],
+    queryFn: () => apiGetContractors(),
+  });
+
   const { data: activeTrackers, refetch: refetchActive } = useQuery({
     queryKey: ['activeTrackers'],
     queryFn: () => apiGetActiveTracker(),
@@ -68,10 +78,10 @@ export default function HomeScreen() {
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     await Promise.all([
-      refetchToday(), refetchSales(), refetchDealers(), refetchActive(), refetchSlabs(), refetchMeetings()
+      refetchToday(), refetchSales(), refetchDealers(), refetchContractors(), refetchActive(), refetchSlabs(), refetchMeetings()
     ]);
     setRefreshing(false);
-  }, []);
+  }, [refetchToday, refetchSales, refetchDealers, refetchContractors, refetchActive, refetchSlabs, refetchMeetings]);
 
   const greeting = getGreeting();
   
@@ -86,7 +96,6 @@ export default function HomeScreen() {
   // Live Sheet Data calculations
   const territorySetting = settings?.find(s => s.setting === 'territory')?.value || user?.territory || 'Jajpur';
   const teamSetting = settings?.find(s => s.setting === 'team')?.value || user?.team || 'Team Jajpur';
-  const targetActiveSetting = Number(settings?.find(s => s.setting === 'active_target')?.value || 80);
 
   // Real Slabs & Meetings for today
   const allSlabsList = allSlabs || [];
@@ -103,11 +112,28 @@ export default function HomeScreen() {
   const realSalesBags = todayBagsFromList > 0 ? todayBagsFromList : monthlyTotalBags;
   const realSalesMT = bagsToMT(realSalesBags);
 
-  // Punch & Active calculations
+  // Target 1: 80% Bag Volume Punch
   const totalPunchBags = (activeTrackers || []).reduce((sum, t) => sum + (Number(t.punched_quantity_bags) || 0), 0);
-  const realActivePercent = monthlyTotalBags > 0
-    ? Math.round((totalPunchBags / monthlyTotalBags) * 100)
-    : (todaySummary?.active_percent ?? 0);
+  const required80PercentBags = calcRequiredPunch(monthlyTotalBags, PUNCH_VOLUME_TARGET_PERCENT);
+  const punchVolumePercent = monthlyTotalBags > 0
+    ? Math.round((totalPunchBags / monthlyTotalBags) * 1000) / 10
+    : 0;
+
+  // Target 2: 40% Contractor Active
+  const sheetTotalContractors = (activeTrackers || []).reduce((max, t) => Math.max(max, Number(t.total_contractors) || 0), 0);
+  const totalContractorsCount = sheetTotalContractors > 0
+    ? sheetTotalContractors
+    : Math.max((contractors || []).length, 10);
+
+  const sheetActiveContractors = (activeTrackers || []).reduce((sum, t) => sum + (Number(t.active_contractors) || 0), 0);
+  const activeContractorsCount = sheetActiveContractors > 0
+    ? sheetActiveContractors
+    : (totalPunchBags > 0 ? Math.ceil(totalPunchBags / 100) : 0);
+
+  const contractorActivePercent = calcContractorActivePercent(activeContractorsCount, totalContractorsCount);
+
+  // Quick 100 Bag Simulation Preview
+  const quickSim = simulateContractorPunchDistribution(monthlyTotalBags, totalContractorsCount, 100);
 
   const realSlabsCount = todaySlabsList.length > 0 ? todaySlabsList.length : allSlabsList.length;
   const realMeetingsCount = todayMeetingsList.length > 0 ? todayMeetingsList.length : (allMeetings || []).length;
@@ -202,13 +228,13 @@ export default function HomeScreen() {
           </View>
           <View style={styles.heroStatSeparator} />
           <View style={styles.heroStatItem}>
-            <Text style={styles.heroStatLabel}>ACTIVE TARGET</Text>
-            <Text style={styles.heroStatValue}>{targetActiveSetting}%</Text>
+            <Text style={styles.heroStatLabel}>80% PUNCH TARGET</Text>
+            <Text style={styles.heroStatValue}>{punchVolumePercent}%</Text>
           </View>
           <View style={styles.heroStatSeparator} />
           <View style={styles.heroStatItem}>
-            <Text style={styles.heroStatLabel}>SLABS (MTD)</Text>
-            <Text style={styles.heroStatValue}>{allSlabs?.length || 0}</Text>
+            <Text style={styles.heroStatLabel}>40% CONTR. ACTIVE</Text>
+            <Text style={styles.heroStatValue}>{contractorActivePercent.toFixed(0)}%</Text>
           </View>
         </View>
       </View>
@@ -253,14 +279,14 @@ export default function HomeScreen() {
               <MaterialCommunityIcons name="package-variant-closed" size={26} color="#D97706" />
             </View>
             <View style={[styles.trendPill, { backgroundColor: '#FEF3C7' }]}>
-              <Text style={[styles.trendPillText, { color: '#B45309' }]}>{realSalesMT.toFixed(1)} MT</Text>
+              <Text style={[styles.trendPillText, { color: '#B45309' }]}>{monthlyTotalMT} MT</Text>
             </View>
           </View>
-          <Text style={styles.bigMetricNumber}>{realSalesBags}</Text>
-          <Text style={styles.bigMetricLabel}>Sales (Bags Today)</Text>
+          <Text style={styles.bigMetricNumber}>{monthlyTotalBags}</Text>
+          <Text style={styles.bigMetricLabel}>Total Sales (Bags)</Text>
         </TouchableOpacity>
 
-        {/* Card 3: Active % */}
+        {/* Card 3: 80% Volume Punch */}
         <TouchableOpacity
           style={styles.bigMetricCard}
           onPress={() => router.push('/(tabs)/sales')}
@@ -268,34 +294,59 @@ export default function HomeScreen() {
         >
           <View style={styles.cardHeaderRow}>
             <View style={[styles.largeIconBox, { backgroundColor: '#DCFCE7' }]}>
-              <MaterialCommunityIcons name="target" size={26} color="#15803D" />
+              <MaterialCommunityIcons name="cube-send" size={26} color="#15803D" />
             </View>
             <View style={[styles.trendPill, { backgroundColor: '#DCFCE7' }]}>
-              <Text style={[styles.trendPillText, { color: '#15803D' }]}>Target {targetActiveSetting}%</Text>
+              <Text style={[styles.trendPillText, { color: '#15803D' }]}>Target: 80%</Text>
             </View>
           </View>
-          <Text style={styles.bigMetricNumber}>{realActivePercent}%</Text>
-          <Text style={styles.bigMetricLabel}>Active Punching</Text>
+          <Text style={[styles.bigMetricNumber, { color: punchVolumePercent >= 80 ? '#15803D' : '#800E20' }]}>
+            {punchVolumePercent}%
+          </Text>
+          <Text style={styles.bigMetricLabel}>Bag Punch Volume</Text>
         </TouchableOpacity>
 
-        {/* Card 4: Meetings */}
+        {/* Card 4: 40% Contractor Active */}
         <TouchableOpacity
           style={styles.bigMetricCard}
-          onPress={() => router.push('/(tabs)/meeting')}
+          onPress={() => router.push('/(tabs)/sales')}
           activeOpacity={0.85}
         >
           <View style={styles.cardHeaderRow}>
             <View style={[styles.largeIconBox, { backgroundColor: '#EDE9FE' }]}>
-              <Ionicons name="people" size={26} color="#7C3AED" />
+              <MaterialCommunityIcons name="account-hard-hat" size={26} color="#7C3AED" />
             </View>
             <View style={[styles.trendPill, { backgroundColor: '#EDE9FE' }]}>
-              <Text style={[styles.trendPillText, { color: '#6D28D9' }]}>{allMeetings?.length || 0} Month</Text>
+              <Text style={[styles.trendPillText, { color: '#6D28D9' }]}>Min: 40%</Text>
             </View>
           </View>
-          <Text style={styles.bigMetricNumber}>{realMeetingsCount}</Text>
-          <Text style={styles.bigMetricLabel}>Meetings Today</Text>
+          <Text style={[styles.bigMetricNumber, { color: contractorActivePercent >= 40 ? '#15803D' : '#D97706' }]}>
+            {contractorActivePercent.toFixed(1)}%
+          </Text>
+          <Text style={styles.bigMetricLabel}>Contractor Active Base</Text>
         </TouchableOpacity>
       </View>
+
+      {/* ── CONTRACTOR PUNCH SIMULATOR TEASER BANNER ── */}
+      <TouchableOpacity
+        style={styles.simTeaserBanner}
+        onPress={() => router.push('/(tabs)/sales')}
+        activeOpacity={0.88}
+      >
+        <View style={styles.simTeaserIconCircle}>
+          <MaterialCommunityIcons name="calculator-variant" size={22} color="#800E20" />
+        </View>
+        <View style={{ flex: 1 }}>
+          <View style={styles.rowBetween}>
+            <Text style={styles.simTeaserTitle}>Contractor Punch Simulator</Text>
+            <Text style={styles.simTeaserTag}>80% TARGET PLANNER</Text>
+          </View>
+          <Text style={styles.simTeaserSub}>
+            @ 100 bags/contractor → <Text style={{ fontWeight: '800', color: '#800E20' }}>{quickSim.activatedContractors} Contractors Activated</Text> ({quickSim.activePercentAchieved}% Active)
+          </Text>
+        </View>
+        <Feather name="chevron-right" size={20} color="#800E20" />
+      </TouchableOpacity>
 
       {/* ── 5. PROTON-GRADE QUICK ACTIONS (BIG BUTTONS) ── */}
       <View style={styles.sectionHeaderRow}>
@@ -772,6 +823,51 @@ const styles = StyleSheet.create({
     color: '#8A7277',
     fontWeight: '600',
     marginTop: 4,
+  },
+
+  // Simulator Teaser
+  simTeaserBanner: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: '#EEDCE1',
+    marginBottom: 24,
+    shadowColor: 'rgba(78, 5, 17, 0.06)',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 1,
+    shadowRadius: 10,
+    elevation: 3,
+    gap: 12,
+  },
+  simTeaserIconCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: '#FBE8EC',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  simTeaserTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#1F0B10',
+  },
+  simTeaserTag: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#800E20',
+    backgroundColor: '#FBE8EC',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  simTeaserSub: {
+    fontSize: 11,
+    color: '#8A7277',
+    marginTop: 3,
   },
 
   // 5. Quick Actions

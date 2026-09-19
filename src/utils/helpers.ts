@@ -115,17 +115,84 @@ export function getGreeting(): string {
   return 'Good Evening'; // Late night
 }
 
+// Business Target Constants
+export const PUNCH_VOLUME_TARGET_PERCENT = 80; // 80% of total sales volume (bags)
+export const CONTRACTOR_ACTIVE_MIN_TARGET_PERCENT = 40; // 40% minimum active contractor base
+
 export function calcActivePercent(actualPunch: number, totalSales: number): number {
   if (totalSales === 0) return 0;
   return (actualPunch / totalSales) * 100;
 }
 
-export function calcRequiredPunch(totalSales: number, targetPercent: number): number {
+export function calcContractorActivePercent(activeContractors: number, totalContractors: number): number {
+  if (totalContractors === 0) return 0;
+  return (activeContractors / totalContractors) * 100;
+}
+
+export function calcRequiredPunch(totalSales: number, targetPercent = PUNCH_VOLUME_TARGET_PERCENT): number {
   return Math.ceil((totalSales * targetPercent) / 100);
+}
+
+export function calcRequiredActiveContractors(totalContractors: number, targetPercent = CONTRACTOR_ACTIVE_MIN_TARGET_PERCENT): number {
+  return Math.ceil((totalContractors * targetPercent) / 100);
 }
 
 export function calcGap(requiredPunch: number, actualPunch: number): number {
   return Math.max(0, requiredPunch - actualPunch);
+}
+
+export interface DistributionSimulation {
+  totalSalesBags: number;
+  totalSalesMT: number;
+  punchTargetBags: number;
+  totalContractors: number;
+  minActiveContractorTarget: number;
+  bagRate: number;
+  fullContractors: number;
+  remainderBags: number;
+  activatedContractors: number;
+  activePercentAchieved: number;
+  isContractorTargetMet: boolean;
+  contractorShortfall: number;
+}
+
+export function simulateContractorPunchDistribution(
+  totalSalesBags: number,
+  totalContractors: number,
+  bagRate: number
+): DistributionSimulation {
+  const safeSalesBags = Math.max(0, Number(totalSalesBags) || 0);
+  const safeContractors = Math.max(0, Number(totalContractors) || 0);
+  const safeBagRate = Math.max(1, Number(bagRate) || 80);
+
+  const punchTargetBags = Math.ceil(safeSalesBags * (PUNCH_VOLUME_TARGET_PERCENT / 100));
+  const minActiveContractorTarget = Math.ceil(safeContractors * (CONTRACTOR_ACTIVE_MIN_TARGET_PERCENT / 100));
+
+  const fullContractors = Math.floor(punchTargetBags / safeBagRate);
+  const remainderBags = punchTargetBags % safeBagRate;
+  const activatedContractors = remainderBags > 0 ? fullContractors + 1 : fullContractors;
+  
+  const activePercentAchieved = safeContractors > 0
+    ? Math.round(((activatedContractors / safeContractors) * 100) * 10) / 10
+    : 0;
+
+  const isContractorTargetMet = activePercentAchieved >= CONTRACTOR_ACTIVE_MIN_TARGET_PERCENT;
+  const contractorShortfall = Math.max(0, minActiveContractorTarget - activatedContractors);
+
+  return {
+    totalSalesBags: safeSalesBags,
+    totalSalesMT: safeSalesBags / BAGS_PER_MT,
+    punchTargetBags,
+    totalContractors: safeContractors,
+    minActiveContractorTarget,
+    bagRate: safeBagRate,
+    fullContractors,
+    remainderBags,
+    activatedContractors,
+    activePercentAchieved,
+    isContractorTargetMet,
+    contractorShortfall,
+  };
 }
 
 export function generateId(prefix: string): string {
