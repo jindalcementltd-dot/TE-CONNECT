@@ -7,12 +7,11 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import Toast from 'react-native-toast-message';
 import { Colors } from '../../src/theme/colors';
-import { Spacing, BorderRadius } from '../../src/theme/spacing';
 import { apiGetDealers, apiCreateSale, apiAddPunch, apiGetUsers } from '../../src/services/api';
 import { getUser } from '../../src/services/auth';
-import { currentDateISO } from '../../src/utils/helpers';
+import { currentDateISO, normalizeDate } from '../../src/utils/helpers';
 import { User, Dealer, Product } from '../../src/types';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
 
 type Mode = 'sale' | 'punch';
 
@@ -52,50 +51,55 @@ export default function AddSaleScreen() {
     mutationFn: (data: any) => apiCreateSale(data),
     onSuccess: (res) => {
       if (res.success) {
-        Toast.show({ type: 'success', text1: 'Sale Added', text2: 'Sale recorded successfully.' });
+        Toast.show({ type: 'success', text1: 'Sale Recorded ✅', text2: 'Logged in Google Sheet successfully.' });
         queryClient.invalidateQueries({ queryKey: ['sales'] });
         queryClient.invalidateQueries({ queryKey: ['dealerSalesSummary'] });
+        queryClient.invalidateQueries({ queryKey: ['todaySummary'] });
         router.back();
       } else {
         Toast.show({ type: 'error', text1: 'Error', text2: res.message });
       }
     },
-    onError: (err: any) => Toast.show({ type: 'error', text1: 'Error', text2: err.message }),
+    onError: (err: any) => Toast.show({ type: 'error', text1: 'Error', text2: err.message || 'Failed to add sale.' }),
   });
 
   const punchMutation = useMutation({
     mutationFn: (data: any) => apiAddPunch(data),
     onSuccess: (res) => {
       if (res.success) {
-        Toast.show({ type: 'success', text1: 'Punch Recorded', text2: 'Punch quantity saved.' });
+        Toast.show({ type: 'success', text1: 'Punch Saved ✅', text2: 'Active tracker updated in Google Sheet.' });
+        queryClient.invalidateQueries({ queryKey: ['activeTrackers'] });
         queryClient.invalidateQueries({ queryKey: ['teActiveSummary'] });
+        queryClient.invalidateQueries({ queryKey: ['todaySummary'] });
         router.back();
       } else {
         Toast.show({ type: 'error', text1: 'Error', text2: res.message });
       }
     },
-    onError: (err: any) => Toast.show({ type: 'error', text1: 'Error', text2: err.message }),
+    onError: (err: any) => Toast.show({ type: 'error', text1: 'Error', text2: err.message || 'Failed to save punch.' }),
   });
 
   const handleSaleSubmit = () => {
-    if (!saleDate) { Toast.show({ type: 'error', text1: 'Missing', text2: 'Date is required.' }); return; }
-    if (!selectedDealer) { Toast.show({ type: 'error', text1: 'Missing', text2: 'Select a dealer.' }); return; }
-    if (!quantityBags || isNaN(Number(quantityBags))) { Toast.show({ type: 'error', text1: 'Missing', text2: 'Enter valid quantity.' }); return; }
+    if (!saleDate) { Toast.show({ type: 'error', text1: 'Missing Date', text2: 'Please specify the sale date.' }); return; }
+    if (!selectedDealer) { Toast.show({ type: 'error', text1: 'Missing Dealer', text2: 'Please select a dealer.' }); return; }
+    if (!quantityBags || isNaN(Number(quantityBags)) || Number(quantityBags) <= 0) {
+      Toast.show({ type: 'error', text1: 'Invalid Quantity', text2: 'Please enter a valid bag quantity.' }); return;
+    }
     saleMutation.mutate({
       sale_date: saleDate,
       dealer_id: selectedDealer.dealer_id,
       dealer_name: selectedDealer.dealer_name,
       product,
       quantity_bags: Number(quantityBags),
-      assigned_te: selectedDealer.assigned_te,
+      assigned_te: selectedDealer.assigned_te || user?.name || 'Team Jajpur',
       source: 'APP',
       created_by: user?.name || '',
     });
   };
 
   const handlePunchSubmit = () => {
-    if (!punchDate || !punchTE || !punchQty) {
-      Toast.show({ type: 'error', text1: 'Missing', text2: 'Date, TE, and quantity are required.' }); return;
+    if (!punchDate || !punchTE || !punchQty || Number(punchQty) <= 0) {
+      Toast.show({ type: 'error', text1: 'Missing Fields', text2: 'Date, TE name, and valid punch bag quantity are required.' }); return;
     }
     punchMutation.mutate({
       date: punchDate,
@@ -116,143 +120,260 @@ export default function AddSaleScreen() {
 
   return (
     <View style={styles.container}>
+      {/* Top Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <Ionicons name="close" size={24} color={Colors.textPrimary} />
+          <Ionicons name="close" size={24} color="#1F0B10" />
         </TouchableOpacity>
-        <Text style={styles.title}>{mode === 'sale' ? 'Add Sale' : 'Add Punch'}</Text>
+        <Text style={styles.title}>{mode === 'sale' ? 'Record Sale Entry' : 'Record Contractor Punch'}</Text>
         <View style={{ width: 40 }} />
       </View>
 
-      {/* Mode Toggle */}
-      <View style={modeStyles.container}>
+      {/* Mode Switcher */}
+      <View style={styles.modeToggleContainer}>
         <TouchableOpacity
-          style={[modeStyles.btn, mode === 'sale' && modeStyles.btnActive]}
+          style={[styles.modeBtn, mode === 'sale' && styles.modeBtnActive]}
           onPress={() => setMode('sale')}
+          activeOpacity={0.8}
         >
-          <Text style={[modeStyles.btnText, mode === 'sale' && modeStyles.btnTextActive]}>Sale Entry</Text>
+          <MaterialCommunityIcons
+            name="cart-outline"
+            size={18}
+            color={mode === 'sale' ? '#FFFFFF' : '#8A7277'}
+            style={{ marginRight: 6 }}
+          />
+          <Text style={[styles.modeBtnText, mode === 'sale' && styles.modeBtnTextActive]}>
+            Sale Entry
+          </Text>
         </TouchableOpacity>
+
         <TouchableOpacity
-          style={[modeStyles.btn, mode === 'punch' && modeStyles.btnActive]}
+          style={[styles.modeBtn, mode === 'punch' && styles.modeBtnActive]}
           onPress={() => setMode('punch')}
+          activeOpacity={0.8}
         >
-          <Text style={[modeStyles.btnText, mode === 'punch' && modeStyles.btnTextActive]}>Add Punch</Text>
+          <MaterialCommunityIcons
+            name="cube-send"
+            size={18}
+            color={mode === 'punch' ? '#FFFFFF' : '#8A7277'}
+            style={{ marginRight: 6 }}
+          />
+          <Text style={[styles.modeBtnText, mode === 'punch' && styles.modeBtnTextActive]}>
+            Contractor Punch
+          </Text>
         </TouchableOpacity>
       </View>
 
       <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         {mode === 'sale' ? (
-          <>
+          <View style={styles.formCard}>
+            {/* Sale Date */}
             <View style={styles.group}>
-              <Text style={styles.label}>Date <Text style={styles.required}>*</Text></Text>
-              <TextInput style={styles.input} value={saleDate} onChangeText={setSaleDate} placeholder="YYYY-MM-DD" placeholderTextColor={Colors.textMuted} />
-            </View>
-            <View style={styles.group}>
-              <Text style={styles.label}>Dealer <Text style={styles.required}>*</Text></Text>
-              <TouchableOpacity style={styles.pickerBtn} onPress={() => setShowDealerPicker(true)}>
-                <Text style={selectedDealer ? styles.pickerSelected : styles.pickerPlaceholder}>
-                  {selectedDealer ? selectedDealer.dealer_name : 'Select dealer...'}
-                </Text>
-                <Ionicons name="chevron-down" size={16} color={Colors.textMuted} />
-              </TouchableOpacity>
-            </View>
-            <View style={styles.group}>
-              <Text style={styles.label}>Product <Text style={styles.required}>*</Text></Text>
-              <View style={productStyles.row}>
-                {(['ACC F2R', 'ACC GOLD'] as Product[]).map(p => (
-                  <TouchableOpacity
-                    key={p}
-                    style={[productStyles.btn, product === p && productStyles.btnActive]}
-                    onPress={() => setProduct(p)}
-                  >
-                    <Text style={[productStyles.btnText, product === p && productStyles.btnTextActive]}>{p}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </View>
-            <View style={styles.group}>
-              <Text style={styles.label}>Quantity (Bags) <Text style={styles.required}>*</Text></Text>
+              <Text style={styles.label}>Sale Date <Text style={styles.required}>*</Text></Text>
               <TextInput
                 style={styles.input}
-                value={quantityBags}
-                onChangeText={setQuantityBags}
-                placeholder="Number of bags"
-                placeholderTextColor={Colors.textMuted}
-                keyboardType="numeric"
+                value={saleDate}
+                onChangeText={setSaleDate}
+                placeholder="YYYY-MM-DD"
+                placeholderTextColor="#A0858C"
               />
             </View>
+
+            {/* Dealer Picker */}
             <View style={styles.group}>
-              <Text style={styles.label}>Remark</Text>
+              <Text style={styles.label}>Dealer / Counter <Text style={styles.required}>*</Text></Text>
+              <TouchableOpacity
+                style={styles.pickerBtn}
+                onPress={() => setShowDealerPicker(true)}
+                activeOpacity={0.8}
+              >
+                <Text style={selectedDealer ? styles.pickerSelected : styles.pickerPlaceholder}>
+                  {selectedDealer ? `${selectedDealer.dealer_name} (${selectedDealer.area || 'Jajpur'})` : 'Select dealer...'}
+                </Text>
+                <Ionicons name="chevron-down" size={18} color="#800E20" />
+              </TouchableOpacity>
+            </View>
+
+            {/* Product Selector */}
+            <View style={styles.group}>
+              <Text style={styles.label}>Product Type <Text style={styles.required}>*</Text></Text>
+              <View style={styles.productRow}>
+                {(['ACC F2R', 'ACC GOLD'] as Product[]).map(p => {
+                  const isSelected = product === p;
+                  return (
+                    <TouchableOpacity
+                      key={p}
+                      style={[styles.productBtn, isSelected && styles.productBtnActive]}
+                      onPress={() => setProduct(p)}
+                      activeOpacity={0.8}
+                    >
+                      <View style={[styles.productDot, { backgroundColor: p === 'ACC F2R' ? '#E53935' : '#F59E0B' }]} />
+                      <Text style={[styles.productBtnText, isSelected && styles.productBtnTextActive]}>{p}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+
+            {/* Quantity */}
+            <View style={styles.group}>
+              <Text style={styles.label}>Quantity (Bags) <Text style={styles.required}>*</Text></Text>
+              <View style={styles.qtyInputContainer}>
+                <TextInput
+                  style={[styles.input, { flex: 1 }]}
+                  value={quantityBags}
+                  onChangeText={setQuantityBags}
+                  placeholder="e.g. 100"
+                  placeholderTextColor="#A0858C"
+                  keyboardType="numeric"
+                />
+                {quantityBags && !isNaN(Number(quantityBags)) ? (
+                  <View style={styles.mtBadge}>
+                    <Text style={styles.mtBadgeText}>{(Number(quantityBags) / 20).toFixed(1)} MT</Text>
+                  </View>
+                ) : null}
+              </View>
+            </View>
+
+            {/* Remark */}
+            <View style={styles.group}>
+              <Text style={styles.label}>Remark / Dispatch Details</Text>
               <TextInput
                 style={[styles.input, styles.textarea]}
                 value={saleRemark}
                 onChangeText={setSaleRemark}
-                placeholder="Optional note"
-                placeholderTextColor={Colors.textMuted}
+                placeholder="Optional notes, invoice no, vehicle details..."
+                placeholderTextColor="#A0858C"
                 multiline
+                numberOfLines={3}
               />
             </View>
-            <TouchableOpacity style={[styles.submitBtn, isPending && styles.submitBtnDisabled]} onPress={handleSaleSubmit} disabled={isPending}>
-              {isPending ? <ActivityIndicator color={Colors.white} /> : <Text style={styles.submitText}>Add Sale 📊</Text>}
+
+            {/* Submit Button */}
+            <TouchableOpacity
+              style={[styles.submitBtn, isPending && styles.submitBtnDisabled]}
+              onPress={handleSaleSubmit}
+              disabled={isPending}
+              activeOpacity={0.85}
+            >
+              {isPending ? (
+                <ActivityIndicator color="#FFFFFF" />
+              ) : (
+                <View style={styles.submitBtnRow}>
+                  <MaterialCommunityIcons name="cart-arrow-down" size={20} color="#FFFFFF" style={{ marginRight: 8 }} />
+                  <Text style={styles.submitText}>Save Sale to Google Sheet</Text>
+                </View>
+              )}
             </TouchableOpacity>
-          </>
+          </View>
         ) : (
-          <>
+          <View style={styles.formCard}>
+            {/* Punch Date */}
             <View style={styles.group}>
-              <Text style={styles.label}>Date <Text style={styles.required}>*</Text></Text>
-              <TextInput style={styles.input} value={punchDate} onChangeText={setPunchDate} placeholder="YYYY-MM-DD" placeholderTextColor={Colors.textMuted} />
-            </View>
-            <View style={styles.group}>
-              <Text style={styles.label}>TE <Text style={styles.required}>*</Text></Text>
-              <TextInput style={styles.input} value={punchTE} onChangeText={setPunchTE} placeholder="TE name" placeholderTextColor={Colors.textMuted} />
-            </View>
-            <View style={styles.group}>
-              <Text style={styles.label}>Punch Quantity (Bags) <Text style={styles.required}>*</Text></Text>
+              <Text style={styles.label}>Punch Date <Text style={styles.required}>*</Text></Text>
               <TextInput
                 style={styles.input}
-                value={punchQty}
-                onChangeText={setPunchQty}
-                placeholder="Bags punched"
-                placeholderTextColor={Colors.textMuted}
-                keyboardType="numeric"
+                value={punchDate}
+                onChangeText={setPunchDate}
+                placeholder="YYYY-MM-DD"
+                placeholderTextColor="#A0858C"
               />
             </View>
+
+            {/* TE User */}
             <View style={styles.group}>
-              <Text style={styles.label}>Remark</Text>
+              <Text style={styles.label}>Territory Executive (TE) <Text style={styles.required}>*</Text></Text>
+              <TextInput
+                style={styles.input}
+                value={punchTE}
+                onChangeText={setPunchTE}
+                placeholder="TE full name"
+                placeholderTextColor="#A0858C"
+              />
+            </View>
+
+            {/* Punch Quantity */}
+            <View style={styles.group}>
+              <Text style={styles.label}>Punched Quantity (Bags) <Text style={styles.required}>*</Text></Text>
+              <View style={styles.qtyInputContainer}>
+                <TextInput
+                  style={[styles.input, { flex: 1 }]}
+                  value={punchQty}
+                  onChangeText={setPunchQty}
+                  placeholder="Total bags punched against contractor"
+                  placeholderTextColor="#A0858C"
+                  keyboardType="numeric"
+                />
+                {punchQty && !isNaN(Number(punchQty)) ? (
+                  <View style={styles.mtBadge}>
+                    <Text style={styles.mtBadgeText}>{(Number(punchQty) / 20).toFixed(1)} MT</Text>
+                  </View>
+                ) : null}
+              </View>
+            </View>
+
+            {/* Remark */}
+            <View style={styles.group}>
+              <Text style={styles.label}>Remark / Contractor Details</Text>
               <TextInput
                 style={[styles.input, styles.textarea]}
                 value={punchRemark}
                 onChangeText={setPunchRemark}
-                placeholder="Optional note"
-                placeholderTextColor={Colors.textMuted}
+                placeholder="Contractor names, coupons punched..."
+                placeholderTextColor="#A0858C"
                 multiline
+                numberOfLines={3}
               />
             </View>
-            <TouchableOpacity style={[styles.submitBtn, isPending && styles.submitBtnDisabled]} onPress={handlePunchSubmit} disabled={isPending}>
-              {isPending ? <ActivityIndicator color={Colors.white} /> : <Text style={styles.submitText}>Record Punch ⚡</Text>}
+
+            {/* Submit Button */}
+            <TouchableOpacity
+              style={[styles.submitBtn, isPending && styles.submitBtnDisabled]}
+              onPress={handlePunchSubmit}
+              disabled={isPending}
+              activeOpacity={0.85}
+            >
+              {isPending ? (
+                <ActivityIndicator color="#FFFFFF" />
+              ) : (
+                <View style={styles.submitBtnRow}>
+                  <MaterialCommunityIcons name="cube-send" size={20} color="#FFFFFF" style={{ marginRight: 8 }} />
+                  <Text style={styles.submitText}>Save Punch to Google Sheet</Text>
+                </View>
+              )}
             </TouchableOpacity>
-          </>
+          </View>
         )}
-        <View style={{ height: 40 }} />
+        <View style={{ height: 60 }} />
       </ScrollView>
 
+      {/* Dealer Selection Modal */}
       <Modal visible={showDealerPicker} animationType="slide" transparent>
         <View style={pickerStyles.overlay}>
           <View style={pickerStyles.sheet}>
             <View style={pickerStyles.header}>
               <Text style={pickerStyles.title}>Select Dealer</Text>
               <TouchableOpacity onPress={() => setShowDealerPicker(false)}>
-                <Ionicons name="close" size={22} color={Colors.textPrimary} />
+                <Ionicons name="close" size={24} color="#1F0B10" />
               </TouchableOpacity>
             </View>
-            <TextInput style={pickerStyles.search} value={dealerSearch} onChangeText={setDealerSearch} placeholder="Search dealer..." placeholderTextColor={Colors.textMuted} />
+            <TextInput
+              style={pickerStyles.search}
+              value={dealerSearch}
+              onChangeText={setDealerSearch}
+              placeholder="Search dealer by name..."
+              placeholderTextColor="#A0858C"
+            />
             <FlatList
               data={filteredDealers}
               keyExtractor={d => d.dealer_id}
               renderItem={({ item }) => (
-                <TouchableOpacity style={pickerStyles.item} onPress={() => { setSelectedDealer(item); setShowDealerPicker(false); }}>
+                <TouchableOpacity
+                  style={pickerStyles.item}
+                  onPress={() => { setSelectedDealer(item); setShowDealerPicker(false); }}
+                >
                   <Text style={pickerStyles.itemName}>{item.dealer_name}</Text>
-                  <Text style={pickerStyles.itemSub}>{item.area}</Text>
+                  <Text style={pickerStyles.itemSub}>{item.area || 'Jajpur'} • {item.owner_name || 'Dealer'}</Text>
                 </TouchableOpacity>
               )}
               keyboardShouldPersistTaps="handled"
@@ -265,47 +386,253 @@ export default function AddSaleScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.background },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: Spacing.base, paddingTop: Platform.OS === 'ios' ? 56 : 36, paddingBottom: 16, backgroundColor: Colors.white, borderBottomWidth: 1, borderBottomColor: Colors.border },
-  backBtn: { width: 40, alignItems: 'flex-start' },
-  title: { fontSize: 18, fontWeight: '700', color: Colors.textPrimary },
-  scroll: { flex: 1, padding: Spacing.base },
-  group: { marginBottom: 16 },
-  label: { fontSize: 13, fontWeight: '600', color: Colors.textPrimary, marginBottom: 7 },
-  required: { color: Colors.error },
-  input: { borderWidth: 1.5, borderColor: Colors.border, borderRadius: BorderRadius.md, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: Colors.textPrimary, backgroundColor: Colors.white },
-  textarea: { height: 80, textAlignVertical: 'top' },
-  pickerBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1.5, borderColor: Colors.border, borderRadius: BorderRadius.md, paddingHorizontal: 14, paddingVertical: 13, backgroundColor: Colors.white },
-  pickerSelected: { fontSize: 15, color: Colors.textPrimary, flex: 1 },
-  pickerPlaceholder: { fontSize: 15, color: Colors.textMuted, flex: 1 },
-  submitBtn: { backgroundColor: Colors.primary, borderRadius: BorderRadius.lg, padding: 16, alignItems: 'center', marginTop: 8, shadowColor: Colors.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.25, shadowRadius: 8, elevation: 5 },
-  submitBtnDisabled: { opacity: 0.7 },
-  submitText: { color: Colors.white, fontSize: 17, fontWeight: '700' },
-});
-
-const modeStyles = StyleSheet.create({
-  container: { flexDirection: 'row', margin: Spacing.base, backgroundColor: Colors.borderLight, borderRadius: 12, padding: 4 },
-  btn: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 10 },
-  btnActive: { backgroundColor: Colors.white, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 2 },
-  btnText: { fontSize: 14, fontWeight: '600', color: Colors.textSecondary },
-  btnTextActive: { color: Colors.primary },
-});
-
-const productStyles = StyleSheet.create({
-  row: { flexDirection: 'row', gap: 10 },
-  btn: { flex: 1, paddingVertical: 12, alignItems: 'center', borderRadius: 12, borderWidth: 1.5, borderColor: Colors.border, backgroundColor: Colors.white },
-  btnActive: { borderColor: Colors.primary, backgroundColor: Colors.primaryLight },
-  btnText: { fontSize: 14, fontWeight: '600', color: Colors.textSecondary },
-  btnTextActive: { color: Colors.primary },
+  container: {
+    flex: 1,
+    backgroundColor: '#F9F5F6',
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 18,
+    paddingTop: Platform.OS === 'ios' ? 56 : 38,
+    paddingBottom: 16,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0E2E5',
+  },
+  backBtn: {
+    width: 40,
+    alignItems: 'flex-start',
+  },
+  title: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#1F0B10',
+  },
+  modeToggleContainer: {
+    flexDirection: 'row',
+    backgroundColor: '#FFFFFF',
+    marginHorizontal: 16,
+    marginTop: 14,
+    marginBottom: 8,
+    borderRadius: 16,
+    padding: 4,
+    borderWidth: 1.5,
+    borderColor: '#EEDCE1',
+  },
+  modeBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    borderRadius: 12,
+  },
+  modeBtnActive: {
+    backgroundColor: '#800E20',
+  },
+  modeBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#8A7277',
+  },
+  modeBtnTextActive: {
+    color: '#FFFFFF',
+  },
+  scroll: {
+    flex: 1,
+    padding: 16,
+  },
+  formCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    padding: 20,
+    borderWidth: 1.5,
+    borderColor: '#EEDCE1',
+    shadowColor: 'rgba(78, 5, 17, 0.06)',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 1,
+    shadowRadius: 14,
+    elevation: 4,
+  },
+  group: {
+    marginBottom: 16,
+  },
+  label: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#1F0B10',
+    marginBottom: 6,
+  },
+  required: {
+    color: '#DC2626',
+  },
+  input: {
+    borderWidth: 1.5,
+    borderColor: '#EEDCE1',
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 15,
+    color: '#1F0B10',
+    backgroundColor: '#FAF6F7',
+    fontWeight: '600',
+  },
+  qtyInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  mtBadge: {
+    backgroundColor: '#FBE8EC',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E8D5DA',
+  },
+  mtBadgeText: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#800E20',
+  },
+  textarea: {
+    height: 76,
+    textAlignVertical: 'top',
+  },
+  pickerBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: 1.5,
+    borderColor: '#EEDCE1',
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 13,
+    backgroundColor: '#FAF6F7',
+  },
+  pickerSelected: {
+    fontSize: 15,
+    color: '#1F0B10',
+    fontWeight: '700',
+    flex: 1,
+  },
+  pickerPlaceholder: {
+    fontSize: 15,
+    color: '#A0858C',
+    flex: 1,
+  },
+  productRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  productBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: '#EEDCE1',
+    backgroundColor: '#FAF6F7',
+    gap: 8,
+  },
+  productBtnActive: {
+    borderColor: '#800E20',
+    backgroundColor: '#FBE8EC',
+  },
+  productDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+  productBtnText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#6B4E55',
+  },
+  productBtnTextActive: {
+    color: '#800E20',
+    fontWeight: '900',
+  },
+  submitBtn: {
+    backgroundColor: '#800E20',
+    borderRadius: 18,
+    paddingVertical: 16,
+    alignItems: 'center',
+    marginTop: 8,
+    shadowColor: '#800E20',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.35,
+    shadowRadius: 10,
+    elevation: 6,
+  },
+  submitBtnDisabled: {
+    opacity: 0.7,
+  },
+  submitBtnRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  submitText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
 });
 
 const pickerStyles = StyleSheet.create({
-  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  sheet: { backgroundColor: Colors.white, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, maxHeight: '80%' },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 },
-  title: { fontSize: 17, fontWeight: '700', color: Colors.textPrimary },
-  search: { borderWidth: 1.5, borderColor: Colors.border, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, fontSize: 15, color: Colors.textPrimary, marginBottom: 8 },
-  item: { paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: Colors.borderLight },
-  itemName: { fontSize: 15, fontWeight: '600', color: Colors.textPrimary },
-  itemSub: { fontSize: 12, color: Colors.textSecondary, marginTop: 2 },
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(31, 11, 16, 0.65)',
+    justifyContent: 'flex-end',
+  },
+  sheet: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    padding: 20,
+    maxHeight: '80%',
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 14,
+  },
+  title: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#1F0B10',
+  },
+  search: {
+    borderWidth: 1.5,
+    borderColor: '#EEDCE1',
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    fontSize: 15,
+    color: '#1F0B10',
+    marginBottom: 10,
+    backgroundColor: '#FAF6F7',
+  },
+  item: {
+    paddingVertical: 13,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F7EFF1',
+  },
+  itemName: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#1F0B10',
+  },
+  itemSub: {
+    fontSize: 12,
+    color: '#8A7277',
+    marginTop: 2,
+  },
 });
+

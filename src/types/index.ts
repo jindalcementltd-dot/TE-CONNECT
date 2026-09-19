@@ -1,4 +1,4 @@
-﻿// TE CONNECT — TypeScript Interfaces
+// TE CONNECT — TypeScript Interfaces
 
 export type UserRole = 'ADMIN' | 'MANAGER' | 'TE' | 'SALES_OPERATOR';
 
@@ -117,6 +117,7 @@ export interface Meeting {
   outcome?: string;
   next_followup?: string;
   expense_amount?: number;
+  remark?: string;
   source: MeetingSource;
   created_by: string;
   created_at: string;

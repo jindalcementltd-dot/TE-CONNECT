@@ -78,11 +78,10 @@ export default function HomeScreen() {
 
   const greeting = getGreeting();
   
-  // Format current date: e.g. "Tue, 19 Sep 2026"
   const now = new Date();
   let formattedDate = 'Today';
   try {
-    formattedDate = format(now, 'EEE, dd MMM yyyy');
+    formattedDate = format(now, 'EEEE, dd MMMM yyyy');
   } catch {}
   let currentMonthLabel = 'This Month';
   try {
@@ -112,7 +111,7 @@ export default function HomeScreen() {
   const totalPunchBags = (activeTrackers || []).reduce((sum, t) => sum + (Number(t.punched_quantity_bags) || 0), 0);
   const required80PercentPunch = calcRequiredPunch(monthlyTotalBags, PUNCH_VOLUME_TARGET_PERCENT);
   const punchVolumePercent = monthlyTotalBags > 0
-    ? Math.round((totalPunchBags / monthlyTotalBags) * 100)
+    ? Math.round((totalPunchBags / monthlyTotalBags) * 1000) / 10
     : 0;
 
   // 40% Contractor Active Base Calculation
@@ -127,6 +126,9 @@ export default function HomeScreen() {
     : (totalPunchBags > 0 ? Math.ceil(totalPunchBags / 100) : 0);
 
   const contractorActivePercent = calcContractorActivePercent(activeContractorsCount, totalContractorsCount);
+
+  // Quick 100 Bag Simulation Preview
+  const quickSim = simulateContractorPunchDistribution(monthlyTotalBags, totalContractorsCount, 100);
 
   // Live Leaderboard from allSalesList & dealers
   const dealerMap: Record<string, { dealer_id: string; dealer_name: string; area: string; total_bags: number }> = {};
@@ -165,17 +167,20 @@ export default function HomeScreen() {
       showsVerticalScrollIndicator={false}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#800E20" />}
     >
-      {/* ── 1. TOP HEADER (CLEAN & MINIMALIST) ── */}
+      {/* ── 1. LARGE EXECUTIVE TOP HEADER ── */}
       <View style={styles.topHeader}>
         <View style={styles.headerLeft}>
           <Text style={styles.greetingSubtitle}>{greeting},</Text>
           <Text style={styles.userNameBig}>{user?.name || 'Rehan'} 👋</Text>
-          <Text style={styles.territorySub}>{teamSetting} • {territorySetting} Territory</Text>
+          <View style={styles.liveTeamBadge}>
+            <View style={styles.greenDot} />
+            <Text style={styles.liveTeamText}>{teamSetting} • {territorySetting}</Text>
+          </View>
         </View>
 
         <View style={styles.headerRight}>
           <TouchableOpacity style={styles.notificationBtn} activeOpacity={0.8} onPress={() => onRefresh()}>
-            <Ionicons name="notifications-outline" size={22} color="#1F0B10" />
+            <Ionicons name="notifications-outline" size={24} color="#1F0B10" />
             <View style={styles.notifBadge}>
               <Text style={styles.notifBadgeText}>3</Text>
             </View>
@@ -189,338 +194,287 @@ export default function HomeScreen() {
         </View>
       </View>
 
-      {/* ── 2. HERO BRAND BANNER (MATCHING REFERENCE EXACTLY) ── */}
-      <View style={styles.heroBanner}>
-        <View style={styles.heroLeft}>
-          <View style={styles.heroTitleRow}>
-            <Text style={styles.heroTeText}>TE </Text>
-            <Text style={styles.heroConnectText}>CONNECT</Text>
-          </View>
-          <Text style={styles.heroTeamText}>{teamSetting.toUpperCase()}</Text>
-          <Text style={styles.heroMotto}>STRONGER SITES{'\n'}STRONGER TOMORROW</Text>
-        </View>
-
-        <View style={styles.heroRight}>
-          <View style={styles.heroTagBadge}>
-            <Text style={styles.heroTagBadgeText}>BUILD • CONNECT • GROW</Text>
-          </View>
-          <View style={styles.cementBagsRow}>
-            <View style={[styles.cementBagPill, { backgroundColor: '#C91F2B' }]}>
-              <Text style={styles.cementBagBrand}>ACC</Text>
-              <Text style={styles.cementBagType}>F2R</Text>
+      {/* ── 2. BIG EXECUTIVE COMMAND HERO CARD (PROTON VAULT WINE) ── */}
+      <View style={styles.heroCardBig}>
+        <View style={styles.heroTopRow}>
+          <View>
+            <View style={styles.brandTitleRow}>
+              <Text style={styles.heroBrandTE}>TE </Text>
+              <Text style={styles.heroBrandCONNECT}>CONNECT</Text>
             </View>
-            <View style={[styles.cementBagPill, { backgroundColor: '#B8860B' }]}>
-              <Text style={styles.cementBagBrand}>ACC</Text>
-              <Text style={styles.cementBagType}>GOLD</Text>
+            <Text style={styles.heroTeamSubtitle}>{teamSetting.toUpperCase()} COMMAND CENTER</Text>
+          </View>
+          <View style={styles.securityShieldCircle}>
+            <MaterialCommunityIcons name="shield-check" size={32} color="#FFFFFF" />
+          </View>
+        </View>
+
+        {/* Big Sales Volume Display */}
+        <View style={styles.heroMainMetricBox}>
+          <Text style={styles.heroMainMetricLabel}>TOTAL SALES VOLUME ({currentMonthLabel.toUpperCase()})</Text>
+          <View style={styles.heroMainMetricRow}>
+            <Text style={styles.heroMainMetricMT}>{monthlyTotalMT}</Text>
+            <Text style={styles.heroMainMetricUnit}>MT</Text>
+            <View style={styles.heroBagsPill}>
+              <Text style={styles.heroBagsPillText}>{monthlyTotalBags} Bags</Text>
             </View>
+          </View>
+        </View>
+
+        <View style={styles.heroDivider} />
+
+        {/* Dual Target Status Badges */}
+        <View style={styles.heroTargetsRow}>
+          <View style={styles.heroTargetItem}>
+            <Text style={styles.heroTargetLabel}>80% BAG PUNCH TARGET</Text>
+            <Text style={styles.heroTargetVal}>{punchVolumePercent}% <Text style={styles.heroTargetSub}>({totalPunchBags}/{required80PercentPunch} Bg)</Text></Text>
+          </View>
+
+          <View style={styles.heroTargetDivider} />
+
+          <View style={styles.heroTargetItem}>
+            <Text style={styles.heroTargetLabel}>40% CONTR. ACTIVE</Text>
+            <Text style={styles.heroTargetVal}>{contractorActivePercent.toFixed(0)}% <Text style={styles.heroTargetSub}>({activeContractorsCount}/{totalContractorsCount} Active)</Text></Text>
           </View>
         </View>
       </View>
 
-      {/* Dots Indicator */}
-      <View style={styles.dotsRow}>
-        <View style={[styles.dot, styles.dotActive]} />
-        <View style={styles.dot} />
-        <View style={styles.dot} />
-      </View>
-
-      {/* ── 3. TODAY METRICS (4 CARDS IN 1 ROW - EXACT REFERENCE) ── */}
-      <View style={styles.sectionHeaderRow}>
-        <Text style={styles.sectionTitle}>Today</Text>
-        <View style={styles.datePill}>
-          <Ionicons name="calendar-outline" size={13} color="#8A7277" style={{ marginRight: 4 }} />
-          <Text style={styles.datePillText}>{formattedDate}</Text>
+      {/* ── 3. DATE BAR ── */}
+      <View style={styles.dateBarRow}>
+        <Text style={styles.sectionHeaderTitle}>Today's Live Metrics</Text>
+        <View style={styles.dateBadge}>
+          <Ionicons name="calendar" size={15} color="#800E20" style={{ marginRight: 6 }} />
+          <Text style={styles.dateBadgeText}>{formattedDate}</Text>
         </View>
       </View>
 
-      <View style={styles.metrics4Row}>
+      {/* ── 4. BIG 2x2 METRICS GRID (LARGE, BOLD, SPACIOUS) ── */}
+      <View style={styles.bigMetricsGrid}>
         {/* Card 1: Slabs */}
         <TouchableOpacity
-          style={styles.metricCardMini}
+          style={styles.bigMetricCard}
           onPress={() => router.push('/(tabs)/slab')}
           activeOpacity={0.85}
         >
-          <View style={[styles.iconCircleMini, { backgroundColor: '#FBE8EC' }]}>
-            <MaterialCommunityIcons name="office-building" size={20} color="#800E20" />
+          <View style={styles.cardHeaderRow}>
+            <View style={[styles.largeIconBox, { backgroundColor: '#FBE8EC' }]}>
+              <MaterialCommunityIcons name="office-building" size={28} color="#800E20" />
+            </View>
+            <View style={styles.trendPill}>
+              <Text style={styles.trendPillText}>{todaySlabsList.length > 0 ? `${todaySlabsList.length} Today` : `${allSlabsList.length} Total`}</Text>
+            </View>
           </View>
-          <Text style={styles.metricValMini}>{todaySlabsList.length || allSlabsList.length}</Text>
-          <Text style={styles.metricLblMini}>Slabs</Text>
-          <View style={[styles.trendBadge, { backgroundColor: '#DCFCE7' }]}>
-            <Text style={[styles.trendText, { color: '#15803D' }]}>↑ 100%</Text>
-          </View>
+          <Text style={styles.bigMetricNumber}>{allSlabsList.length}</Text>
+          <Text style={styles.bigMetricLabel}>Slabs Scheduled</Text>
         </TouchableOpacity>
 
-        {/* Card 2: Sales (Bags) */}
+        {/* Card 2: Sales */}
         <TouchableOpacity
-          style={styles.metricCardMini}
+          style={styles.bigMetricCard}
           onPress={() => router.push('/(tabs)/sales')}
           activeOpacity={0.85}
         >
-          <View style={[styles.iconCircleMini, { backgroundColor: '#FEF3C7' }]}>
-            <MaterialCommunityIcons name="package-variant-closed" size={20} color="#D97706" />
+          <View style={styles.cardHeaderRow}>
+            <View style={[styles.largeIconBox, { backgroundColor: '#FEF3C7' }]}>
+              <MaterialCommunityIcons name="package-variant-closed" size={28} color="#D97706" />
+            </View>
+            <View style={[styles.trendPill, { backgroundColor: '#FEF3C7' }]}>
+              <Text style={[styles.trendPillText, { color: '#B45309' }]}>{monthlyTotalMT} MT</Text>
+            </View>
           </View>
-          <Text style={styles.metricValMini}>{displaySalesBags}</Text>
-          <Text style={styles.metricLblMini}>Sales (Bags)</Text>
-          <View style={[styles.trendBadge, { backgroundColor: '#DCFCE7' }]}>
-            <Text style={[styles.trendText, { color: '#15803D' }]}>↑ {monthlyTotalMT} MT</Text>
-          </View>
+          <Text style={styles.bigMetricNumber}>{displaySalesBags}</Text>
+          <Text style={styles.bigMetricLabel}>Total Sales (Bags)</Text>
         </TouchableOpacity>
 
-        {/* Card 3: Active % */}
+        {/* Card 3: 80% Bag Volume Punch */}
         <TouchableOpacity
-          style={styles.metricCardMini}
+          style={styles.bigMetricCard}
           onPress={() => router.push('/(tabs)/sales')}
           activeOpacity={0.85}
         >
-          <View style={[styles.iconCircleMini, { backgroundColor: '#F0FDF4' }]}>
-            <MaterialCommunityIcons name="target" size={20} color="#15803D" />
+          <View style={styles.cardHeaderRow}>
+            <View style={[styles.largeIconBox, { backgroundColor: '#DCFCE7' }]}>
+              <MaterialCommunityIcons name="cube-send" size={28} color="#15803D" />
+            </View>
+            <View style={[styles.trendPill, { backgroundColor: '#DCFCE7' }]}>
+              <Text style={[styles.trendPillText, { color: '#15803D' }]}>Target 80%</Text>
+            </View>
           </View>
-          <Text style={styles.metricValMini}>{punchVolumePercent}%</Text>
-          <Text style={styles.metricLblMini}>Active</Text>
-          <View style={[styles.trendBadge, { backgroundColor: '#DCFCE7' }]}>
-            <Text style={[styles.trendText, { color: '#15803D' }]}>Target 80%</Text>
-          </View>
+          <Text style={[styles.bigMetricNumber, { color: punchVolumePercent >= 80 ? '#15803D' : '#800E20' }]}>
+            {punchVolumePercent}%
+          </Text>
+          <Text style={styles.bigMetricLabel}>Bag Punch Volume</Text>
         </TouchableOpacity>
 
-        {/* Card 4: Meetings */}
+        {/* Card 4: 40% Contractor Active Base */}
         <TouchableOpacity
-          style={styles.metricCardMini}
-          onPress={() => router.push('/(tabs)/meeting')}
+          style={styles.bigMetricCard}
+          onPress={() => router.push('/(tabs)/sales')}
           activeOpacity={0.85}
         >
-          <View style={[styles.iconCircleMini, { backgroundColor: '#EDE9FE' }]}>
-            <Ionicons name="people" size={20} color="#7C3AED" />
+          <View style={styles.cardHeaderRow}>
+            <View style={[styles.largeIconBox, { backgroundColor: '#EDE9FE' }]}>
+              <MaterialCommunityIcons name="account-hard-hat" size={28} color="#7C3AED" />
+            </View>
+            <View style={[styles.trendPill, { backgroundColor: '#EDE9FE' }]}>
+              <Text style={[styles.trendPillText, { color: '#6D28D9' }]}>Min 40%</Text>
+            </View>
           </View>
-          <Text style={styles.metricValMini}>{todayMeetingsList.length || allMeetingsList.length}</Text>
-          <Text style={styles.metricLblMini}>Meetings</Text>
-          <View style={[styles.trendBadge, { backgroundColor: '#EDE9FE' }]}>
-            <Text style={[styles.trendText, { color: '#6D28D9' }]}>{allMeetingsList.length} Total</Text>
-          </View>
+          <Text style={[styles.bigMetricNumber, { color: contractorActivePercent >= 40 ? '#15803D' : '#D97706' }]}>
+            {contractorActivePercent.toFixed(1)}%
+          </Text>
+          <Text style={styles.bigMetricLabel}>Contractor Active Base</Text>
         </TouchableOpacity>
       </View>
 
-      {/* ── 4. QUICK ACTIONS (3 PILL BUTTONS IN 1 ROW - EXACT REFERENCE) ── */}
+      {/* ── 5. BIG FIELD QUICK ACTIONS (LARGE SPACIOUS TOUCH CARDS) ── */}
       <View style={styles.sectionHeaderRow}>
-        <Text style={styles.sectionTitle}>Quick Actions</Text>
+        <Text style={styles.sectionHeaderTitle}>Quick Field Actions</Text>
         <TouchableOpacity onPress={() => router.push('/(tabs)/plus')}>
-          <Text style={styles.seeAllLink}>See All ›</Text>
+          <Text style={styles.seeAllText}>All Actions ›</Text>
         </TouchableOpacity>
       </View>
 
-      <View style={styles.quickActions3Row}>
+      <View style={styles.quickActionCardsCol}>
         {/* Action 1: Add Slab */}
         <TouchableOpacity
-          style={styles.actionPillBtn}
+          style={styles.actionBigButton}
           onPress={() => router.push('/slab/add')}
           activeOpacity={0.85}
         >
-          <View style={[styles.actionPillIconBox, { backgroundColor: '#FBE8EC' }]}>
-            <MaterialCommunityIcons name="office-building" size={20} color="#800E20" />
+          <View style={[styles.actionIconContainer, { backgroundColor: '#800E20' }]}>
+            <MaterialCommunityIcons name="office-building-marker" size={26} color="#FFFFFF" />
           </View>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.actionPillTitle}>Add Slab</Text>
-            <Text style={styles.actionPillSub}>Log new slab</Text>
+          <View style={styles.actionTextContainer}>
+            <Text style={styles.actionTitleBig}>Schedule New Slab</Text>
+            <Text style={styles.actionSubtitle}>Add casting date, contractor, and site GPS</Text>
+          </View>
+          <View style={styles.actionChevronCircle}>
+            <Feather name="arrow-up-right" size={20} color="#800E20" />
           </View>
         </TouchableOpacity>
 
-        {/* Action 2: Add Sale */}
+        {/* Action 2: Add Sale / Punch */}
         <TouchableOpacity
-          style={styles.actionPillBtn}
+          style={styles.actionBigButton}
           onPress={() => router.push('/sale/add')}
           activeOpacity={0.85}
         >
-          <View style={[styles.actionPillIconBox, { backgroundColor: '#FEF3C7' }]}>
-            <MaterialCommunityIcons name="package-variant-closed" size={20} color="#D97706" />
+          <View style={[styles.actionIconContainer, { backgroundColor: '#4A0611' }]}>
+            <MaterialCommunityIcons name="cart-plus" size={26} color="#FFFFFF" />
           </View>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.actionPillTitle}>Add Sale</Text>
-            <Text style={styles.actionPillSub}>Record sales</Text>
+          <View style={styles.actionTextContainer}>
+            <Text style={styles.actionTitleBig}>Record Sale & Punch</Text>
+            <Text style={styles.actionSubtitle}>Log ACC F2R / GOLD bags or contractor punch</Text>
+          </View>
+          <View style={styles.actionChevronCircle}>
+            <Feather name="arrow-up-right" size={20} color="#800E20" />
           </View>
         </TouchableOpacity>
 
         {/* Action 3: Add Meeting */}
         <TouchableOpacity
-          style={styles.actionPillBtn}
+          style={styles.actionBigButton}
           onPress={() => router.push('/meeting/add')}
           activeOpacity={0.85}
         >
-          <View style={[styles.actionPillIconBox, { backgroundColor: '#EDE9FE' }]}>
-            <Ionicons name="people" size={20} color="#7C3AED" />
+          <View style={[styles.actionIconContainer, { backgroundColor: '#6B1224' }]}>
+            <MaterialCommunityIcons name="account-multiple-plus" size={26} color="#FFFFFF" />
           </View>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.actionPillTitle}>Add Meet</Text>
-            <Text style={styles.actionPillSub}>Plan meeting</Text>
+          <View style={styles.actionTextContainer}>
+            <Text style={styles.actionTitleBig}>Schedule Meeting</Text>
+            <Text style={styles.actionSubtitle}>Log customer, contractor or site meet</Text>
+          </View>
+          <View style={styles.actionChevronCircle}>
+            <Feather name="arrow-up-right" size={20} color="#800E20" />
           </View>
         </TouchableOpacity>
       </View>
 
-      {/* ── 5. TODAY'S SCHEDULE (2 SIDE-BY-SIDE CARDS - EXACT REFERENCE) ── */}
+      {/* ── 6. TODAY'S SCHEDULE (SPACIOUS GLASS CARDS) ── */}
       <View style={styles.sectionHeaderRow}>
-        <Text style={styles.sectionTitle}>Today's Schedule</Text>
+        <Text style={styles.sectionHeaderTitle}>Today's Schedule & Slabs</Text>
         <TouchableOpacity onPress={() => router.push('/(tabs)/slab')}>
-          <Text style={styles.seeAllLink}>View All ›</Text>
+          <Text style={styles.seeAllText}>View Calendar ›</Text>
         </TouchableOpacity>
       </View>
 
-      <View style={styles.schedule2ColRow}>
-        {/* Left Card: Slabs Today */}
-        <TouchableOpacity
-          style={styles.scheduleBoxCard}
-          onPress={() => router.push('/(tabs)/slab')}
-          activeOpacity={0.85}
-        >
-          <View style={styles.scheduleBoxHeader}>
-            <View style={[styles.scheduleBoxIcon, { backgroundColor: '#FBE8EC' }]}>
-              <MaterialCommunityIcons name="office-building" size={18} color="#800E20" />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.scheduleBoxTitle}>Slabs Today</Text>
-              <Text style={styles.scheduleBoxSub}>{todaySlabsList.length || allSlabsList.length} Scheduled ›</Text>
-            </View>
+      {allSlabsList.length === 0 ? (
+        <View style={styles.emptyStateCard}>
+          <View style={styles.emptyIconCircle}>
+            <Ionicons name="calendar-outline" size={32} color="#800E20" />
           </View>
-
-          <View style={styles.scheduleBoxDivider} />
-
-          {allSlabsList.slice(0, 2).map((slab) => (
-            <View key={slab.slab_id} style={styles.scheduleItemLine}>
-              <MaterialCommunityIcons name="office-building" size={13} color="#800E20" style={{ marginRight: 6 }} />
+          <Text style={styles.emptyStateTitle}>No Slabs Scheduled Today</Text>
+          <Text style={styles.emptyStateSub}>Tap 'Schedule New Slab' above to add your first casting.</Text>
+        </View>
+      ) : (
+        <View style={styles.scheduleListCol}>
+          {allSlabsList.slice(0, 3).map((slab) => (
+            <TouchableOpacity
+              key={slab.slab_id}
+              style={styles.realScheduleCard}
+              onPress={() => router.push(`/slab/${slab.slab_id}` as any)}
+              activeOpacity={0.85}
+            >
+              <View style={[styles.realScheduleIcon, { backgroundColor: '#FBE8EC' }]}>
+                <MaterialCommunityIcons name="office-building" size={24} color="#800E20" />
+              </View>
               <View style={{ flex: 1 }}>
-                <Text style={styles.scheduleItemName} numberOfLines={1}>{slab.dealer_name}</Text>
-                <Text style={styles.scheduleItemMeta} numberOfLines={1}>
-                  {slab.expected_cement || '200 bags'} • {slab.contractor_name || 'Contractor'}
+                <View style={styles.rowBetween}>
+                  <Text style={styles.scheduleDealerTitle}>{slab.dealer_name}</Text>
+                  <View style={[
+                    styles.statusBadgeSmall,
+                    slab.status === 'COMPLETED' ? styles.statusComp : slab.status === 'CANCELLED' ? styles.statusCanc : styles.statusUpc
+                  ]}>
+                    <Text style={[
+                      styles.statusBadgeText,
+                      slab.status === 'COMPLETED' ? { color: '#15803D' } : slab.status === 'CANCELLED' ? { color: '#6B7280' } : { color: '#800E20' }
+                    ]}>
+                      {slab.status}
+                    </Text>
+                  </View>
+                </View>
+                <Text style={styles.scheduleMetaText}>
+                  👷 {slab.contractor_name || 'No contractor'} • 🧱 {slab.expected_cement ? `${slab.expected_cement} Bags` : '200 Bags'}
                 </Text>
               </View>
-            </View>
+            </TouchableOpacity>
           ))}
-        </TouchableOpacity>
+        </View>
+      )}
 
-        {/* Right Card: Meetings Today */}
-        <TouchableOpacity
-          style={styles.scheduleBoxCard}
-          onPress={() => router.push('/(tabs)/meeting')}
-          activeOpacity={0.85}
-        >
-          <View style={styles.scheduleBoxHeader}>
-            <View style={[styles.scheduleBoxIcon, { backgroundColor: '#EDE9FE' }]}>
-              <Ionicons name="people" size={18} color="#7C3AED" />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.scheduleBoxTitle}>Meetings</Text>
-              <Text style={styles.scheduleBoxSub}>{allMeetingsList.length} Scheduled ›</Text>
-            </View>
-          </View>
-
-          <View style={styles.scheduleBoxDivider} />
-
-          {allMeetingsList.length === 0 ? (
-            <View style={styles.scheduleItemLine}>
-              <Text style={styles.scheduleItemMeta}>No meetings scheduled today</Text>
-            </View>
-          ) : (
-            allMeetingsList.slice(0, 2).map((mtg) => (
-              <View key={mtg.meeting_id} style={styles.scheduleItemLine}>
-                <MaterialCommunityIcons name="account-group" size={13} color="#7C3AED" style={{ marginRight: 6 }} />
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.scheduleItemName} numberOfLines={1}>{mtg.meeting_name || mtg.meeting_type}</Text>
-                  <Text style={styles.scheduleItemMeta} numberOfLines={1}>
-                    {mtg.location || 'Site Location'}
-                  </Text>
-                </View>
-              </View>
-            ))
-          )}
-        </TouchableOpacity>
-      </View>
-
-      {/* ── 6. MONTHLY PERFORMANCE (3 PROGRESS CARDS IN 1 ROW - EXACT REFERENCE) ── */}
+      {/* ── 7. DEALER SALES LEADERBOARD (BIG EXECUTIVE GLASS CARDS) ── */}
       <View style={styles.sectionHeaderRow}>
-        <Text style={styles.sectionTitle}>Monthly Performance</Text>
-        <View style={styles.datePill}>
-          <Text style={styles.datePillText}>{currentMonthLabel} ⌄</Text>
-        </View>
-      </View>
-
-      <View style={styles.monthly3CardsRow}>
-        {/* Card 1: Sales */}
-        <View style={styles.monthlyProgressCard}>
-          <View style={styles.monthlyCardTop}>
-            <MaterialCommunityIcons name="chart-bar" size={16} color="#800E20" />
-            <Text style={styles.monthlyCardTitle}>Sales</Text>
-          </View>
-          <Text style={styles.monthlyCardValue}>
-            {monthlyTotalBags} <Text style={styles.monthlyCardDenom}>/ 1,000</Text>
-          </Text>
-          <View style={styles.progressBarTrack}>
-            <View style={[styles.progressBarFill, { width: `${Math.min((monthlyTotalBags / 1000) * 100, 100)}%` as any }]} />
-          </View>
-          <Text style={styles.progressPercentText}>{((monthlyTotalBags / 1000) * 100).toFixed(0)}%</Text>
-        </View>
-
-        {/* Card 2: 80% Active Punch */}
-        <View style={styles.monthlyProgressCard}>
-          <View style={styles.monthlyCardTop}>
-            <MaterialCommunityIcons name="heart-pulse" size={16} color="#800E20" />
-            <Text style={styles.monthlyCardTitle}>Active Punch</Text>
-          </View>
-          <Text style={styles.monthlyCardValue}>
-            {totalPunchBags} <Text style={styles.monthlyCardDenom}>/ {required80PercentPunch}</Text>
-          </Text>
-          <View style={styles.progressBarTrack}>
-            <View style={[styles.progressBarFill, { width: `${Math.min(punchVolumePercent, 100)}%` as any }]} />
-          </View>
-          <Text style={styles.progressPercentText}>{punchVolumePercent}%</Text>
-        </View>
-
-        {/* Card 3: 40% Contractor Base */}
-        <View style={styles.monthlyProgressCard}>
-          <View style={styles.monthlyCardTop}>
-            <MaterialCommunityIcons name="account-hard-hat" size={16} color="#800E20" />
-            <Text style={styles.monthlyCardTitle}>Contr. Active</Text>
-          </View>
-          <Text style={styles.monthlyCardValue}>
-            {activeContractorsCount} <Text style={styles.monthlyCardDenom}>/ {totalContractorsCount}</Text>
-          </Text>
-          <View style={styles.progressBarTrack}>
-            <View style={[styles.progressBarFill, { width: `${Math.min(contractorActivePercent, 100)}%` as any }]} />
-          </View>
-          <Text style={styles.progressPercentText}>{contractorActivePercent.toFixed(0)}%</Text>
-        </View>
-      </View>
-
-      {/* ── 7. DEALER SALES LEADERBOARD (MTD - EXACT REFERENCE) ── */}
-      <View style={styles.sectionHeaderRow}>
-        <Text style={styles.sectionTitle}>Dealer Sales Leaderboard (MTD)</Text>
+        <Text style={styles.sectionHeaderTitle}>Dealer Leaderboard ({currentMonthLabel})</Text>
         <TouchableOpacity onPress={() => router.push('/(tabs)/sales')}>
-          <Text style={styles.seeAllLink}>View All ›</Text>
+          <Text style={styles.seeAllText}>Sales Screen ›</Text>
         </TouchableOpacity>
       </View>
 
-      <View style={styles.leaderboardCard}>
-        {topDealersList.length === 0 ? (
-          <View style={styles.emptyLeaderboard}>
-            <Text style={styles.emptyLeaderboardText}>No sales recorded yet. Log your first sale above!</Text>
-          </View>
-        ) : (
-          topDealersList.map((d, idx) => (
-            <View key={d.dealer_id} style={[styles.leaderRow, idx === topDealersList.length - 1 && { borderBottomWidth: 0 }]}>
-              <View style={[
-                styles.rankBadge,
-                idx === 0 ? styles.rank1 : idx === 1 ? styles.rank2 : styles.rank3
-              ]}>
+      {topDealersList.length === 0 ? (
+        <View style={styles.emptyStateCard}>
+          <Text style={styles.emptyStateTitle}>No Sales Logged Yet</Text>
+          <Text style={styles.emptyStateSub}>Record sales to see dealer rankings here.</Text>
+        </View>
+      ) : (
+        <View style={styles.leaderboardContainer}>
+          {topDealersList.map((dealer, idx) => (
+            <View key={dealer.dealer_id} style={[styles.leaderRowItem, idx === topDealersList.length - 1 && { borderBottomWidth: 0 }]}>
+              <View style={[styles.rankBadgeCircle, idx === 0 ? styles.rankGold : idx === 1 ? styles.rankSilver : styles.rankBronze]}>
                 <Text style={styles.rankBadgeText}>{idx + 1}</Text>
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={styles.leaderDealerName}>{d.dealer_name}</Text>
-                <Text style={styles.leaderDealerArea}>{d.area}</Text>
+                <Text style={styles.leaderDealerName}>{dealer.dealer_name}</Text>
+                <Text style={styles.leaderDealerArea}>{dealer.area}</Text>
               </View>
               <View style={{ alignItems: 'flex-end' }}>
-                <Text style={styles.leaderBagsText}>{d.total_bags} Bags</Text>
-                <Text style={styles.leaderTrendText}>↑ {(d.total_bags / 20).toFixed(1)} MT</Text>
+                <Text style={styles.leaderDealerMT}>{(dealer.total_bags / 20).toFixed(1)} MT</Text>
+                <Text style={styles.leaderDealerBags}>{dealer.total_bags} bags</Text>
               </View>
             </View>
-          ))
-        )}
-      </View>
+          ))}
+        </View>
+      )}
 
       <View style={{ height: 60 }} />
     </ScrollView>
@@ -530,11 +484,11 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8F4F5', // Soft, clean rose-tinted background
+    backgroundColor: '#F9F5F6',
   },
   content: {
-    paddingHorizontal: 16,
-    paddingTop: Platform.OS === 'ios' ? 56 : 38,
+    paddingHorizontal: 18,
+    paddingTop: Platform.OS === 'ios' ? 60 : 44,
     paddingBottom: 40,
   },
 
@@ -543,48 +497,66 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 20,
   },
   headerLeft: {
     flex: 1,
   },
   greetingSubtitle: {
-    fontSize: 13,
+    fontSize: 14,
     color: '#8A7277',
-    fontWeight: '500',
+    fontWeight: '600',
   },
   userNameBig: {
-    fontSize: 22,
+    fontSize: 28,
     fontWeight: '900',
-    color: '#17060A',
+    color: '#1F0B10',
     letterSpacing: -0.5,
     marginTop: 2,
   },
-  territorySub: {
+  liveTeamBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FBE8EC',
+    alignSelf: 'flex-start',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginTop: 6,
+    borderWidth: 1,
+    borderColor: '#E8D5DA',
+  },
+  greenDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#16A34A',
+    marginRight: 6,
+  },
+  liveTeamText: {
     fontSize: 11,
-    fontWeight: '700',
+    fontWeight: '800',
     color: '#800E20',
-    marginTop: 2,
   },
   headerRight: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 12,
   },
   notificationBtn: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
+    width: 46,
+    height: 46,
+    borderRadius: 23,
     backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#EFE4E7',
-    shadowColor: 'rgba(128, 14, 32, 0.08)',
-    shadowOffset: { width: 0, height: 2 },
+    borderWidth: 1.5,
+    borderColor: '#EEDCE1',
+    shadowColor: 'rgba(78, 5, 17, 0.08)',
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 1,
-    shadowRadius: 6,
-    elevation: 2,
+    shadowRadius: 10,
+    elevation: 3,
     position: 'relative',
   },
   notifBadge: {
@@ -592,9 +564,9 @@ const styles = StyleSheet.create({
     top: 6,
     right: 6,
     backgroundColor: '#E53935',
-    width: 16,
-    height: 16,
-    borderRadius: 8,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1.5,
@@ -602,13 +574,13 @@ const styles = StyleSheet.create({
   },
   notifBadgeText: {
     color: '#FFFFFF',
-    fontSize: 9,
-    fontWeight: '800',
+    fontSize: 10,
+    fontWeight: '900',
   },
   avatarCircle: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
+    width: 46,
+    height: 46,
+    borderRadius: 23,
     backgroundColor: '#800E20',
     alignItems: 'center',
     justifyContent: 'center',
@@ -617,431 +589,436 @@ const styles = StyleSheet.create({
   },
   avatarLetter: {
     color: '#FFFFFF',
-    fontSize: 17,
-    fontWeight: '800',
+    fontSize: 19,
+    fontWeight: '900',
   },
 
-  // 2. Hero Banner (Red Gradient & Bags)
-  heroBanner: {
+  // 2. Big Hero Command Card
+  heroCardBig: {
     backgroundColor: '#4A0611',
-    borderRadius: 22,
-    padding: 18,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    borderRadius: 28,
+    padding: 22,
+    marginBottom: 24,
     shadowColor: '#4A0611',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.3,
-    shadowRadius: 14,
-    elevation: 6,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.35,
+    shadowRadius: 20,
+    elevation: 10,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.15)',
   },
-  heroLeft: {
-    flex: 1,
+  heroTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
-  heroTitleRow: {
+  brandTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
   },
-  heroTeText: {
-    fontSize: 22,
+  heroBrandTE: {
+    fontSize: 26,
     fontWeight: '900',
     color: '#FFFFFF',
-    letterSpacing: 0.5,
+    letterSpacing: 1,
   },
-  heroConnectText: {
-    fontSize: 22,
+  heroBrandCONNECT: {
+    fontSize: 26,
     fontWeight: '900',
     color: '#E53935',
-    letterSpacing: 0.5,
+    letterSpacing: 1,
   },
-  heroTeamText: {
+  heroTeamSubtitle: {
     fontSize: 11,
     fontWeight: '800',
-    color: 'rgba(255, 255, 255, 0.8)',
-    letterSpacing: 1,
-    marginTop: 2,
+    color: 'rgba(255, 255, 255, 0.75)',
+    letterSpacing: 1.5,
+    marginTop: 3,
   },
-  heroMotto: {
-    fontSize: 9,
-    fontWeight: '700',
-    color: 'rgba(255, 255, 255, 0.65)',
-    letterSpacing: 0.8,
-    marginTop: 8,
-    lineHeight: 13,
-  },
-  heroRight: {
-    alignItems: 'flex-end',
-  },
-  heroTagBadge: {
+  securityShieldCircle: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
     backgroundColor: 'rgba(255, 255, 255, 0.12)',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-    marginBottom: 10,
-  },
-  heroTagBadgeText: {
-    fontSize: 8,
-    fontWeight: '800',
-    color: '#FFFFFF',
-    letterSpacing: 0.5,
-  },
-  cementBagsRow: {
-    flexDirection: 'row',
-    gap: 6,
-  },
-  cementBagPill: {
-    width: 48,
-    height: 54,
-    borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
+    borderColor: 'rgba(255, 255, 255, 0.25)',
   },
-  cementBagBrand: {
+  heroMainMetricBox: {
+    marginTop: 18,
+  },
+  heroMainMetricLabel: {
     fontSize: 10,
+    fontWeight: '800',
+    color: 'rgba(255, 255, 255, 0.7)',
+    letterSpacing: 1,
+  },
+  heroMainMetricRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 8,
+    marginTop: 4,
+  },
+  heroMainMetricMT: {
+    fontSize: 38,
     fontWeight: '900',
     color: '#FFFFFF',
+    letterSpacing: -1,
   },
-  cementBagType: {
-    fontSize: 8,
+  heroMainMetricUnit: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#E53935',
+  },
+  heroBagsPill: {
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 10,
+    marginLeft: 'auto',
+  },
+  heroBagsPillText: {
+    fontSize: 12,
     fontWeight: '800',
     color: '#FFFFFF',
-    marginTop: 2,
   },
-  dotsRow: {
+  heroDivider: {
+    height: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    marginVertical: 16,
+  },
+  heroTargetsRow: {
     flexDirection: 'row',
-    justifyContent: 'center',
     alignItems: 'center',
-    gap: 6,
-    marginTop: 10,
-    marginBottom: 18,
   },
-  dot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#E2D1D4',
+  heroTargetItem: {
+    flex: 1,
   },
-  dotActive: {
-    width: 18,
-    backgroundColor: '#800E20',
+  heroTargetLabel: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: 'rgba(255, 255, 255, 0.65)',
+    letterSpacing: 0.8,
+  },
+  heroTargetVal: {
+    fontSize: 16,
+    fontWeight: '900',
+    color: '#FFFFFF',
+    marginTop: 3,
+  },
+  heroTargetSub: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: 'rgba(255, 255, 255, 0.75)',
+  },
+  heroTargetDivider: {
+    width: 1,
+    height: 28,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    marginHorizontal: 12,
   },
 
-  // 3. Section Headers & Date Pills
+  // 3. Date Bar
+  dateBarRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 14,
+  },
+  sectionHeaderTitle: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: '#1F0B10',
+    letterSpacing: -0.3,
+  },
+  dateBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: '#EEDCE1',
+  },
+  dateBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#554246',
+  },
+
+  // 4. Big 2x2 Metrics Grid
+  bigMetricsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    marginBottom: 24,
+  },
+  bigMetricCard: {
+    flexBasis: '47%',
+    flexGrow: 1,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    padding: 18,
+    borderWidth: 1.5,
+    borderColor: '#EEDCE1',
+    shadowColor: 'rgba(78, 5, 17, 0.06)',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 1,
+    shadowRadius: 12,
+    elevation: 3,
+  },
+  cardHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  largeIconBox: {
+    width: 48,
+    height: 48,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  trendPill: {
+    backgroundColor: '#FBE8EC',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 10,
+  },
+  trendPillText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#800E20',
+  },
+  bigMetricNumber: {
+    fontSize: 32,
+    fontWeight: '900',
+    color: '#1F0B10',
+    letterSpacing: -0.5,
+  },
+  bigMetricLabel: {
+    fontSize: 12,
+    color: '#8A7277',
+    fontWeight: '700',
+    marginTop: 4,
+  },
+
+  // 5. Quick Actions
   sectionHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 10,
+    marginBottom: 12,
   },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: '#17060A',
-    letterSpacing: -0.3,
-  },
-  datePill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#EFE4E7',
-  },
-  datePillText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#8A7277',
-  },
-  seeAllLink: {
-    fontSize: 12,
+  seeAllText: {
+    fontSize: 13,
     fontWeight: '800',
     color: '#800E20',
   },
-
-  // 4. 4 Metric Cards in 1 Row
-  metrics4Row: {
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 20,
+  quickActionCardsCol: {
+    gap: 12,
+    marginBottom: 24,
   },
-  metricCardMini: {
-    flex: 1,
+  actionBigButton: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 18,
-    padding: 10,
+    borderRadius: 24,
+    padding: 18,
+    flexDirection: 'row',
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#EFE4E7',
-    shadowColor: 'rgba(128, 14, 32, 0.05)',
-    shadowOffset: { width: 0, height: 3 },
+    borderWidth: 1.5,
+    borderColor: '#EEDCE1',
+    shadowColor: 'rgba(78, 5, 17, 0.06)',
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 1,
-    shadowRadius: 6,
-    elevation: 2,
+    shadowRadius: 10,
+    elevation: 3,
   },
-  iconCircleMini: {
-    width: 32,
-    height: 32,
-    borderRadius: 12,
+  actionIconContainer: {
+    width: 52,
+    height: 52,
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 6,
+    marginRight: 14,
+    shadowColor: '#4A0611',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
   },
-  metricValMini: {
+  actionTextContainer: {
+    flex: 1,
+  },
+  actionTitleBig: {
     fontSize: 16,
-    fontWeight: '900',
-    color: '#17060A',
+    fontWeight: '800',
+    color: '#1F0B10',
   },
-  metricLblMini: {
-    fontSize: 10,
+  actionSubtitle: {
+    fontSize: 12,
     color: '#8A7277',
-    fontWeight: '600',
+    fontWeight: '500',
     marginTop: 2,
+  },
+  actionChevronCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#FAF0F2',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#EEDCE1',
+  },
+
+  // 6. Schedule List & Cards
+  emptyStateCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    padding: 24,
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: '#EEDCE1',
+    marginBottom: 24,
+  },
+  emptyIconCircle: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#FBE8EC',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  emptyStateTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#1F0B10',
+    marginBottom: 4,
+  },
+  emptyStateSub: {
+    fontSize: 12,
+    color: '#8A7277',
     textAlign: 'center',
   },
-  trendBadge: {
-    marginTop: 6,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
+  scheduleListCol: {
+    gap: 12,
+    marginBottom: 24,
   },
-  trendText: {
-    fontSize: 9,
-    fontWeight: '800',
-  },
-
-  // 5. Quick Actions (3 Pill Buttons)
-  quickActions3Row: {
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 20,
-  },
-  actionPillBtn: {
-    flex: 1,
+  realScheduleCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 22,
+    padding: 16,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 10,
-    borderWidth: 1,
-    borderColor: '#EFE4E7',
-    gap: 8,
-    shadowColor: 'rgba(128, 14, 32, 0.04)',
-    shadowOffset: { width: 0, height: 2 },
+    borderWidth: 1.5,
+    borderColor: '#EEDCE1',
+    shadowColor: 'rgba(78, 5, 17, 0.06)',
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 1,
-    shadowRadius: 6,
-    elevation: 2,
+    shadowRadius: 10,
+    elevation: 3,
   },
-  actionPillIconBox: {
+  realScheduleIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 14,
+  },
+  rowBetween: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  scheduleDealerTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#1F0B10',
+  },
+  statusBadgeSmall: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 10,
+  },
+  statusUpc: {
+    backgroundColor: '#FBE8EC',
+  },
+  statusComp: {
+    backgroundColor: '#DCFCE7',
+  },
+  statusCanc: {
+    backgroundColor: '#F3F4F6',
+  },
+  statusBadgeText: {
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  scheduleMetaText: {
+    fontSize: 13,
+    color: '#6B4E55',
+    marginTop: 4,
+    fontWeight: '600',
+  },
+
+  // 7. Leaderboard
+  leaderboardContainer: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderWidth: 1.5,
+    borderColor: '#EEDCE1',
+    marginBottom: 24,
+    shadowColor: 'rgba(78, 5, 17, 0.06)',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 1,
+    shadowRadius: 10,
+    elevation: 3,
+  },
+  leaderRowItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F7EFF1',
+  },
+  rankBadgeCircle: {
     width: 32,
     height: 32,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  actionPillTitle: {
-    fontSize: 12,
-    fontWeight: '800',
-    color: '#17060A',
-  },
-  actionPillSub: {
-    fontSize: 9,
-    color: '#8A7277',
-    marginTop: 1,
-  },
-
-  // 6. Today's Schedule (2 Side-by-Side Cards)
-  schedule2ColRow: {
-    flexDirection: 'row',
-    gap: 10,
-    marginBottom: 20,
-  },
-  scheduleBoxCard: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 18,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: '#EFE4E7',
-    shadowColor: 'rgba(128, 14, 32, 0.05)',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 1,
-    shadowRadius: 6,
-    elevation: 2,
-  },
-  scheduleBoxHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  scheduleBoxIcon: {
-    width: 30,
-    height: 30,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  scheduleBoxTitle: {
-    fontSize: 12,
-    fontWeight: '800',
-    color: '#17060A',
-  },
-  scheduleBoxSub: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#800E20',
-    marginTop: 1,
-  },
-  scheduleBoxDivider: {
-    height: 1,
-    backgroundColor: '#F5ECEE',
-    marginVertical: 8,
-  },
-  scheduleItemLine: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginVertical: 3,
-  },
-  scheduleItemName: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#17060A',
-  },
-  scheduleItemMeta: {
-    fontSize: 9,
-    color: '#8A7277',
-  },
-
-  // 7. Monthly Performance (3 Progress Cards)
-  monthly3CardsRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 20,
-  },
-  monthlyProgressCard: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
     borderRadius: 16,
-    padding: 10,
-    borderWidth: 1,
-    borderColor: '#EFE4E7',
-    shadowColor: 'rgba(128, 14, 32, 0.04)',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 1,
-    shadowRadius: 6,
-    elevation: 2,
-  },
-  monthlyCardTop: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    marginBottom: 4,
-  },
-  monthlyCardTitle: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#8A7277',
-  },
-  monthlyCardValue: {
-    fontSize: 13,
-    fontWeight: '900',
-    color: '#17060A',
-    marginBottom: 6,
-  },
-  monthlyCardDenom: {
-    fontSize: 9,
-    fontWeight: '600',
-    color: '#8A7277',
-  },
-  progressBarTrack: {
-    height: 4,
-    backgroundColor: '#F5E8EB',
-    borderRadius: 2,
-    overflow: 'hidden',
-    marginBottom: 4,
-  },
-  progressBarFill: {
-    height: '100%',
-    backgroundColor: '#800E20',
-    borderRadius: 2,
-  },
-  progressPercentText: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: '#800E20',
-    textAlign: 'right',
-  },
-
-  // 8. Leaderboard
-  leaderboardCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderWidth: 1,
-    borderColor: '#EFE4E7',
-    shadowColor: 'rgba(128, 14, 32, 0.05)',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 1,
-    shadowRadius: 8,
-    elevation: 2,
-    marginBottom: 20,
-  },
-  emptyLeaderboard: {
-    padding: 16,
-    alignItems: 'center',
-  },
-  emptyLeaderboardText: {
-    fontSize: 12,
-    color: '#8A7277',
-  },
-  leaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F5ECEE',
-  },
-  rankBadge: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 10,
+    marginRight: 12,
   },
-  rank1: { backgroundColor: '#FBBF24' },
-  rank2: { backgroundColor: '#CBD5E1' },
-  rank3: { backgroundColor: '#FDBA74' },
+  rankGold: { backgroundColor: '#FBBF24' },
+  rankSilver: { backgroundColor: '#CBD5E1' },
+  rankBronze: { backgroundColor: '#FDBA74' },
   rankBadgeText: {
-    fontSize: 11,
+    fontSize: 14,
     fontWeight: '900',
-    color: '#17060A',
+    color: '#1F0B10',
   },
   leaderDealerName: {
-    fontSize: 13,
+    fontSize: 15,
     fontWeight: '800',
-    color: '#17060A',
+    color: '#1F0B10',
   },
   leaderDealerArea: {
-    fontSize: 10,
+    fontSize: 12,
     color: '#8A7277',
-    marginTop: 1,
+    marginTop: 2,
   },
-  leaderBagsText: {
-    fontSize: 13,
+  leaderDealerMT: {
+    fontSize: 16,
     fontWeight: '900',
     color: '#800E20',
   },
-  leaderTrendText: {
-    fontSize: 10,
-    color: '#15803D',
-    fontWeight: '700',
-    marginTop: 1,
+  leaderDealerBags: {
+    fontSize: 11,
+    color: '#8A7277',
   },
 });
