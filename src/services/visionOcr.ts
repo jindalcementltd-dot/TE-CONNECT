@@ -163,11 +163,13 @@ export function parseVisionSalesSheet(
   const dealerBySap = new Map<string, Dealer>();
   const dealerByName = new Map<string, Dealer>();
   existingDealers.forEach(d => {
-    if (d.sap_code && d.sap_code.trim()) {
-      dealerBySap.set(d.sap_code.trim(), d);
+    const sapStr = d.sap_code !== undefined && d.sap_code !== null ? String(d.sap_code).trim() : '';
+    const nameStr = d.dealer_name !== undefined && d.dealer_name !== null ? String(d.dealer_name).trim() : '';
+    if (sapStr) {
+      dealerBySap.set(sapStr, d);
     }
-    if (d.dealer_name && d.dealer_name.trim()) {
-      dealerByName.set(d.dealer_name.toLowerCase().trim(), d);
+    if (nameStr) {
+      dealerByName.set(nameStr.toLowerCase(), d);
     }
   });
 
@@ -411,12 +413,14 @@ function parseSingleChallan(words: OcrWord[], existingDealers: Dealer[]): Vision
   let matchedId: string | undefined;
 
   for (const d of existingDealers) {
-    if (sapCode && d.sap_code === sapCode) {
+    const dSap = d.sap_code !== undefined && d.sap_code !== null ? String(d.sap_code).trim() : '';
+    const dName = d.dealer_name !== undefined && d.dealer_name !== null ? String(d.dealer_name).trim() : '';
+    if (sapCode && dSap === sapCode) {
       dealerName = d.dealer_name;
       matchedId = d.dealer_id;
       break;
     }
-    if (d.dealer_name && allText.toLowerCase().includes(d.dealer_name.toLowerCase())) {
+    if (dName && allText.toLowerCase().includes(dName.toLowerCase())) {
       dealerName = d.dealer_name;
       matchedId = d.dealer_id;
       break;

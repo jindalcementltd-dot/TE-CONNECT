@@ -71,7 +71,12 @@ export async function apiGetUsers(): Promise<User[]> {
 // ── DEALERS ───────────────────────────────────────────────
 export async function apiGetDealers(): Promise<Dealer[]> {
   try {
-    const serverDealers = await get<Dealer[]>('getDealers');
+    const rawDealers = await get<Dealer[]>('getDealers');
+    const serverDealers: Dealer[] = (rawDealers || []).map(d => ({
+      ...d,
+      sap_code: d.sap_code !== undefined && d.sap_code !== null ? String(d.sap_code).trim() : '',
+      dealer_name: d.dealer_name !== undefined && d.dealer_name !== null ? String(d.dealer_name).trim() : '',
+    }));
     const localRaw = await AsyncStorage.getItem('local_dealers');
     if (localRaw) {
       const localDealers: Dealer[] = JSON.parse(localRaw);

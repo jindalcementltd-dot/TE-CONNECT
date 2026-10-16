@@ -281,10 +281,10 @@ export default function PunchScreen() {
     if (!dealerSearch.trim()) return dealerSalesList;
     const q = dealerSearch.toLowerCase().trim();
     return dealerSalesList.filter(d =>
-      d.dealer_name.toLowerCase().includes(q) ||
-      d.sap_code.toLowerCase().includes(q) ||
-      d.area.toLowerCase().includes(q) ||
-      d.assigned_te.toLowerCase().includes(q)
+      (d.dealer_name || '').toLowerCase().includes(q) ||
+      String(d.sap_code || '').toLowerCase().includes(q) ||
+      (d.area || '').toLowerCase().includes(q) ||
+      (d.assigned_te || '').toLowerCase().includes(q)
     );
   }, [dealerSalesList, dealerSearch]);
 

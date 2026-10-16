@@ -161,8 +161,8 @@ export default function ScanSalesScreen() {
       .filter(({ dealer }) => {
         if (!q) return true;
         return (
-          dealer.dealer_name.toLowerCase().includes(q) ||
-          dealer.sap_code.toLowerCase().includes(q)
+          (dealer.dealer_name || '').toLowerCase().includes(q) ||
+          String(dealer.sap_code || '').toLowerCase().includes(q)
         );
       });
   }, [scannedDealers, searchQuery]);
