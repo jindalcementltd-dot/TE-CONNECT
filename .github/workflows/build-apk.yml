@@ -38,15 +38,15 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x android/gradlew
 
-      - name: Build Android APK
+      - name: Build Standalone Android APK
         working-directory: android
         env:
           GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx3072m -XX:MaxMetaspaceSize=1024m"
-        run: ./gradlew assembleDebug --no-daemon --stacktrace
+        run: ./gradlew assembleRelease --no-daemon --stacktrace
 
       - name: Upload APK to GitHub Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: TE-CONNECT-Android-APK
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          path: android/app/build/outputs/apk/release/app-release.apk
           retention-days: 30
