@@ -5,22 +5,19 @@ import Toast from 'react-native-toast-message';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { StatusBar } from 'expo-status-bar';
 import { View, ActivityIndicator } from 'react-native';
+import { useFonts } from 'expo-font';
 import {
-  useFonts,
-  Outfit_400Regular,
-  Outfit_500Medium,
-  Outfit_600SemiBold,
-  Outfit_700Bold,
-  Outfit_800ExtraBold,
-  Outfit_900Black,
-} from '@expo-google-fonts/outfit';
+  Sen_400Regular,
+  Sen_500Medium,
+  Sen_600SemiBold,
+  Sen_700Bold,
+} from '@expo-google-fonts/sen';
 import {
-  PlusJakartaSans_400Regular,
-  PlusJakartaSans_500Medium,
-  PlusJakartaSans_600SemiBold,
-  PlusJakartaSans_700Bold,
-  PlusJakartaSans_800ExtraBold,
-} from '@expo-google-fonts/plus-jakarta-sans';
+  Poppins_400Regular,
+  Poppins_500Medium,
+  Poppins_600SemiBold,
+  Poppins_700Bold,
+} from '@expo-google-fonts/poppins';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -35,17 +32,14 @@ const queryClient = new QueryClient({
 
 export default function RootLayout() {
   const [fontsLoaded] = useFonts({
-    Outfit_400Regular,
-    Outfit_500Medium,
-    Outfit_600SemiBold,
-    Outfit_700Bold,
-    Outfit_800ExtraBold,
-    Outfit_900Black,
-    PlusJakartaSans_400Regular,
-    PlusJakartaSans_500Medium,
-    PlusJakartaSans_600SemiBold,
-    PlusJakartaSans_700Bold,
-    PlusJakartaSans_800ExtraBold,
+    Sen_400Regular,
+    Sen_500Medium,
+    Sen_600SemiBold,
+    Sen_700Bold,
+    Poppins_400Regular,
+    Poppins_500Medium,
+    Poppins_600SemiBold,
+    Poppins_700Bold,
   });
 
   if (!fontsLoaded) {
@@ -66,9 +60,12 @@ export default function RootLayout() {
           <Stack.Screen name="slab/add" options={{ presentation: 'modal' }} />
           <Stack.Screen name="slab/[id]" options={{ presentation: 'modal' }} />
           <Stack.Screen name="sale/add" options={{ presentation: 'modal' }} />
+          <Stack.Screen name="sale/scan" options={{ presentation: 'modal' }} />
+          <Stack.Screen name="punch/add" options={{ presentation: 'modal' }} />
           <Stack.Screen name="meeting/add" options={{ presentation: 'modal' }} />
           <Stack.Screen name="meeting/[id]" options={{ presentation: 'modal' }} />
           <Stack.Screen name="dealer/[id]" />
+          <Stack.Screen name="dealer/add" options={{ presentation: 'modal' }} />
           <Stack.Screen name="admin/index" />
           <Stack.Screen name="public/quick" options={{ headerShown: false }} />
           <Stack.Screen name="public/slab" options={{ headerShown: false }} />

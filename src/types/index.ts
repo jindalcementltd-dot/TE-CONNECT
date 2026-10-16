@@ -29,6 +29,7 @@ export interface Dealer {
   phone: string;
   address: string;
   area: string;
+  sap_code?: string;
   latitude?: number;
   longitude?: number;
   assigned_te: string;
@@ -71,7 +72,7 @@ export interface Slab {
   updated_at: string;
 }
 
-export type Product = 'ACC F2R' | 'ACC GOLD';
+export type Product = 'ACC F2R' | 'ACC GOLD' | 'ACC HPC' | string;
 
 export interface Sale {
   sale_id: string;
@@ -96,6 +97,8 @@ export interface ActiveTracker {
   active_contractors: number;
   inactive_contractors: number;
   punched_quantity_bags: number;
+  f2r_punch_bags?: number;
+  gold_punch_bags?: number;
   updated_by: string;
   updated_at: string;
 }
@@ -155,6 +158,7 @@ export interface DealerSalesSummary {
   dealer_id: string;
   dealer_name: string;
   area: string;
+  sap_code?: string;
   assigned_te: string;
   active: boolean;
   total_bags: number;
@@ -245,7 +249,11 @@ export interface AddMeetingForm {
 export interface AddPunchForm {
   date: string;
   te: string;
-  punch_quantity_bags: number;
+  punch_quantity_bags?: number;
+  f2r_bags?: number;
+  gold_bags?: number;
+  total_contractors?: number;
+  active_contractors?: number;
   remark?: string;
 }
 
@@ -271,3 +279,48 @@ export interface PublicMeetingForm {
   people_count?: number;
   remark?: string;
 }
+
+export interface ScannedDealerSale {
+  sap_code: string;
+  dealer_name: string;
+  matched_dealer_id?: string;
+  hpc_mt: number;
+  f2r_mt: number;
+  gold_mt: number;
+  total_mt: number;
+  hpc_bags: number;
+  f2r_bags: number;
+  gold_bags: number;
+  total_bags: number;
+  selected: boolean;
+}
+
+export interface VisionScanResult {
+  success: boolean;
+  error?: string;
+  dealers: ScannedDealerSale[];
+  summary: {
+    total_dealers: number;
+    active_dealers: number;
+    total_mt: number;
+    total_f2r_mt: number;
+    total_gold_mt: number;
+    total_hpc_mt: number;
+    total_bags: number;
+    total_f2r: number;
+    total_gold: number;
+    total_hpc: number;
+  };
+}
+
+export interface BatchSaleItem {
+  sale_date: string;
+  dealer_id?: string;
+  dealer_name: string;
+  sap_code?: string;
+  product: Product;
+  quantity_bags: number;
+  assigned_te?: string;
+  remark?: string;
+}
+

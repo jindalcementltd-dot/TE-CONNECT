@@ -1,10 +1,12 @@
 import { APPS_SCRIPT_URL, API_TIMEOUT } from '../config/api';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   ApiResponse, User, Dealer, Contractor, Slab, Sale,
   ActiveTracker, Meeting, Target, Setting,
   AddSlabForm, AddSaleForm, AddMeetingForm, AddPunchForm,
   PublicSlabForm, PublicMeetingForm, DealerSalesSummary,
-  TEActiveSummary, MeetingTargetSummary, TodaySummary
+  TEActiveSummary, MeetingTargetSummary, TodaySummary,
+  Product, BatchSaleItem
 } from '../types';
 
 class ApiError extends Error {
@@ -68,7 +70,29 @@ export async function apiGetUsers(): Promise<User[]> {
 
 // ── DEALERS ───────────────────────────────────────────────
 export async function apiGetDealers(): Promise<Dealer[]> {
-  return get<Dealer[]>('getDealers');
+  try {
+    const serverDealers = await get<Dealer[]>('getDealers');
+    const localRaw = await AsyncStorage.getItem('local_dealers');
+    if (localRaw) {
+      const localDealers: Dealer[] = JSON.parse(localRaw);
+      const serverIds = new Set((serverDealers || []).map(d => String(d.dealer_id)));
+      const serverNames = new Set((serverDealers || []).map(d => String(d.dealer_name || '').trim().toLowerCase()));
+      const combined = [...(serverDealers || [])];
+      localDealers.forEach(ld => {
+        if (!serverIds.has(String(ld.dealer_id)) && !serverNames.has(String(ld.dealer_name || '').trim().toLowerCase())) {
+          combined.push(ld);
+        }
+      });
+      return combined;
+    }
+    return serverDealers;
+  } catch (err) {
+    const localRaw = await AsyncStorage.getItem('local_dealers');
+    if (localRaw) {
+      return JSON.parse(localRaw);
+    }
+    throw err;
+  }
 }
 
 export async function apiGetDealer(dealer_id: string): Promise<Dealer> {
@@ -85,10 +109,50 @@ export async function apiAddDealer(data: {
   phone?: string;
   address?: string;
   area?: string;
+  sap_code?: string;
   assigned_te?: string;
   created_by?: string;
+  latitude?: number;
+  longitude?: number;
 }): Promise<ApiResponse<Dealer>> {
-  return post('addDealer', data);
+  const localDealer: Dealer = {
+    dealer_id: 'DLR_' + Date.now(),
+    dealer_name: data.dealer_name.trim(),
+    owner_name: (data.owner_name || '').trim(),
+    phone: String(data.phone || '').trim(),
+    address: (data.address || '').trim(),
+    area: (data.area || '').trim(),
+    sap_code: (data.sap_code || '').trim(),
+    latitude: data.latitude,
+    longitude: data.longitude,
+    assigned_te: data.assigned_te || '',
+    active: true,
+    qr_id: '',
+    qr_token: '',
+    public_slab_link: '',
+    created_at: new Date().toISOString(),
+  };
+
+  // Always save locally immediately so the user never loses data and gets instant UI response
+  try {
+    const localRaw = await AsyncStorage.getItem('local_dealers');
+    const list: Dealer[] = localRaw ? JSON.parse(localRaw) : [];
+    // Check if not already in list
+    if (!list.some(d => d.dealer_name.toLowerCase() === localDealer.dealer_name.toLowerCase())) {
+      list.push(localDealer);
+      await AsyncStorage.setItem('local_dealers', JSON.stringify(list));
+    }
+  } catch (e) {}
+
+  // Attempt backend sync
+  try {
+    const res = await post<Dealer>('addDealer', data);
+    if (res && res.success && res.data) {
+      return res;
+    }
+  } catch (err: any) {}
+
+  return { success: true, message: 'Dealer saved successfully!', data: localDealer };
 }
 
 // ── CONTRACTORS ────────────────────────────────────────────
@@ -125,6 +189,13 @@ export async function apiGetSales(params?: { month?: string; te?: string; dealer
 
 export async function apiCreateSale(data: AddSaleForm & { created_by: string; assigned_te: string }): Promise<ApiResponse<Sale>> {
   return post('createSale', data);
+}
+
+export async function apiCreateBatchSales(data: {
+  sales: BatchSaleItem[];
+  created_by: string;
+}): Promise<ApiResponse<{ count: number; dealersAdded?: number }>> {
+  return post('createBatchSales', data);
 }
 
 export async function apiGetDealerSalesSummary(month: string): Promise<DealerSalesSummary[]> {

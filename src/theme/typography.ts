@@ -1,20 +1,20 @@
 import { StyleSheet, Platform } from 'react-native';
 
 export const FontFamily = {
-  // Headings & Display Numbers (Outfit)
-  displayRegular: 'Outfit_400Regular',
-  displayMedium: 'Outfit_500Medium',
-  displaySemiBold: 'Outfit_600SemiBold',
-  displayBold: 'Outfit_700Bold',
-  displayExtraBold: 'Outfit_800ExtraBold',
-  displayBlack: 'Outfit_900Black',
+  // Headings & Display Numbers (Oswald)
+  displayRegular: 'Sen_400Regular',
+  displayMedium: 'Sen_500Medium',
+  displaySemiBold: 'Sen_600SemiBold',
+  displayBold: 'Sen_700Bold',
+  displayExtraBold: 'Sen_700Bold', // Oswald doesn't have 800/900 in the basic package
+  displayBlack: 'Sen_700Bold',
 
-  // Body & UI (Plus Jakarta Sans)
-  sansRegular: 'PlusJakartaSans_400Regular',
-  sansMedium: 'PlusJakartaSans_500Medium',
-  sansSemiBold: 'PlusJakartaSans_600SemiBold',
-  sansBold: 'PlusJakartaSans_700Bold',
-  sansExtraBold: 'PlusJakartaSans_800ExtraBold',
+  // Body & UI (Poppins)
+  sansRegular: 'Poppins_400Regular',
+  sansMedium: 'Poppins_500Medium',
+  sansSemiBold: 'Poppins_600SemiBold',
+  sansBold: 'Poppins_700Bold',
+  sansExtraBold: 'Poppins_700Bold',
 };
 
 export const FontSize = {

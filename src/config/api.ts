@@ -7,8 +7,11 @@
 
 export const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwD_2lt1qBbtcEiTcjbct565HUusllU1YW4b5i3fS_cEQBmBE_ZZ8WLBlPOXhs6ELum_g/exec';
 
-// Timeout for API calls (milliseconds)
-export const API_TIMEOUT = 15000;
+// Google Cloud Vision API Key for OCR scanning of sales sheets & invoices
+export const GOOGLE_CLOUD_VISION_API_KEY = 'AIzaSyCOncyHcL6NN6HgZrR2r6-Cu9B5gAzbAdU';
+
+// Timeout for API calls (milliseconds) - 60s for batch uploads & vision OCR
+export const API_TIMEOUT = 60000;
 
 // App version
 export const APP_VERSION = '1.0.0';

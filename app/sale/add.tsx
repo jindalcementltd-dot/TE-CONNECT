@@ -3,381 +3,336 @@ import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity,
   TextInput, ActivityIndicator, Platform, Modal, FlatList,
 } from 'react-native';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router } from 'expo-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import Toast from 'react-native-toast-message';
 import { Colors } from '../../src/theme/colors';
-import { apiGetDealers, apiCreateSale, apiAddPunch, apiGetUsers } from '../../src/services/api';
+import { Spacing, BorderRadius } from '../../src/theme/spacing';
+import { Typography, FontFamily, FontSize } from '../../src/theme/typography';
+import { apiGetDealers, apiCreateSale } from '../../src/services/api';
 import { getUser } from '../../src/services/auth';
-import { currentDateISO, normalizeDate } from '../../src/utils/helpers';
+import { currentDateISO } from '../../src/utils/helpers';
 import { User, Dealer, Product } from '../../src/types';
-import { FontFamily } from '../../src/theme/typography';
-import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
-
-type Mode = 'sale' | 'punch';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 
 export default function AddSaleScreen() {
-  const params = useLocalSearchParams<{ type?: string }>();
   const queryClient = useQueryClient();
   const [user, setUser] = useState<User | null>(null);
-  const [mode, setMode] = useState<Mode>(params.type === 'punch' ? 'punch' : 'sale');
 
-  // Sale form
-  const [saleDate, setSaleDate] = useState(currentDateISO());
+  const [saleDate, setSaleDate] = useState<string>(currentDateISO());
   const [selectedDealer, setSelectedDealer] = useState<Dealer | null>(null);
   const [product, setProduct] = useState<Product>('ACC F2R');
-  const [quantityBags, setQuantityBags] = useState('');
-  const [saleRemark, setSaleRemark] = useState('');
-  const [showDealerPicker, setShowDealerPicker] = useState(false);
-  const [dealerSearch, setDealerSearch] = useState('');
-
-  // Punch form
-  const [punchDate, setPunchDate] = useState(currentDateISO());
-  const [punchTE, setPunchTE] = useState('');
-  const [punchQty, setPunchQty] = useState('');
-  const [punchRemark, setPunchRemark] = useState('');
+  const [quantityBags, setQuantityBags] = useState<string>('');
+  const [saleRemark, setSaleRemark] = useState<string>('');
+  const [showDealerPicker, setShowDealerPicker] = useState<boolean>(false);
+  const [dealerSearch, setDealerSearch] = useState<string>('');
 
   useEffect(() => {
-    getUser().then(u => {
-      setUser(u);
-      if (u) setPunchTE(u.name);
-    });
+    getUser().then(setUser);
   }, []);
 
-  const { data: dealers } = useQuery({ queryKey: ['dealers'], queryFn: apiGetDealers });
-  const { data: users } = useQuery({ queryKey: ['users'], queryFn: apiGetUsers });
-  const teUsers = (users || []).filter(u => u.role === 'TE' && u.active);
+  const { data: dealers } = useQuery({ queryKey: ['dealers'], queryFn: () => apiGetDealers() });
 
   const saleMutation = useMutation({
     mutationFn: (data: any) => apiCreateSale(data),
     onSuccess: (res) => {
-      if (res.success) {
-        Toast.show({ type: 'success', text1: 'Sale Recorded ✅', text2: 'Logged in Google Sheet successfully.' });
+      if (res && res.success) {
+        Toast.show({
+          type: 'success',
+          text1: 'Sale Recorded Successfully! ✅',
+          text2: `${quantityBags} bags of ${product} for ${selectedDealer?.dealer_name}`,
+          position: 'top',
+        });
         queryClient.invalidateQueries({ queryKey: ['sales'] });
         queryClient.invalidateQueries({ queryKey: ['dealerSalesSummary'] });
         queryClient.invalidateQueries({ queryKey: ['todaySummary'] });
         router.back();
       } else {
-        Toast.show({ type: 'error', text1: 'Error', text2: res.message });
+        Toast.show({ type: 'error', text1: 'Error', text2: res?.message || 'Failed to record sale.' });
       }
     },
-    onError: (err: any) => Toast.show({ type: 'error', text1: 'Error', text2: err.message || 'Failed to add sale.' }),
-  });
-
-  const punchMutation = useMutation({
-    mutationFn: (data: any) => apiAddPunch(data),
-    onSuccess: (res) => {
-      if (res.success) {
-        Toast.show({ type: 'success', text1: 'Punch Saved ✅', text2: 'Active tracker updated in Google Sheet.' });
-        queryClient.invalidateQueries({ queryKey: ['activeTrackers'] });
-        queryClient.invalidateQueries({ queryKey: ['teActiveSummary'] });
-        queryClient.invalidateQueries({ queryKey: ['todaySummary'] });
-        router.back();
-      } else {
-        Toast.show({ type: 'error', text1: 'Error', text2: res.message });
-      }
+    onError: (err: any) => {
+      Toast.show({ type: 'error', text1: 'Submission Error', text2: err.message || 'Could not save sale.' });
     },
-    onError: (err: any) => Toast.show({ type: 'error', text1: 'Error', text2: err.message || 'Failed to save punch.' }),
   });
 
-  const handleSaleSubmit = () => {
-    if (!saleDate) { Toast.show({ type: 'error', text1: 'Missing Date', text2: 'Please specify the sale date.' }); return; }
-    if (!selectedDealer) { Toast.show({ type: 'error', text1: 'Missing Dealer', text2: 'Please select a dealer.' }); return; }
-    if (!quantityBags || isNaN(Number(quantityBags)) || Number(quantityBags) <= 0) {
-      Toast.show({ type: 'error', text1: 'Invalid Quantity', text2: 'Please enter a valid bag quantity.' }); return;
+  const handleSubmit = () => {
+    if (!saleDate) {
+      Toast.show({ type: 'error', text1: 'Missing Date', text2: 'Please select sale date.' });
+      return;
     }
+    if (!selectedDealer) {
+      Toast.show({ type: 'error', text1: 'Missing Dealer', text2: 'Please select a dealer.' });
+      return;
+    }
+    const bags = Number(quantityBags);
+    if (!bags || isNaN(bags) || bags <= 0) {
+      Toast.show({ type: 'error', text1: 'Invalid Quantity', text2: 'Please enter valid bag count.' });
+      return;
+    }
+
     saleMutation.mutate({
       sale_date: saleDate,
       dealer_id: selectedDealer.dealer_id,
       dealer_name: selectedDealer.dealer_name,
       product,
-      quantity_bags: Number(quantityBags),
+      quantity_bags: bags,
       assigned_te: selectedDealer.assigned_te || user?.name || 'Team Jajpur',
+      remark: saleRemark,
       source: 'APP',
       created_by: user?.name || '',
     });
   };
 
-  const handlePunchSubmit = () => {
-    if (!punchDate || !punchTE || !punchQty || Number(punchQty) <= 0) {
-      Toast.show({ type: 'error', text1: 'Missing Fields', text2: 'Date, TE name, and valid punch bag quantity are required.' }); return;
-    }
-    punchMutation.mutate({
-      date: punchDate,
-      te: punchTE,
-      punch_quantity_bags: Number(punchQty),
-      remark: punchRemark,
-      updated_by: user?.name || '',
-    });
-  };
-
   const filteredDealers = (dealers || []).filter(d => {
-    const nameMatch = (d.dealer_name || '').toLowerCase().includes(dealerSearch.toLowerCase());
-    const isNotInactive = d.active === undefined || d.active === null || String(d.active) === '' || String(d.active).toLowerCase() !== 'false';
-    return nameMatch && isNotInactive;
+    const q = dealerSearch.toLowerCase().trim();
+    if (!q) return true;
+    const nameMatch = (d.dealer_name || '').toLowerCase().includes(q);
+    const sapMatch = (d.sap_code || '').toLowerCase().includes(q);
+    const areaMatch = (d.area || '').toLowerCase().includes(q);
+    return nameMatch || sapMatch || areaMatch;
   });
 
-  const isPending = saleMutation.isPending || punchMutation.isPending;
+  const numBags = Number(quantityBags) || 0;
+  const mtValue = (numBags / 20).toFixed(2);
 
   return (
     <View style={styles.container}>
-      {/* Top Header */}
+      {/* ── HEADER ── */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <Ionicons name="close" size={24} color="#1F0B10" />
+          <Ionicons name="close" size={24} color={Colors.textPrimary} />
         </TouchableOpacity>
-        <Text style={styles.title}>{mode === 'sale' ? 'Record Sale Entry' : 'Record Contractor Punch'}</Text>
+        <Text style={styles.headerTitle}>Add Cement Sale</Text>
         <View style={{ width: 40 }} />
       </View>
 
-      {/* Mode Switcher */}
-      <View style={styles.modeToggleContainer}>
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
+        {/* ── AI OCR SCAN BANNER ── */}
         <TouchableOpacity
-          style={[styles.modeBtn, mode === 'sale' && styles.modeBtnActive]}
-          onPress={() => setMode('sale')}
-          activeOpacity={0.8}
+          style={styles.aiScanBanner}
+          onPress={() => router.push('/sale/scan')}
+          activeOpacity={0.85}
         >
-          <MaterialCommunityIcons
-            name="cart-outline"
-            size={18}
-            color={mode === 'sale' ? '#FFFFFF' : '#8A7277'}
-            style={{ marginRight: 6 }}
-          />
-          <Text style={[styles.modeBtnText, mode === 'sale' && styles.modeBtnTextActive]}>
-            Sale Entry
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.modeBtn, mode === 'punch' && styles.modeBtnActive]}
-          onPress={() => setMode('punch')}
-          activeOpacity={0.8}
-        >
-          <MaterialCommunityIcons
-            name="cube-send"
-            size={18}
-            color={mode === 'punch' ? '#FFFFFF' : '#8A7277'}
-            style={{ marginRight: 6 }}
-          />
-          <Text style={[styles.modeBtnText, mode === 'punch' && styles.modeBtnTextActive]}>
-            Contractor Punch
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-        {mode === 'sale' ? (
-          <View style={styles.formCard}>
-            {/* Sale Date */}
-            <View style={styles.group}>
-              <Text style={styles.label}>Sale Date <Text style={styles.required}>*</Text></Text>
-              <TextInput
-                style={styles.input}
-                value={saleDate}
-                onChangeText={setSaleDate}
-                placeholder="YYYY-MM-DD"
-                placeholderTextColor="#A0858C"
-              />
+          <View style={styles.aiScanIconBox}>
+            <MaterialCommunityIcons name="camera-metering-center" size={24} color="#FFFFFF" />
+          </View>
+          <View style={{ flex: 1, marginLeft: 12 }}>
+            <View style={styles.aiTagRow}>
+              <Text style={styles.aiTagText}>CLOUD VISION AI</Text>
+              <View style={styles.autoPill}>
+                <Text style={styles.autoPillText}>AUTO FILL</Text>
+              </View>
             </View>
+            <Text style={styles.aiScanTitle}>Scan Excel Sheet / Challan</Text>
+            <Text style={styles.aiScanSub}>
+              Photo se direct SAP Code, Dealer & Product bags sheet me upload karein
+            </Text>
+          </View>
+          <Ionicons name="chevron-forward" size={18} color="#FFFFFF" />
+        </TouchableOpacity>
 
-            {/* Dealer Picker */}
-            <View style={styles.group}>
-              <Text style={styles.label}>Dealer / Counter <Text style={styles.required}>*</Text></Text>
-              <TouchableOpacity
-                style={styles.pickerBtn}
-                onPress={() => setShowDealerPicker(true)}
-                activeOpacity={0.8}
-              >
+        <View style={styles.card}>
+          {/* Sale Date */}
+          <View style={styles.group}>
+            <Text style={styles.label}>Sale Date <Text style={styles.required}>*</Text></Text>
+            <TextInput
+              style={styles.input}
+              value={saleDate}
+              onChangeText={setSaleDate}
+              placeholder="YYYY-MM-DD"
+              placeholderTextColor={Colors.textMuted}
+            />
+          </View>
+
+          {/* Dealer / Counter */}
+          <View style={styles.group}>
+            <Text style={styles.label}>Dealer / Counter <Text style={styles.required}>*</Text></Text>
+            <TouchableOpacity
+              style={styles.pickerBtn}
+              onPress={() => setShowDealerPicker(true)}
+              activeOpacity={0.8}
+            >
+              <View style={{ flex: 1 }}>
                 <Text style={selectedDealer ? styles.pickerSelected : styles.pickerPlaceholder}>
-                  {selectedDealer ? `${selectedDealer.dealer_name} (${selectedDealer.area || 'Jajpur'})` : 'Select dealer...'}
+                  {selectedDealer ? selectedDealer.dealer_name : 'Select dealer / counter...'}
                 </Text>
-                <Ionicons name="chevron-down" size={18} color="#800E20" />
-              </TouchableOpacity>
-            </View>
-
-            {/* Product Selector */}
-            <View style={styles.group}>
-              <Text style={styles.label}>Product Type <Text style={styles.required}>*</Text></Text>
-              <View style={styles.productRow}>
-                {(['ACC F2R', 'ACC GOLD'] as Product[]).map(p => {
-                  const isSelected = product === p;
-                  return (
-                    <TouchableOpacity
-                      key={p}
-                      style={[styles.productBtn, isSelected && styles.productBtnActive]}
-                      onPress={() => setProduct(p)}
-                      activeOpacity={0.8}
-                    >
-                      <View style={[styles.productDot, { backgroundColor: p === 'ACC F2R' ? '#E53935' : '#F59E0B' }]} />
-                      <Text style={[styles.productBtnText, isSelected && styles.productBtnTextActive]}>{p}</Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            </View>
-
-            {/* Quantity */}
-            <View style={styles.group}>
-              <Text style={styles.label}>Quantity (Bags) <Text style={styles.required}>*</Text></Text>
-              <View style={styles.qtyInputContainer}>
-                <TextInput
-                  style={[styles.input, { flex: 1 }]}
-                  value={quantityBags}
-                  onChangeText={setQuantityBags}
-                  placeholder="e.g. 100"
-                  placeholderTextColor="#A0858C"
-                  keyboardType="numeric"
-                />
-                {quantityBags && !isNaN(Number(quantityBags)) ? (
-                  <View style={styles.mtBadge}>
-                    <Text style={styles.mtBadgeText}>{(Number(quantityBags) / 20).toFixed(1)} MT</Text>
-                  </View>
+                {selectedDealer ? (
+                  <Text style={styles.pickerSubtext}>
+                    {selectedDealer.area || 'Jajpur'} {selectedDealer.sap_code ? `· SAP: ${selectedDealer.sap_code}` : ''}
+                  </Text>
                 ) : null}
               </View>
-            </View>
-
-            {/* Remark */}
-            <View style={styles.group}>
-              <Text style={styles.label}>Remark / Dispatch Details</Text>
-              <TextInput
-                style={[styles.input, styles.textarea]}
-                value={saleRemark}
-                onChangeText={setSaleRemark}
-                placeholder="Optional notes, invoice no, vehicle details..."
-                placeholderTextColor="#A0858C"
-                multiline
-                numberOfLines={3}
-              />
-            </View>
-
-            {/* Submit Button */}
-            <TouchableOpacity
-              style={[styles.submitBtn, isPending && styles.submitBtnDisabled]}
-              onPress={handleSaleSubmit}
-              disabled={isPending}
-              activeOpacity={0.85}
-            >
-              {isPending ? (
-                <ActivityIndicator color="#FFFFFF" />
-              ) : (
-                <View style={styles.submitBtnRow}>
-                  <MaterialCommunityIcons name="cart-arrow-down" size={20} color="#FFFFFF" style={{ marginRight: 8 }} />
-                  <Text style={styles.submitText}>Save Sale to Google Sheet</Text>
-                </View>
-              )}
+              <Ionicons name="chevron-down" size={18} color="#800E20" />
             </TouchableOpacity>
           </View>
-        ) : (
-          <View style={styles.formCard}>
-            {/* Punch Date */}
-            <View style={styles.group}>
-              <Text style={styles.label}>Punch Date <Text style={styles.required}>*</Text></Text>
-              <TextInput
-                style={styles.input}
-                value={punchDate}
-                onChangeText={setPunchDate}
-                placeholder="YYYY-MM-DD"
-                placeholderTextColor="#A0858C"
-              />
-            </View>
 
-            {/* TE User */}
-            <View style={styles.group}>
-              <Text style={styles.label}>Territory Executive (TE) <Text style={styles.required}>*</Text></Text>
-              <TextInput
-                style={styles.input}
-                value={punchTE}
-                onChangeText={setPunchTE}
-                placeholder="TE full name"
-                placeholderTextColor="#A0858C"
-              />
+          {/* Product Type */}
+          <View style={styles.group}>
+            <Text style={styles.label}>Product Type <Text style={styles.required}>*</Text></Text>
+            <View style={styles.productRow}>
+              {(['ACC F2R', 'ACC GOLD'] as Product[]).map(p => {
+                const isSelected = product === p;
+                const isF2R = p === 'ACC F2R';
+                return (
+                  <TouchableOpacity
+                    key={p}
+                    style={[
+                      styles.productCard,
+                      isSelected && (isF2R ? styles.productCardActiveF2R : styles.productCardActiveGold),
+                    ]}
+                    onPress={() => setProduct(p)}
+                    activeOpacity={0.8}
+                  >
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <View style={[styles.productDot, { backgroundColor: isF2R ? '#EF4444' : '#F59E0B' }]} />
+                      <Text style={[styles.productName, isSelected && { color: '#800E20', fontWeight: '800' }]}>
+                        {p}
+                      </Text>
+                    </View>
+                    <Text style={styles.productSub}>{isF2R ? 'Premium Super Fast' : 'Water Shield Armor'}</Text>
+                    {isSelected && (
+                      <View style={styles.productCheckCircle}>
+                        <Ionicons name="checkmark" size={12} color="#FFFFFF" />
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
             </View>
+          </View>
 
-            {/* Punch Quantity */}
-            <View style={styles.group}>
-              <Text style={styles.label}>Punched Quantity (Bags) <Text style={styles.required}>*</Text></Text>
-              <View style={styles.qtyInputContainer}>
-                <TextInput
-                  style={[styles.input, { flex: 1 }]}
-                  value={punchQty}
-                  onChangeText={setPunchQty}
-                  placeholder="Total bags punched against contractor"
-                  placeholderTextColor="#A0858C"
-                  keyboardType="numeric"
-                />
-                {punchQty && !isNaN(Number(punchQty)) ? (
-                  <View style={styles.mtBadge}>
-                    <Text style={styles.mtBadgeText}>{(Number(punchQty) / 20).toFixed(1)} MT</Text>
-                  </View>
-                ) : null}
-              </View>
-            </View>
-
-            {/* Remark */}
-            <View style={styles.group}>
-              <Text style={styles.label}>Remark / Contractor Details</Text>
-              <TextInput
-                style={[styles.input, styles.textarea]}
-                value={punchRemark}
-                onChangeText={setPunchRemark}
-                placeholder="Contractor names, coupons punched..."
-                placeholderTextColor="#A0858C"
-                multiline
-                numberOfLines={3}
-              />
-            </View>
-
-            {/* Submit Button */}
-            <TouchableOpacity
-              style={[styles.submitBtn, isPending && styles.submitBtnDisabled]}
-              onPress={handlePunchSubmit}
-              disabled={isPending}
-              activeOpacity={0.85}
-            >
-              {isPending ? (
-                <ActivityIndicator color="#FFFFFF" />
-              ) : (
-                <View style={styles.submitBtnRow}>
-                  <MaterialCommunityIcons name="cube-send" size={20} color="#FFFFFF" style={{ marginRight: 8 }} />
-                  <Text style={styles.submitText}>Save Punch to Google Sheet</Text>
+          {/* Quantity Bags & MT */}
+          <View style={styles.group}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+              <Text style={[styles.label, { marginBottom: 0 }]}>Quantity (Bags) <Text style={styles.required}>*</Text></Text>
+              {numBags > 0 && (
+                <View style={styles.mtBadge}>
+                  <Text style={styles.mtBadgeText}>{mtValue} Metric Ton (MT)</Text>
                 </View>
               )}
-            </TouchableOpacity>
-          </View>
-        )}
-        <View style={{ height: 60 }} />
-      </ScrollView>
-
-      {/* Dealer Selection Modal */}
-      <Modal visible={showDealerPicker} animationType="slide" transparent>
-        <View style={pickerStyles.overlay}>
-          <View style={pickerStyles.sheet}>
-            <View style={pickerStyles.header}>
-              <Text style={pickerStyles.title}>Select Dealer</Text>
-              <TouchableOpacity onPress={() => setShowDealerPicker(false)}>
-                <Ionicons name="close" size={24} color="#1F0B10" />
-              </TouchableOpacity>
             </View>
             <TextInput
-              style={pickerStyles.search}
-              value={dealerSearch}
-              onChangeText={setDealerSearch}
-              placeholder="Search dealer by name..."
-              placeholderTextColor="#A0858C"
+              style={styles.input}
+              placeholder="e.g. 100"
+              placeholderTextColor={Colors.textMuted}
+              keyboardType="numeric"
+              value={quantityBags}
+              onChangeText={setQuantityBags}
             />
+
+            {/* Quick Bag Pills */}
+            <View style={styles.quickCountRow}>
+              {[50, 100, 200, 500, 1000].map(amt => (
+                <TouchableOpacity
+                  key={amt}
+                  style={styles.quickCountPill}
+                  onPress={() => setQuantityBags(String((Number(quantityBags) || 0) + amt))}
+                >
+                  <Text style={styles.quickCountPillText}>+{amt}</Text>
+                </TouchableOpacity>
+              ))}
+              {quantityBags ? (
+                <TouchableOpacity
+                  style={[styles.quickCountPill, { backgroundColor: '#FEE2E2', borderColor: '#FCA5A5' }]}
+                  onPress={() => setQuantityBags('')}
+                >
+                  <Text style={[styles.quickCountPillText, { color: '#DC2626' }]}>Clear</Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
+          </View>
+
+          {/* Remark */}
+          <View style={styles.group}>
+            <Text style={styles.label}>Remark / Invoice No. (Optional)</Text>
+            <TextInput
+              style={[styles.input, { height: 60, textAlignVertical: 'top' }]}
+              multiline
+              placeholder="Invoice number, delivery site, vehicle..."
+              placeholderTextColor={Colors.textMuted}
+              value={saleRemark}
+              onChangeText={setSaleRemark}
+            />
+          </View>
+
+          {/* Submit Button */}
+          <TouchableOpacity
+            style={[styles.submitBtn, saleMutation.isPending && { opacity: 0.7 }]}
+            onPress={handleSubmit}
+            disabled={saleMutation.isPending}
+            activeOpacity={0.85}
+          >
+            {saleMutation.isPending ? (
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            ) : (
+              <Text style={styles.submitBtnText}>Record Sale in Google Sheet 📈</Text>
+            )}
+          </TouchableOpacity>
+        </View>
+
+        <View style={{ height: 40 }} />
+      </ScrollView>
+
+      {/* ── DEALER PICKER MODAL ── */}
+      <Modal
+        visible={showDealerPicker}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowDealerPicker(false)}
+      >
+        <View style={styles.pickerOverlay}>
+          <View style={styles.pickerSheet}>
+            <View style={styles.pickerHeader}>
+              <Text style={styles.pickerTitle}>Select Dealer Counter</Text>
+              <TouchableOpacity onPress={() => setShowDealerPicker(false)}>
+                <Ionicons name="close" size={22} color={Colors.textPrimary} />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.pickerSearchRow}>
+              <Ionicons name="search" size={16} color="#8A7277" style={{ marginRight: 6 }} />
+              <TextInput
+                style={styles.pickerSearchInput}
+                placeholder="Search by name, area or SAP code..."
+                placeholderTextColor={Colors.textMuted}
+                value={dealerSearch}
+                onChangeText={setDealerSearch}
+              />
+              {dealerSearch ? (
+                <TouchableOpacity onPress={() => setDealerSearch('')}>
+                  <Ionicons name="close-circle" size={16} color="#8A7277" />
+                </TouchableOpacity>
+              ) : null}
+            </View>
+
             <FlatList
               data={filteredDealers}
               keyExtractor={d => d.dealer_id}
+              showsVerticalScrollIndicator={false}
               renderItem={({ item }) => (
                 <TouchableOpacity
-                  style={pickerStyles.item}
-                  onPress={() => { setSelectedDealer(item); setShowDealerPicker(false); }}
+                  style={styles.dealerItemRow}
+                  onPress={() => {
+                    setSelectedDealer(item);
+                    setShowDealerPicker(false);
+                    setDealerSearch('');
+                  }}
                 >
-                  <Text style={pickerStyles.itemName}>{item.dealer_name}</Text>
-                  <Text style={pickerStyles.itemSub}>{item.area || 'Jajpur'} • {item.owner_name || 'Dealer'}</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.dealerItemName}>{item.dealer_name}</Text>
+                    <Text style={styles.dealerItemSub}>
+                      {item.area || 'Jajpur'} {item.sap_code ? `· SAP: ${item.sap_code}` : ''}
+                    </Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={16} color="#C9A3AA" />
                 </TouchableOpacity>
               )}
-              keyboardShouldPersistTaps="handled"
             />
           </View>
         </View>
@@ -395,9 +350,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 18,
+    paddingHorizontal: 16,
     paddingTop: Platform.OS === 'ios' ? 56 : 38,
-    paddingBottom: 16,
+    paddingBottom: 14,
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
     borderBottomColor: '#F0E2E5',
@@ -406,247 +361,300 @@ const styles = StyleSheet.create({
     width: 40,
     alignItems: 'flex-start',
   },
-  title: {
+  headerTitle: {
     fontFamily: FontFamily.displayBold,
     fontSize: 18,
     fontWeight: '800',
     color: '#1F0B10',
   },
-  modeToggleContainer: {
-    flexDirection: 'row',
-    backgroundColor: '#FFFFFF',
-    marginHorizontal: 16,
-    marginTop: 14,
-    marginBottom: 8,
-    borderRadius: 16,
-    padding: 4,
-    borderWidth: 1.5,
-    borderColor: '#EEDCE1',
-  },
-  modeBtn: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 10,
-    borderRadius: 12,
-  },
-  modeBtnActive: {
-    backgroundColor: '#800E20',
-  },
-  modeBtnText: {
-    fontFamily: FontFamily.sansBold,
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#8A7277',
-  },
-  modeBtnTextActive: {
-    color: '#FFFFFF',
-  },
   scroll: {
     flex: 1,
+  },
+  scrollContent: {
     padding: 16,
   },
-  formCard: {
+  aiScanBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#4A0611',
+    borderRadius: 20,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+    shadowColor: '#4A0611',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    elevation: 6,
+  },
+  aiScanIconBox: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  aiTagRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 2,
+  },
+  aiTagText: {
+    fontFamily: FontFamily.sansBold,
+    fontSize: 9,
+    color: '#FCA5A5',
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  autoPill: {
+    backgroundColor: '#DCFCE7',
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 4,
+  },
+  autoPillText: {
+    fontFamily: FontFamily.sansBold,
+    fontSize: 8,
+    color: '#15803D',
+    fontWeight: '800',
+  },
+  aiScanTitle: {
+    fontFamily: FontFamily.displayBold,
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#FFFFFF',
+  },
+  aiScanSub: {
+    fontFamily: FontFamily.sansRegular,
+    fontSize: 11,
+    color: 'rgba(255, 255, 255, 0.8)',
+    marginTop: 2,
+  },
+  card: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 24,
-    padding: 20,
+    borderRadius: 22,
+    padding: 16,
     borderWidth: 1.5,
     borderColor: '#EEDCE1',
-    shadowColor: 'rgba(78, 5, 17, 0.06)',
-    shadowOffset: { width: 0, height: 6 },
+    shadowColor: 'rgba(78, 5, 17, 0.04)',
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 1,
-    shadowRadius: 14,
-    elevation: 4,
+    shadowRadius: 8,
+    elevation: 2,
   },
   group: {
     marginBottom: 16,
   },
   label: {
     fontFamily: FontFamily.sansBold,
-    fontSize: 13,
-    fontWeight: '700',
+    fontSize: 12,
     color: '#1F0B10',
     marginBottom: 6,
+    fontWeight: '700',
   },
   required: {
-    color: '#DC2626',
-  },
-  input: {
-    fontFamily: FontFamily.sansMedium,
-    borderWidth: 1.5,
-    borderColor: '#EEDCE1',
-    borderRadius: 14,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 15,
-    color: '#1F0B10',
-    backgroundColor: '#FAF6F7',
-    fontWeight: '600',
-  },
-  qtyInputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  mtBadge: {
-    backgroundColor: '#FBE8EC',
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: '#E8D5DA',
-  },
-  mtBadgeText: {
-    fontFamily: FontFamily.sansBold,
-    fontSize: 14,
-    fontWeight: '800',
     color: '#800E20',
   },
-  textarea: {
-    height: 76,
-    textAlignVertical: 'top',
+  input: {
+    backgroundColor: '#FAF0F2',
+    borderWidth: 1.5,
+    borderColor: '#EEDCE1',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    fontSize: 15,
+    fontFamily: FontFamily.sansMedium,
+    color: '#1F0B10',
   },
   pickerBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    backgroundColor: '#FAF0F2',
     borderWidth: 1.5,
     borderColor: '#EEDCE1',
-    borderRadius: 14,
+    borderRadius: 12,
     paddingHorizontal: 14,
-    paddingVertical: 13,
-    backgroundColor: '#FAF6F7',
+    paddingVertical: 12,
   },
   pickerSelected: {
-    fontFamily: FontFamily.sansBold,
-    fontSize: 15,
+    fontFamily: FontFamily.displayBold,
+    fontSize: 14,
+    fontWeight: '800',
     color: '#1F0B10',
-    fontWeight: '700',
-    flex: 1,
   },
   pickerPlaceholder: {
     fontFamily: FontFamily.sansRegular,
-    fontSize: 15,
-    color: '#A0858C',
-    flex: 1,
+    fontSize: 14,
+    color: Colors.textMuted,
+  },
+  pickerSubtext: {
+    fontFamily: FontFamily.sansRegular,
+    fontSize: 11,
+    color: '#8A7277',
+    marginTop: 2,
   },
   productRow: {
     flexDirection: 'row',
     gap: 10,
   },
-  productBtn: {
+  productCard: {
     flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 12,
+    backgroundColor: '#FAF0F2',
     borderRadius: 14,
+    padding: 12,
     borderWidth: 1.5,
     borderColor: '#EEDCE1',
-    backgroundColor: '#FAF6F7',
-    gap: 8,
   },
-  productBtnActive: {
+  productCardActiveF2R: {
+    backgroundColor: '#FDE8EA',
     borderColor: '#800E20',
-    backgroundColor: '#FBE8EC',
+  },
+  productCardActiveGold: {
+    backgroundColor: '#FEF3C7',
+    borderColor: '#D97706',
   },
   productDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
   },
-  productBtnText: {
+  productName: {
+    fontFamily: FontFamily.displayBold,
+    fontSize: 13,
+    color: '#1F0B10',
+  },
+  productSub: {
+    fontFamily: FontFamily.sansRegular,
+    fontSize: 10,
+    color: '#8A7277',
+    marginTop: 3,
+  },
+  productCheckCircle: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: '#800E20',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  mtBadge: {
+    backgroundColor: '#DCFCE7',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  mtBadgeText: {
     fontFamily: FontFamily.sansBold,
-    fontSize: 14,
+    fontSize: 10,
+    color: '#15803D',
     fontWeight: '700',
-    color: '#6B4E55',
   },
-  productBtnTextActive: {
+  quickCountRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 8,
+  },
+  quickCountPill: {
+    backgroundColor: '#FAF0F2',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#EEDCE1',
+  },
+  quickCountPillText: {
+    fontFamily: FontFamily.sansBold,
+    fontSize: 11,
     color: '#800E20',
-    fontWeight: '900',
+    fontWeight: '700',
   },
   submitBtn: {
     backgroundColor: '#800E20',
-    borderRadius: 18,
-    paddingVertical: 16,
+    paddingVertical: 14,
+    borderRadius: 14,
     alignItems: 'center',
-    marginTop: 8,
+    justifyContent: 'center',
     shadowColor: '#800E20',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.35,
-    shadowRadius: 10,
-    elevation: 6,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+    marginTop: 8,
   },
-  submitBtnDisabled: {
-    opacity: 0.7,
-  },
-  submitBtnRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  submitText: {
+  submitBtnText: {
     fontFamily: FontFamily.sansBold,
-    color: '#FFFFFF',
     fontSize: 15,
+    color: '#FFFFFF',
     fontWeight: '800',
-    letterSpacing: 0.5,
   },
-});
-
-const pickerStyles = StyleSheet.create({
-  overlay: {
+  pickerOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(31, 11, 16, 0.65)',
+    backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'flex-end',
   },
-  sheet: {
+  pickerSheet: {
     backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
     padding: 20,
-    maxHeight: '80%',
+    maxHeight: '75%',
   },
-  header: {
+  pickerHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 14,
+    marginBottom: 12,
   },
-  title: {
+  pickerTitle: {
     fontFamily: FontFamily.displayBold,
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '800',
     color: '#1F0B10',
   },
-  search: {
-    fontFamily: FontFamily.sansMedium,
-    borderWidth: 1.5,
+  pickerSearchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FAF0F2',
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderWidth: 1,
     borderColor: '#EEDCE1',
-    borderRadius: 14,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    fontSize: 15,
+    marginBottom: 12,
+  },
+  pickerSearchInput: {
+    flex: 1,
+    fontFamily: FontFamily.sansRegular,
+    fontSize: 13,
     color: '#1F0B10',
-    marginBottom: 10,
-    backgroundColor: '#FAF6F7',
+    padding: 0,
   },
-  item: {
-    paddingVertical: 13,
+  dealerItemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#F7EFF1',
+    borderBottomColor: '#F3E8EB',
   },
-  itemName: {
-    fontFamily: FontFamily.sansBold,
-    fontSize: 15,
+  dealerItemName: {
+    fontFamily: FontFamily.displayBold,
+    fontSize: 14,
     fontWeight: '700',
     color: '#1F0B10',
   },
-  itemSub: {
+  dealerItemSub: {
     fontFamily: FontFamily.sansRegular,
-    fontSize: 12,
+    fontSize: 11,
     color: '#8A7277',
     marginTop: 2,
   },
 });
-

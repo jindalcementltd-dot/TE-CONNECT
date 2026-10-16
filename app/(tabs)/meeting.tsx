@@ -1,18 +1,18 @@
 import React, { useState, useCallback, useMemo } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity, RefreshControl, Platform,
+  Modal, FlatList,
 } from 'react-native';
 import { Calendar } from 'react-native-calendars';
 import { router } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { Colors } from '../../src/theme/colors';
-import { apiGetMeetings, apiGetTargets, apiGetUsers } from '../../src/services/api';
-import { getUser } from '../../src/services/auth';
+import { apiGetMeetings, apiGetUsers } from '../../src/services/api';
 import { currentMonthISO, formatPercent, normalizeDate } from '../../src/utils/helpers';
 import { Meeting } from '../../src/types';
 import { FontFamily } from '../../src/theme/typography';
 import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
-import { format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 
 function MeetingTypeBadge({ type }: { type: Meeting['meeting_type'] }) {
   const isCust = type === 'CUSTOMER';
@@ -63,7 +63,7 @@ function MeetingCard({ meeting, onPress }: { meeting: Meeting; onPress: () => vo
         <MeetingStatusBadge status={meeting.status} />
       </View>
       <Text style={cardStyles.name}>{meeting.meeting_name || meeting.meeting_type || 'Meeting'}</Text>
-      
+
       {/* Date Row */}
       <View style={cardStyles.infoRow}>
         <Ionicons name="calendar-outline" size={13} color="#800E20" style={{ marginRight: 6 }} />
@@ -99,9 +99,9 @@ function MeetingCard({ meeting, onPress }: { meeting: Meeting; onPress: () => vo
 
 export default function MeetingScreen() {
   const today = normalizeDate(new Date());
-  const [selectedTE, setSelectedTE] = useState<string>('ALL');
+  const [selectedMonth, setSelectedMonth] = useState<string>(currentMonthISO());
+  const [showMonthModal, setShowMonthModal] = useState<boolean>(false);
   const [selectedDate, setSelectedDate] = useState(today);
-  const [currentMonth, setCurrentMonth] = useState(currentMonthISO());
   const [refreshing, setRefreshing] = useState(false);
 
   const { data: usersList } = useQuery({
@@ -120,37 +120,59 @@ export default function MeetingScreen() {
     setRefreshing(false);
   }, [refetchMeetings]);
 
-  // Unique team list
-  const uniqueTeamList = useMemo(() => {
-    const set = new Set<string>();
-    (usersList || []).forEach(u => {
-      if (u.name && u.name.trim()) set.add(u.name.trim());
-    });
-    (allMeetings || []).forEach(m => {
-      if (m.te && m.te.trim()) set.add(m.te.trim());
-    });
-    return Array.from(set).filter(Boolean);
-  }, [usersList, allMeetings]);
-
   const rawMeetings = useMemo(() => allMeetings || [], [allMeetings]);
 
-  // Filter meetings by team member
-  const meetingsList = useMemo(() => {
-    if (selectedTE === 'ALL') return rawMeetings;
-    return rawMeetings.filter(m => 
-      String(m.te || m.created_by || '').toLowerCase() === selectedTE.toLowerCase()
-    );
-  }, [rawMeetings, selectedTE]);
+  // Compute available months from meetings
+  const availableMonths = useMemo(() => {
+    const set = new Set<string>();
+    set.add(currentMonthISO());
+    rawMeetings.forEach(m => {
+      const mStr = normalizeDate(m.meeting_date).substring(0, 7);
+      if (mStr && mStr.length === 7) set.add(mStr);
+    });
+    return Array.from(set).sort().reverse();
+  }, [rawMeetings]);
 
-  // Build marked dates for calendar & count map
+  const switchMonth = (direction: 'prev' | 'next') => {
+    const currentIndex = availableMonths.indexOf(selectedMonth);
+    if (direction === 'prev' && currentIndex < availableMonths.length - 1) {
+      const nextMonth = availableMonths[currentIndex + 1];
+      setSelectedMonth(nextMonth);
+      setSelectedDate(nextMonth + '-01');
+    } else if (direction === 'next' && currentIndex > 0) {
+      const prevMonth = availableMonths[currentIndex - 1];
+      setSelectedMonth(prevMonth);
+      setSelectedDate(prevMonth === currentMonthISO() ? today : prevMonth + '-01');
+    }
+  };
+
+  const formattedSelectedMonth = useMemo(() => {
+    try {
+      return format(parseISO(selectedMonth + '-01'), 'MMMM yyyy');
+    } catch {
+      return selectedMonth;
+    }
+  }, [selectedMonth]);
+
+  // Filter meetings strictly by selectedMonth, sorted recent date first
+  const monthMeetings = useMemo(() => {
+    const list = rawMeetings.filter(m => normalizeDate(m.meeting_date).startsWith(selectedMonth));
+    return [...list].sort((a, b) => {
+      const dateA = normalizeDate(a.meeting_date);
+      const dateB = normalizeDate(b.meeting_date);
+      return dateB.localeCompare(dateA);
+    });
+  }, [rawMeetings, selectedMonth]);
+
+  // Build marked dates for calendar & count map for selectedMonth
   const markedDates: Record<string, any> = {};
   const dateMeetingCountMap: Record<string, number> = {};
 
-  meetingsList.forEach(m => {
+  monthMeetings.forEach(m => {
     if (!m.meeting_date) return;
     const dateKey = normalizeDate(m.meeting_date);
     if (!dateKey) return;
-    
+
     dateMeetingCountMap[dateKey] = (dateMeetingCountMap[dateKey] || 0) + 1;
     markedDates[dateKey] = {
       marked: true,
@@ -169,14 +191,15 @@ export default function MeetingScreen() {
     dotColor: '#FFFFFF',
   };
 
-  const selectedMeetings = meetingsList.filter(m =>
+  const selectedMeetings = monthMeetings.filter(m =>
     normalizeDate(m.meeting_date) === selectedDate
   );
 
   const scheduledDatesList = Object.keys(dateMeetingCountMap).sort();
 
-  const customerMeetingsCount = meetingsList.filter(m => m.meeting_type === 'CUSTOMER').length;
-  const contractorMeetingsCount = meetingsList.filter(m => m.meeting_type === 'CONTRACTOR').length;
+  const customerMeetingsCount = monthMeetings.filter(m => m.meeting_type === 'CUSTOMER').length;
+  const contractorMeetingsCount = monthMeetings.filter(m => m.meeting_type === 'CONTRACTOR').length;
+  const totalPeopleAttended = monthMeetings.reduce((sum, m) => sum + (Number(m.people_count) || 0), 0);
 
   let formattedSelectedDate = selectedDate;
   try {
@@ -192,7 +215,7 @@ export default function MeetingScreen() {
         <View>
           <Text style={styles.headerTitle}>Meetings Command</Text>
           <Text style={styles.headerSub}>
-            {selectedTE === 'ALL' ? 'Team Jajpur • All Meetings' : `${selectedTE} • Logged Meets`}
+            District Jajpur • Consolidated Team
           </Text>
         </View>
         <TouchableOpacity
@@ -211,81 +234,61 @@ export default function MeetingScreen() {
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#800E20" />}
       >
-        {/* ── TEAM MEMBER SELECTOR CHIP BAR ("SARE USER KA DATA") ── */}
-        <View style={styles.teamFilterContainer}>
-          <View style={styles.teamFilterHeaderRow}>
-            <View style={styles.teamFilterTitleWrap}>
-              <MaterialCommunityIcons name="account-group-outline" size={18} color="#800E20" />
-              <Text style={styles.teamFilterHeading}>Team Visibility</Text>
-            </View>
-            {selectedTE !== 'ALL' && (
-              <TouchableOpacity onPress={() => setSelectedTE('ALL')} style={styles.resetFilterBtn}>
-                <Text style={styles.resetFilterBtnText}>Show All Team ✕</Text>
-              </TouchableOpacity>
-            )}
+        {/* ── MONTH SELECTOR CAPSULE ── */}
+        <View style={styles.monthSelectorBar}>
+          <View>
+            <Text style={styles.monthSelectorLabel}>PERFORMANCE PERIOD</Text>
+            <Text style={styles.monthSelectorSub}>Showing meetings for single month</Text>
           </View>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.teamFilterScroll}>
-            <TouchableOpacity
-              style={[styles.teamSelectChip, selectedTE === 'ALL' && styles.teamSelectChipActive]}
-              onPress={() => setSelectedTE('ALL')}
-              activeOpacity={0.8}
-            >
-              <MaterialCommunityIcons
-                name="account-multiple"
-                size={15}
-                color={selectedTE === 'ALL' ? '#FFFFFF' : '#800E20'}
-                style={{ marginRight: 6 }}
-              />
-              <Text style={[styles.teamSelectChipText, selectedTE === 'ALL' && styles.teamSelectChipTextActive]}>
-                All Team (Consolidated)
-              </Text>
+          <View style={styles.monthControlsRow}>
+            <TouchableOpacity onPress={() => switchMonth('prev')} style={styles.monthArrowBtn} activeOpacity={0.7}>
+              <Ionicons name="chevron-back" size={16} color="#800E20" />
             </TouchableOpacity>
-
-            {uniqueTeamList.map((member) => {
-              const isSelected = selectedTE === member;
-              return (
-                <TouchableOpacity
-                  key={member}
-                  style={[styles.teamSelectChip, isSelected && styles.teamSelectChipActive]}
-                  onPress={() => setSelectedTE(member)}
-                  activeOpacity={0.8}
-                >
-                  <Feather
-                    name="user"
-                    size={13}
-                    color={isSelected ? '#FFFFFF' : '#800E20'}
-                    style={{ marginRight: 5 }}
-                  />
-                  <Text style={[styles.teamSelectChipText, isSelected && styles.teamSelectChipTextActive]}>
-                    {member}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
+            <TouchableOpacity style={styles.monthPillCapsule} onPress={() => setShowMonthModal(true)} activeOpacity={0.8}>
+              <Ionicons name="calendar" size={13} color="#800E20" />
+              <Text style={styles.monthPillCapsuleText}>{formattedSelectedMonth}</Text>
+              <Ionicons name="chevron-down" size={12} color="#800E20" />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => switchMonth('next')} style={styles.monthArrowBtn} activeOpacity={0.7}>
+              <Ionicons name="chevron-forward" size={16} color="#800E20" />
+            </TouchableOpacity>
+          </View>
         </View>
 
-        {/* ── 1. TARGET SUMMARY CARDS ── */}
+        {/* ── 1. MONTHLY TARGET SUMMARY CARDS ── */}
         <View style={styles.targetsRow}>
           <View style={styles.targetCard}>
             <Text style={styles.targetCardTitle}>Customer Meets</Text>
             <Text style={styles.targetCardValue}>{customerMeetingsCount}</Text>
-            <Text style={styles.targetCardSub}>Total Logged</Text>
+            <Text style={styles.targetCardSub}>In {formattedSelectedMonth}</Text>
           </View>
 
           <View style={styles.targetCard}>
             <Text style={styles.targetCardTitle}>Contractor Meets</Text>
-            <Text style={styles.targetCardValue}>{contractorMeetingsCount}</Text>
-            <Text style={styles.targetCardSub}>Total Logged</Text>
+            <Text style={[styles.targetCardValue, { color: '#C2410C' }]}>{contractorMeetingsCount}</Text>
+            <Text style={styles.targetCardSub}>In {formattedSelectedMonth}</Text>
+          </View>
+
+          <View style={styles.targetCard}>
+            <Text style={styles.targetCardTitle}>Total People</Text>
+            <Text style={[styles.targetCardValue, { color: '#16A34A' }]}>{totalPeopleAttended}</Text>
+            <Text style={styles.targetCardSub}>Attended</Text>
           </View>
         </View>
 
         {/* ── 2. CALENDAR ── */}
         <View style={styles.calendarCard}>
           <Calendar
-            current={selectedDate || today}
+            key={selectedMonth}
+            current={selectedDate.startsWith(selectedMonth) ? selectedDate : `${selectedMonth}-01`}
             onDayPress={(day) => setSelectedDate(day.dateString)}
-            onMonthChange={(month) => setCurrentMonth(month.dateString.substring(0, 7))}
+            onMonthChange={(month) => {
+              const m = month.dateString.substring(0, 7);
+              if (m !== selectedMonth) {
+                setSelectedMonth(m);
+                setSelectedDate(month.dateString);
+              }
+            }}
             markedDates={markedDates}
             theme={{
               backgroundColor: '#FFFFFF',
@@ -307,10 +310,10 @@ export default function MeetingScreen() {
           />
         </View>
 
-        {/* Quick Date Jump Chips */}
+        {/* ── 3. QUICK DATE JUMP CHIPS (FOR SELECTED MONTH) ── */}
         {scheduledDatesList.length > 0 && (
           <View style={styles.chipsSection}>
-            <Text style={styles.chipsSectionTitle}>📅 Scheduled Meeting Dates (Tap to Jump):</Text>
+            <Text style={styles.chipsSectionTitle}>📅 Scheduled Meeting Dates in {formattedSelectedMonth}:</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipsScroll}>
               {scheduledDatesList.map(dateKey => {
                 const count = dateMeetingCountMap[dateKey];
@@ -343,7 +346,7 @@ export default function MeetingScreen() {
           </View>
         )}
 
-        {/* ── 3. MEETINGS FOR SELECTED DATE ── */}
+        {/* ── 4. MEETINGS ON SELECTED DATE ── */}
         <View style={styles.sectionHeaderRow}>
           <View>
             <Text style={styles.sectionTitle}>Meetings on Selected Date</Text>
@@ -377,22 +380,25 @@ export default function MeetingScreen() {
           </View>
         )}
 
-        {/* ── 4. ALL MEETINGS OVERVIEW ── */}
+        {/* ── 5. RECORDED MEETINGS FOR SELECTED MONTH (RECENT FIRST) ── */}
         <View style={[styles.sectionHeaderRow, { marginTop: 26 }]}>
-          <Text style={styles.sectionTitle}>All Recorded Meetings ({meetingsList.length})</Text>
+          <View>
+            <Text style={styles.sectionTitle}>Recorded Meetings for {formattedSelectedMonth} ({monthMeetings.length})</Text>
+            <Text style={styles.sectionSub}>Recent meetings appear first</Text>
+          </View>
           <TouchableOpacity onPress={() => onRefresh()}>
             <Text style={styles.refreshLink}>Refresh ⟳</Text>
           </TouchableOpacity>
         </View>
 
-        {meetingsList.length === 0 ? (
+        {monthMeetings.length === 0 ? (
           <View style={styles.emptyCard}>
-            <Text style={styles.emptyTitle}>No Meetings Found</Text>
-            <Text style={styles.emptySub}>Recorded meetings in Google Sheets will appear here.</Text>
+            <Text style={styles.emptyTitle}>No Meetings in {formattedSelectedMonth}</Text>
+            <Text style={styles.emptySub}>No meetings recorded in Google Sheets for this month.</Text>
           </View>
         ) : (
           <View style={styles.list}>
-            {meetingsList.map(m => (
+            {monthMeetings.map(m => (
               <MeetingCard
                 key={m.meeting_id}
                 meeting={m}
@@ -404,6 +410,54 @@ export default function MeetingScreen() {
 
         <View style={{ height: 60 }} />
       </ScrollView>
+
+      {/* ── MONTH PICKER MODAL ── */}
+      <Modal visible={showMonthModal} transparent animationType="fade" onRequestClose={() => setShowMonthModal(false)}>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowMonthModal(false)}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select Meeting Month</Text>
+              <TouchableOpacity onPress={() => setShowMonthModal(false)} style={styles.modalCloseBtn}>
+                <Ionicons name="close" size={20} color="#1F0B10" />
+              </TouchableOpacity>
+            </View>
+            <FlatList
+              data={availableMonths}
+              keyExtractor={(item) => item}
+              renderItem={({ item }) => {
+                const isSelected = item === selectedMonth;
+                let monthLabel = item;
+                try {
+                  monthLabel = format(parseISO(item + '-01'), 'MMMM yyyy');
+                } catch {}
+                const isCurrent = item === currentMonthISO();
+                return (
+                  <TouchableOpacity
+                    style={[styles.monthOptionRow, isSelected && styles.monthOptionSelected]}
+                    onPress={() => {
+                      setSelectedMonth(item);
+                      setSelectedDate(item === currentMonthISO() ? today : item + '-01');
+                      setShowMonthModal(false);
+                    }}
+                  >
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                      <Ionicons
+                        name={isSelected ? 'radio-button-on' : 'radio-button-off'}
+                        size={18}
+                        color={isSelected ? '#800E20' : '#8A7277'}
+                      />
+                      <Text style={[styles.monthOptionText, isSelected && styles.monthOptionTextSelected]}>
+                        {monthLabel} {isCurrent ? '(Current)' : ''}
+                      </Text>
+                    </View>
+                    {isSelected && <Ionicons name="checkmark" size={18} color="#800E20" />}
+                  </TouchableOpacity>
+                );
+              }}
+            />
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 }
@@ -416,7 +470,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 18,
     paddingTop: Platform.OS === 'ios' ? 56 : 38,
-    paddingBottom: 16,
+    paddingBottom: 14,
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
     borderBottomColor: '#F0E2E5',
@@ -441,200 +495,231 @@ const styles = StyleSheet.create({
   scroll: { flex: 1 },
   scrollContent: { padding: 16 },
 
-  // Team Filter Bar
-  teamFilterContainer: {
-    marginBottom: 16,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    padding: 14,
-    borderWidth: 1.5,
-    borderColor: '#EEDCE1',
-    shadowColor: 'rgba(78, 5, 17, 0.05)',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 1,
-    shadowRadius: 8,
-    elevation: 2,
-  },
-  teamFilterHeaderRow: {
+  // Month Selector Bar
+  monthSelectorBar: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 10,
-  },
-  teamFilterTitleWrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  teamFilterHeading: {
-    fontFamily: FontFamily.displayBold,
-    fontSize: 13,
-    fontWeight: '800',
-    color: '#1F0B10',
-    marginLeft: 6,
-  },
-  resetFilterBtn: {
-    backgroundColor: '#FAF0F2',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 8,
-  },
-  resetFilterBtnText: {
-    fontFamily: FontFamily.sansBold,
-    fontSize: 11,
-    color: '#800E20',
-    fontWeight: '700',
-  },
-  teamFilterScroll: {
-    gap: 8,
-    paddingRight: 10,
-  },
-  teamSelectChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FAF0F2',
-    paddingHorizontal: 13,
-    paddingVertical: 8,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: '#EEDCE1',
-  },
-  teamSelectChipActive: {
-    backgroundColor: '#800E20',
-    borderColor: '#800E20',
-  },
-  teamSelectChipText: {
-    fontFamily: FontFamily.sansSemiBold,
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#800E20',
-  },
-  teamSelectChipTextActive: {
-    color: '#FFFFFF',
-  },
-
-  targetsRow: { flexDirection: 'row', gap: 12, marginBottom: 16 },
-  targetCard: {
-    flex: 1,
     backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    padding: 16,
+    borderRadius: 18,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginBottom: 14,
     borderWidth: 1.5,
     borderColor: '#EEDCE1',
-    alignItems: 'center',
+    shadowColor: 'rgba(78, 5, 17, 0.04)',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 1,
+    shadowRadius: 6,
+    elevation: 2,
   },
-  targetCardTitle: { fontFamily: FontFamily.sansBold, fontSize: 12, fontWeight: '700', color: '#8A7277' },
-  targetCardValue: { fontFamily: FontFamily.displayBlack, fontSize: 28, fontWeight: '900', color: '#800E20', marginVertical: 4 },
-  targetCardSub: { fontFamily: FontFamily.sansRegular, fontSize: 11, color: '#A0858C' },
-  calendarCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 24,
-    padding: 12,
-    borderWidth: 1.5,
-    borderColor: '#EEDCE1',
-    marginBottom: 16,
-    overflow: 'hidden',
-  },
-  chipsSection: {
-    marginBottom: 18,
-  },
-  chipsSectionTitle: {
-    fontFamily: FontFamily.sansBold,
-    fontSize: 12,
-    fontWeight: '800',
-    color: '#800E20',
-    marginBottom: 8,
-    letterSpacing: 0.2,
-  },
-  chipsScroll: {
-    flexDirection: 'row',
-  },
-  dateChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 14,
-    marginRight: 8,
-    borderWidth: 1.5,
-    borderColor: '#EEDCE1',
-    gap: 6,
-  },
-  dateChipSelected: {
-    backgroundColor: '#800E20',
-    borderColor: '#800E20',
-  },
-  chipDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#800E20',
-  },
-  chipDotSelected: {
-    backgroundColor: '#FFFFFF',
-  },
-  dateChipText: {
-    fontFamily: FontFamily.sansBold,
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#1F0B10',
-  },
-  dateChipTextSelected: {
-    color: '#FFFFFF',
-  },
-  chipCountBadge: {
-    backgroundColor: '#FBE8EC',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 8,
-  },
-  chipCountBadgeSelected: {
-    backgroundColor: 'rgba(255, 255, 255, 0.25)',
-  },
-  chipCountText: {
+  monthSelectorLabel: {
     fontFamily: FontFamily.sansBold,
     fontSize: 10,
     fontWeight: '800',
     color: '#800E20',
+    letterSpacing: 0.8,
   },
-  chipCountTextSelected: {
-    color: '#FFFFFF',
+  monthSelectorSub: {
+    fontFamily: FontFamily.sansRegular,
+    fontSize: 11,
+    color: '#8A7277',
+    marginTop: 1,
   },
-  sectionHeaderRow: {
+  monthControlsRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    gap: 4,
   },
-  sectionTitle: { fontFamily: FontFamily.displayBold, fontSize: 17, fontWeight: '800', color: '#1F0B10', letterSpacing: -0.3 },
-  sectionDate: { fontFamily: FontFamily.sansSemiBold, fontSize: 12, color: '#800E20', fontWeight: '600', marginTop: 2 },
-  countBadge: {
-    backgroundColor: '#FBE8EC',
+  monthArrowBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#FAF0F2',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#EEDCE1',
+  },
+  monthPillCapsule: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FAF0F2',
     paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 10,
+    paddingVertical: 5,
+    borderRadius: 14,
+    gap: 5,
+    borderWidth: 1,
+    borderColor: '#EEDCE1',
   },
-  countBadgeText: { fontFamily: FontFamily.sansBold, fontSize: 12, fontWeight: '800', color: '#800E20' },
-  refreshLink: { fontFamily: FontFamily.sansBold, fontSize: 13, fontWeight: '700', color: '#800E20' },
-  list: { gap: 10 },
+  monthPillCapsuleText: {
+    fontFamily: FontFamily.sansBold,
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#800E20',
+  },
+
+  // 1. Target Summary Cards
+  targetsRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 16,
+  },
+  targetCard: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    padding: 14,
+    borderWidth: 1.5,
+    borderColor: '#EEDCE1',
+    shadowColor: 'rgba(78, 5, 17, 0.04)',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 1,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  targetCardTitle: {
+    fontFamily: FontFamily.sansSemiBold,
+    fontSize: 11,
+    color: '#8A7277',
+    fontWeight: '700',
+  },
+  targetCardValue: {
+    fontFamily: FontFamily.displayBlack,
+    fontSize: 22,
+    fontWeight: '900',
+    color: '#800E20',
+    marginVertical: 2,
+  },
+  targetCardSub: {
+    fontFamily: FontFamily.sansRegular,
+    fontSize: 10,
+    color: '#8A7277',
+  },
+
+  // Calendar
+  calendarCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 22,
+    padding: 10,
+    borderWidth: 1.5,
+    borderColor: '#EEDCE1',
+    marginBottom: 16,
+    shadowColor: 'rgba(78, 5, 17, 0.04)',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 1,
+    shadowRadius: 8,
+    elevation: 2,
+    overflow: 'hidden',
+  },
+
+  // Chips Section
+  chipsSection: { marginBottom: 16 },
+  chipsSectionTitle: { fontFamily: FontFamily.displayBold, fontSize: 12, fontWeight: '800', color: '#1F0B10', marginBottom: 8 },
+  chipsScroll: { flexDirection: 'row' },
+  dateChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    marginRight: 8,
+    borderWidth: 1.5,
+    borderColor: '#EEDCE1',
+  },
+  dateChipSelected: { backgroundColor: '#800E20', borderColor: '#800E20' },
+  chipDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#800E20', marginRight: 6 },
+  chipDotSelected: { backgroundColor: '#FFFFFF' },
+  dateChipText: { fontFamily: FontFamily.sansSemiBold, fontSize: 12, color: '#1F0B10', fontWeight: '700', marginRight: 6 },
+  dateChipTextSelected: { color: '#FFFFFF' },
+  chipCountBadge: { backgroundColor: '#FAF0F2', borderRadius: 10, paddingHorizontal: 6, paddingVertical: 1 },
+  chipCountBadgeSelected: { backgroundColor: 'rgba(255, 255, 255, 0.25)' },
+  chipCountText: { fontFamily: FontFamily.sansBold, fontSize: 10, color: '#800E20', fontWeight: '800' },
+  chipCountTextSelected: { color: '#FFFFFF' },
+
+  // Sections
+  sectionHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
+  sectionTitle: { fontFamily: FontFamily.displayBold, fontSize: 15, fontWeight: '800', color: '#1F0B10' },
+  sectionSub: { fontFamily: FontFamily.sansRegular, fontSize: 11, color: '#8A7277', marginTop: 1 },
+  sectionDate: { fontFamily: FontFamily.sansMedium, fontSize: 12, color: '#800E20', marginTop: 2, fontWeight: '600' },
+  countBadge: { backgroundColor: '#FAF0F2', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 4, borderWidth: 1, borderColor: '#EEDCE1' },
+  countBadgeText: { fontFamily: FontFamily.sansBold, fontSize: 11, color: '#800E20', fontWeight: '700' },
+  refreshLink: { fontFamily: FontFamily.sansBold, fontSize: 12, color: '#800E20', fontWeight: '700' },
+
+  list: { gap: 12 },
+
   emptyCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 20,
-    padding: 20,
+    padding: 24,
     alignItems: 'center',
     borderWidth: 1.5,
     borderColor: '#EEDCE1',
   },
-  emptyTitle: { fontFamily: FontFamily.displayBold, fontSize: 14, fontWeight: '800', color: '#1F0B10' },
+  emptyTitle: { fontFamily: FontFamily.displayBold, fontSize: 15, fontWeight: '800', color: '#1F0B10' },
   emptySub: { fontFamily: FontFamily.sansRegular, fontSize: 12, color: '#8A7277', marginTop: 4, textAlign: 'center' },
-  emptyAddBtn: {
-    backgroundColor: '#800E20',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    marginTop: 12,
+  emptyAddBtn: { marginTop: 14, backgroundColor: '#FAF0F2', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 12, borderWidth: 1, borderColor: '#EEDCE1' },
+  emptyAddBtnText: { fontFamily: FontFamily.sansBold, fontSize: 12, color: '#800E20', fontWeight: '700' },
+
+  // Month Picker Modal
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    padding: 20,
   },
-  emptyAddBtnText: { fontFamily: FontFamily.sansBold, color: '#FFFFFF', fontSize: 12, fontWeight: '800' },
+  modalContent: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    padding: 20,
+    maxHeight: '70%',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.25,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0E2E5',
+  },
+  modalTitle: {
+    fontFamily: FontFamily.displayBold,
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#1F0B10',
+  },
+  modalCloseBtn: {
+    padding: 4,
+  },
+  monthOptionRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    marginBottom: 6,
+  },
+  monthOptionSelected: {
+    backgroundColor: '#FAF0F2',
+  },
+  monthOptionText: {
+    fontFamily: FontFamily.sansMedium,
+    fontSize: 14,
+    color: '#1F0B10',
+  },
+  monthOptionTextSelected: {
+    fontFamily: FontFamily.sansBold,
+    color: '#800E20',
+    fontWeight: '700',
+  },
 });
 
 const cardStyles = StyleSheet.create({
@@ -644,21 +729,40 @@ const cardStyles = StyleSheet.create({
     padding: 16,
     borderWidth: 1.5,
     borderColor: '#EEDCE1',
-    shadowColor: 'rgba(78, 5, 17, 0.05)',
-    shadowOffset: { width: 0, height: 2 },
+    shadowColor: 'rgba(78, 5, 17, 0.04)',
+    shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 1,
-    shadowRadius: 6,
+    shadowRadius: 8,
     elevation: 2,
   },
-  header: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 },
-  name: { fontFamily: FontFamily.displayBold, fontSize: 16, fontWeight: '800', color: '#1F0B10', marginBottom: 6 },
-  infoRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
-  detail: { fontFamily: FontFamily.sansMedium, fontSize: 13, color: '#6B4E55' },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  name: {
+    fontFamily: FontFamily.displayBold,
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#1F0B10',
+    marginBottom: 8,
+  },
+  infoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 5,
+  },
+  detail: {
+    fontFamily: FontFamily.sansMedium,
+    fontSize: 12,
+    color: '#6B4E55',
+  },
   footer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: 10,
+    marginTop: 8,
     paddingTop: 8,
     borderTopWidth: 1,
     borderTopColor: '#F7EFF1',
@@ -666,15 +770,27 @@ const cardStyles = StyleSheet.create({
   teTag: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FBE8EC',
+    backgroundColor: '#FAF0F2',
     paddingHorizontal: 8,
     paddingVertical: 3,
-    borderRadius: 6,
+    borderRadius: 8,
   },
-  te: { fontFamily: FontFamily.sansBold, fontSize: 11, fontWeight: '700', color: '#800E20' },
+  te: {
+    fontFamily: FontFamily.sansMedium,
+    fontSize: 11,
+    color: '#800E20',
+  },
 });
 
 const badge = StyleSheet.create({
-  container: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
-  text: { fontFamily: FontFamily.sansBold, fontSize: 10, fontWeight: '800', letterSpacing: 0.5 },
+  container: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+  },
+  text: {
+    fontFamily: FontFamily.sansBold,
+    fontSize: 10,
+    fontWeight: '800',
+  },
 });

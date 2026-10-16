@@ -1,1240 +1,1492 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
-  View, Text, ScrollView, StyleSheet, TouchableOpacity,
-  RefreshControl, Dimensions, Platform,
+  View, Text, StyleSheet, TouchableOpacity, ScrollView,
+  RefreshControl, Dimensions, Platform, Image, Modal, FlatList, Animated, ActivityIndicator,
+  TextInput, KeyboardAvoidingView,
 } from 'react-native';
-import { router } from 'expo-router';
+import { router, Link } from 'expo-router';
+import FloatingActionMenu from '../../components/FloatingActionMenu';
 import { useQuery } from '@tanstack/react-query';
+import { BlurView } from 'expo-blur';
+import Toast from 'react-native-toast-message';
 import {
-  apiGetTodaySummary, apiGetDealerSalesSummary,
-  apiGetSlabs, apiGetMeetings, apiGetSettings, apiGetSales,
-  apiGetDealers, apiGetActiveTracker, apiGetContractors, apiGetUsers,
+  apiGetSettings, apiGetSales, apiGetDealers, apiGetActiveTracker, 
+  apiGetContractors, apiGetUsers, apiGetSlabs, apiGetMeetings,
+  apiUpdateSlab, apiUpdateMeeting
 } from '../../src/services/api';
 import { getUser } from '../../src/services/auth';
 import {
-  getGreeting, currentMonthISO, bagsToMT, normalizeDate,
-  PUNCH_VOLUME_TARGET_PERCENT, CONTRACTOR_ACTIVE_MIN_TARGET_PERCENT,
-  simulateContractorPunchDistribution, calcContractorActivePercent,
-  calcRequiredPunch,
+  getGreeting, normalizeDate, currentMonthISO, formatDateShort, formatMonthYear
 } from '../../src/utils/helpers';
-import { User, DealerSalesSummary } from '../../src/types';
+import { User, DealerSalesSummary, Slab, Meeting } from '../../src/types';
 import { FontFamily } from '../../src/theme/typography';
 import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
-import { format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
+import { Colors } from '../../src/theme/colors';
 
 const { width } = Dimensions.get('window');
 
 export default function HomeScreen() {
   const [user, setUser] = useState<User | null>(null);
-  const [selectedTE, setSelectedTE] = useState<string>('ALL');
   const [refreshing, setRefreshing] = useState(false);
   const today = normalizeDate(new Date());
+  
+  // Interactive month selection (defaults to current month)
+  const [selectedMonth, setSelectedMonth] = useState<string>(() => currentMonthISO());
+  const [showMonthModal, setShowMonthModal] = useState(false);
+
+  // Target TE Selection State (defaults to logged-in user)
+  const [targetTE, setTargetTE] = useState<string>('');
+  const [showTargetTeModal, setShowTargetTeModal] = useState<boolean>(false);
+
+  // Meeting Attendance & Target Credit Modal State
+  const [meetingToAttend, setMeetingToAttend] = useState<Meeting | null>(null);
+  const [attendCreditTE, setAttendCreditTE] = useState<string>('');
+  const [attendPeopleCount, setAttendPeopleCount] = useState<string>('');
+  const [attendOutcome, setAttendOutcome] = useState<string>('');
+  const [isSubmittingAttendance, setIsSubmittingAttendance] = useState<boolean>(false);
+
+  // Scroll animation for FAB
+  const scrollY = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    getUser().then(setUser);
+    getUser().then(u => {
+      setUser(u);
+      if (u && !targetTE) {
+        setTargetTE(u.name);
+      }
+    });
   }, []);
 
-  // 100% Live Google Sheets Queries
-  const { data: settings } = useQuery({
-    queryKey: ['settings'],
-    queryFn: () => apiGetSettings(),
-  });
-
-  const { data: usersList, refetch: refetchUsers } = useQuery({
-    queryKey: ['users'],
-    queryFn: () => apiGetUsers(),
-  });
-
-  const { data: allSales, refetch: refetchSales } = useQuery({
-    queryKey: ['sales'],
-    queryFn: () => apiGetSales(),
-  });
-
-  const { data: dealers, refetch: refetchDealers } = useQuery({
-    queryKey: ['dealers'],
-    queryFn: () => apiGetDealers(),
-  });
-
-  const { data: contractors, refetch: refetchContractors } = useQuery({
-    queryKey: ['contractors'],
-    queryFn: () => apiGetContractors(),
-  });
-
-  const { data: activeTrackers, refetch: refetchActive } = useQuery({
-    queryKey: ['activeTrackers'],
-    queryFn: () => apiGetActiveTracker(),
-  });
-
-  const { data: allSlabs, refetch: refetchSlabs } = useQuery({
-    queryKey: ['slabs'],
-    queryFn: () => apiGetSlabs(),
-  });
-
-  const { data: allMeetings, refetch: refetchMeetings } = useQuery({
-    queryKey: ['meetings'],
-    queryFn: () => apiGetMeetings(),
-  });
+  const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: () => apiGetSettings() });
+  const { data: usersList, refetch: refetchUsers } = useQuery({ queryKey: ['users'], queryFn: () => apiGetUsers() });
+  const { data: allSales, refetch: refetchSales } = useQuery({ queryKey: ['sales'], queryFn: () => apiGetSales() });
+  const { data: dealers, refetch: refetchDealers } = useQuery({ queryKey: ['dealers'], queryFn: () => apiGetDealers() });
+  const { data: contractors, refetch: refetchContractors } = useQuery({ queryKey: ['contractors'], queryFn: () => apiGetContractors() });
+  const { data: activeTrackers, refetch: refetchActive } = useQuery({ queryKey: ['activeTrackers'], queryFn: () => apiGetActiveTracker() });
+  const { data: allSlabs, refetch: refetchSlabs } = useQuery({ queryKey: ['slabs'], queryFn: () => apiGetSlabs() });
+  const { data: allMeetings, refetch: refetchMeetings } = useQuery({ queryKey: ['meetings'], queryFn: () => apiGetMeetings() });
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     await Promise.all([
-      refetchUsers(), refetchSales(), refetchDealers(), refetchContractors(), refetchActive(), refetchSlabs(), refetchMeetings()
+      refetchUsers(), refetchSales(), refetchDealers(), refetchContractors(),
+      refetchActive(), refetchSlabs(), refetchMeetings()
     ]);
     setRefreshing(false);
   }, [refetchUsers, refetchSales, refetchDealers, refetchContractors, refetchActive, refetchSlabs, refetchMeetings]);
 
-  // Build unique team list for filter
-  const uniqueTeamList = useMemo(() => {
+  const territorySetting = settings?.find(s => s.setting === 'territory')?.value || user?.territory || 'Jajpur';
+
+  // Compute available months from all data to populate month selector
+  const availableMonths = useMemo(() => {
     const set = new Set<string>();
-    (usersList || []).forEach(u => {
-      if (u.name && u.name.trim()) set.add(u.name.trim());
-    });
+    set.add(currentMonthISO());
     (allSales || []).forEach(s => {
-      if (s.assigned_te && s.assigned_te.trim()) set.add(s.assigned_te.trim());
+      const m = normalizeDate(s.sale_date).substring(0, 7);
+      if (m && m.length === 7) set.add(m);
     });
     (allSlabs || []).forEach(s => {
-      if (s.assigned_te && s.assigned_te.trim()) set.add(s.assigned_te.trim());
+      const m = normalizeDate(s.slab_date).substring(0, 7);
+      if (m && m.length === 7) set.add(m);
+    });
+    (allMeetings || []).forEach(m => {
+      const mStr = normalizeDate(m.meeting_date).substring(0, 7);
+      if (mStr && mStr.length === 7) set.add(mStr);
+    });
+    (activeTrackers || []).forEach(t => {
+      const mStr = normalizeDate(t.month || t.date).substring(0, 7);
+      if (mStr && mStr.length === 7) set.add(mStr);
+    });
+    return Array.from(set).sort().reverse();
+  }, [allSales, allSlabs, allMeetings, activeTrackers]);
+
+  // MONTHLY DATA FILTERED BY selectedMonth
+  const allSlabsList = useMemo(() => 
+    (allSlabs || []).filter(s => normalizeDate(s.slab_date).startsWith(selectedMonth)),
+    [allSlabs, selectedMonth]
+  );
+
+  const allMeetingsList = useMemo(() => 
+    (allMeetings || []).filter(m => normalizeDate(m.meeting_date).startsWith(selectedMonth)),
+    [allMeetings, selectedMonth]
+  );
+
+  const allSalesList = useMemo(() => 
+    (allSales || []).filter(s => normalizeDate(s.sale_date).startsWith(selectedMonth)),
+    [allSales, selectedMonth]
+  );
+
+  const filteredActiveTrackers = useMemo(() => {
+    const list = activeTrackers || [];
+    const thisMonthTrackers = list.filter(t => normalizeDate(t.month || t.date).startsWith(selectedMonth));
+    const targetName = (targetTE || user?.name || '').trim().toLowerCase();
+    if (targetName && targetName !== 'all') {
+      const teFiltered = thisMonthTrackers.filter(t => String(t.te || '').toLowerCase() === targetName);
+      if (teFiltered.length > 0) return teFiltered;
+    }
+    return thisMonthTrackers;
+  }, [activeTrackers, user, targetTE, selectedMonth]);
+
+  // Totals for Monthly Performance
+  const totalSalesBags = allSalesList.reduce((sum, s) => sum + (Number(s.quantity_bags) || 0), 0);
+  const totalSalesMT = (totalSalesBags / 20).toFixed(1);
+  const totalPunchBags = filteredActiveTrackers.reduce((sum, t) => sum + (Number(t.punched_quantity_bags) || 0), 0);
+  
+  const sheetTotalContractors = filteredActiveTrackers.reduce((max, t) => Math.max(max, Number(t.total_contractors) || 0), 0);
+  const totalContractorsCount = sheetTotalContractors > 0 ? sheetTotalContractors : Math.max((contractors || []).length, 10);
+  
+  const sheetActiveContractors = filteredActiveTrackers.reduce((sum, t) => sum + (Number(t.active_contractors) || 0), 0);
+  const activeContractorsCount = sheetActiveContractors > 0 ? sheetActiveContractors : (totalPunchBags > 0 ? Math.ceil(totalPunchBags / 100) : 0);
+  const activePercent = totalContractorsCount > 0 ? (activeContractorsCount / totalContractorsCount) * 100 : 0;
+
+  const monthCompletedSlabs = allSlabsList.filter(s => s.status === 'COMPLETED').length;
+  const monthCompletedMeetings = allMeetingsList.filter(m => m.status === 'COMPLETED').length;
+
+  // Active TE list for meeting target & attendance assignment
+  const teList = useMemo(() => {
+    const set = new Set<string>();
+    if (user?.name && user.name.trim()) set.add(user.name.trim());
+    (usersList || []).forEach(u => {
+      if (u.name && u.name.trim()) set.add(u.name.trim());
     });
     (allMeetings || []).forEach(m => {
       if (m.te && m.te.trim()) set.add(m.te.trim());
     });
-    (activeTrackers || []).forEach(t => {
-      if (t.te && t.te.trim()) set.add(t.te.trim());
-    });
     return Array.from(set).filter(Boolean);
-  }, [usersList, allSales, allSlabs, allMeetings, activeTrackers]);
+  }, [usersList, allMeetings, user]);
 
-  const greeting = getGreeting();
-  
-  const now = new Date();
-  let formattedDate = 'Today';
-  try {
-    formattedDate = format(now, 'EEEE, dd MMMM yyyy');
-  } catch {}
-  let currentMonthLabel = 'This Month';
-  try {
-    currentMonthLabel = format(now, 'MMMM yyyy');
-  } catch {}
+  const effectiveTargetTE = targetTE || user?.name || (teList[0] || '');
 
-  // Live Sheet Data calculations
-  const territorySetting = settings?.find(s => s.setting === 'territory')?.value || user?.territory || 'Jajpur';
-  const teamSetting = settings?.find(s => s.setting === 'team')?.value || user?.team || 'Team Jajpur';
+  // Target meetings filtered by selected TE
+  const targetedMeetings = useMemo(() => {
+    if (effectiveTargetTE === 'ALL') return allMeetingsList;
+    return allMeetingsList.filter(m => 
+      String(m.te || '').toLowerCase() === effectiveTargetTE.toLowerCase()
+    );
+  }, [allMeetingsList, effectiveTargetTE]);
 
-  // Apply Team Filter
-  const allSlabsList = useMemo(() => {
+  const contractorPeopleCount = targetedMeetings
+    .filter(m => m.meeting_type === 'CONTRACTOR' && m.status === 'COMPLETED')
+    .reduce((sum, m) => sum + (Number(m.people_count) || 0), 0);
+    
+  const ihbPeopleCount = targetedMeetings
+    .filter(m => m.meeting_type === 'CUSTOMER' && m.status === 'COMPLETED')
+    .reduce((sum, m) => sum + (Number(m.people_count) || 0), 0);
+
+  // UPCOMING vs RECENT SLABS
+  const upcomingSlabsList = useMemo(() => {
     const list = allSlabs || [];
-    if (selectedTE === 'ALL') return list;
-    return list.filter(s => 
-      String(s.assigned_te || s.created_by || '').toLowerCase() === selectedTE.toLowerCase()
-    );
-  }, [allSlabs, selectedTE]);
+    const upcoming = list.filter(s => s.status === 'UPCOMING' || normalizeDate(s.slab_date) >= today);
+    return upcoming.sort((a, b) => normalizeDate(a.slab_date).localeCompare(normalizeDate(b.slab_date)));
+  }, [allSlabs, today]);
 
-  const todaySlabsList = allSlabsList.filter(s => normalizeDate(s.slab_date) === today);
+  // Display upcoming slabs if available; otherwise show recent slabs from the sheet
+  const displaySlabs = useMemo(() => {
+    if (upcomingSlabsList.length > 0) return upcomingSlabsList.slice(0, 3);
+    return (allSlabs || []).slice(-3).reverse();
+  }, [upcomingSlabsList, allSlabs]);
 
-  const allMeetingsList = useMemo(() => {
+  // UPCOMING vs RECENT EVENTS
+  const upcomingMeetingsList = useMemo(() => {
     const list = allMeetings || [];
-    if (selectedTE === 'ALL') return list;
-    return list.filter(m => 
-      String(m.te || m.created_by || '').toLowerCase() === selectedTE.toLowerCase()
-    );
-  }, [allMeetings, selectedTE]);
+    const upcoming = list.filter(m => m.status === 'PLANNED' || normalizeDate(m.meeting_date) >= today);
+    return upcoming.sort((a, b) => normalizeDate(a.meeting_date).localeCompare(normalizeDate(b.meeting_date)));
+  }, [allMeetings, today]);
 
-  const todayMeetingsList = allMeetingsList.filter(m => normalizeDate(m.meeting_date) === today);
+  // Display upcoming meetings if available; otherwise show recent meetings from sheet
+  const displayMeetings = useMemo(() => {
+    if (upcomingMeetingsList.length > 0) return upcomingMeetingsList.slice(0, 3);
+    return (allMeetings || []).slice(-3).reverse();
+  }, [upcomingMeetingsList, allMeetings]);
 
-  // Sales Calculations
-  const allSalesList = useMemo(() => {
-    const list = allSales || [];
-    if (selectedTE === 'ALL') return list;
-    return list.filter(s => 
-      String(s.assigned_te || s.created_by || '').toLowerCase() === selectedTE.toLowerCase()
-    );
-  }, [allSales, selectedTE]);
+  // ── TODAY'S PENDING TASKS (FOR ACTION REQUIRED REMINDER) ──
+  const [updatingTaskId, setUpdatingTaskId] = useState<string | null>(null);
 
-  const monthlyTotalBags = allSalesList.reduce((sum, s) => sum + (Number(s.quantity_bags) || 0), 0);
-  const monthlyTotalMT = (monthlyTotalBags / 20).toFixed(1);
+  // Slabs scheduled for today or past due that are still UPCOMING
+  const pendingSlabs = useMemo(() => {
+    return (allSlabs || []).filter(s => {
+      const slabDate = normalizeDate(s.slab_date);
+      return s.status === 'UPCOMING' && slabDate <= today;
+    });
+  }, [allSlabs, today]);
 
-  const todaySalesList = allSalesList.filter(s => normalizeDate(s.sale_date) === today);
-  const todaySalesBags = todaySalesList.reduce((sum, s) => sum + (Number(s.quantity_bags) || 0), 0);
-  const displaySalesBags = todaySalesBags > 0 ? todaySalesBags : monthlyTotalBags;
+  // Meetings scheduled for today or past due that are still PLANNED
+  const pendingMeetings = useMemo(() => {
+    return (allMeetings || []).filter(m => {
+      const mDate = normalizeDate(m.meeting_date);
+      return m.status === 'PLANNED' && mDate <= today;
+    });
+  }, [allMeetings, today]);
 
-  // 80% Bag Punch Calculation
-  const filteredActiveTrackers = useMemo(() => {
-    const list = activeTrackers || [];
-    if (selectedTE === 'ALL') return list;
-    return list.filter(t => String(t.te || '').toLowerCase() === selectedTE.toLowerCase());
-  }, [activeTrackers, selectedTE]);
+  const pendingTasksTotal = pendingSlabs.length + pendingMeetings.length;
 
-  const totalPunchBags = filteredActiveTrackers.reduce((sum, t) => sum + (Number(t.punched_quantity_bags) || 0), 0);
-  const required80PercentPunch = calcRequiredPunch(monthlyTotalBags, PUNCH_VOLUME_TARGET_PERCENT);
-  const punchVolumePercent = monthlyTotalBags > 0
-    ? Math.round((totalPunchBags / monthlyTotalBags) * 1000) / 10
-    : 0;
+  const markSlabAttended = async (slab: Slab) => {
+    try {
+      setUpdatingTaskId(slab.slab_id);
+      await apiUpdateSlab(slab.slab_id, { status: 'COMPLETED', updated_by: user?.name || '' });
+      await refetchSlabs();
+      Toast.show({
+        type: 'success',
+        text1: 'Slab Completed! ✅',
+        text2: `${slab.dealer_name} marked as COMPLETED. Alert cleared.`,
+        position: 'top',
+      });
+    } catch (err: any) {
+      Toast.show({ type: 'error', text1: 'Error', text2: err.message || 'Failed to update slab' });
+    } finally {
+      setUpdatingTaskId(null);
+    }
+  };
 
-  // 40% Contractor Active Base Calculation
-  const sheetTotalContractors = filteredActiveTrackers.reduce((max, t) => Math.max(max, Number(t.total_contractors) || 0), 0);
-  const totalContractorsCount = sheetTotalContractors > 0
-    ? sheetTotalContractors
-    : Math.max((contractors || []).length, 10);
+  const openAttendModal = (meeting: Meeting) => {
+    setMeetingToAttend(meeting);
+    setAttendCreditTE(user?.name || meeting.te || (teList[0] || ''));
+    setAttendPeopleCount(meeting.people_count ? String(meeting.people_count) : '');
+    setAttendOutcome(meeting.outcome || '');
+  };
 
-  const sheetActiveContractors = filteredActiveTrackers.reduce((sum, t) => sum + (Number(t.active_contractors) || 0), 0);
-  const activeContractorsCount = sheetActiveContractors > 0
-    ? sheetActiveContractors
-    : (totalPunchBags > 0 ? Math.ceil(totalPunchBags / 100) : 0);
+  const confirmMeetingAttendance = async () => {
+    if (!meetingToAttend) return;
+    setIsSubmittingAttendance(true);
+    const count = Number(attendPeopleCount) || (meetingToAttend.people_count ? Number(meetingToAttend.people_count) : 0);
+    const creditedTo = attendCreditTE || user?.name || meetingToAttend.te || 'Team Jajpur';
 
-  const contractorActivePercent = calcContractorActivePercent(activeContractorsCount, totalContractorsCount);
+    try {
+      await apiUpdateMeeting(meetingToAttend.meeting_id, {
+        status: 'COMPLETED',
+        te: creditedTo,
+        people_count: count > 0 ? count : undefined,
+        outcome: attendOutcome.trim() || undefined,
+        updated_by: user?.name || creditedTo,
+      });
+      await refetchMeetings();
+      Toast.show({
+        type: 'success',
+        text1: 'Meeting Attended! 🎉',
+        text2: `${count > 0 ? `${count} attendees` : 'Meeting'} credited to ${creditedTo}!`,
+        position: 'top',
+        visibilityTime: 3500,
+      });
+      setMeetingToAttend(null);
+    } catch (err: any) {
+      Toast.show({
+        type: 'error',
+        text1: 'Update Failed',
+        text2: err.message || 'Could not update meeting attendance',
+        position: 'top',
+      });
+    } finally {
+      setIsSubmittingAttendance(false);
+    }
+  };
 
-  // Quick 100 Bag Simulation Preview
-  const quickSim = simulateContractorPunchDistribution(monthlyTotalBags, totalContractorsCount, 100);
-
-  // Live Leaderboard from allSalesList & dealers
-  const dealerMap: Record<string, { dealer_id: string; dealer_name: string; area: string; total_bags: number }> = {};
-  
-  (dealers || []).forEach(d => {
-    dealerMap[d.dealer_id] = {
-      dealer_id: d.dealer_id,
-      dealer_name: d.dealer_name,
-      area: d.area || territorySetting,
-      total_bags: 0,
-    };
-  });
-
-  allSalesList.forEach(s => {
-    const did = s.dealer_id || s.dealer_name;
-    if (!dealerMap[did]) {
-      dealerMap[did] = {
-        dealer_id: did,
-        dealer_name: s.dealer_name,
-        area: territorySetting,
+  // Top Dealers computed from allSalesList for selectedMonth
+  const computedTopDealers = useMemo(() => {
+    const dealerMap: Record<string, { dealer_id: string; dealer_name: string; area: string; total_bags: number }> = {};
+    (dealers || []).forEach(d => {
+      dealerMap[d.dealer_id] = {
+        dealer_id: d.dealer_id,
+        dealer_name: d.dealer_name,
+        area: d.area || 'Jajpur',
         total_bags: 0,
       };
-    }
-    dealerMap[did].total_bags += Number(s.quantity_bags) || 0;
-  });
+    });
 
-  const topDealersList = Object.values(dealerMap)
-    .filter(d => d.total_bags > 0)
-    .sort((a, b) => b.total_bags - a.total_bags)
-    .slice(0, 5);
+    allSalesList.forEach(s => {
+      const did = s.dealer_id || s.dealer_name;
+      if (!dealerMap[did]) {
+        dealerMap[did] = {
+          dealer_id: did,
+          dealer_name: s.dealer_name,
+          area: 'Jajpur',
+          total_bags: 0,
+        };
+      }
+      dealerMap[did].total_bags += Number(s.quantity_bags) || 0;
+    });
+
+    return Object.values(dealerMap).sort((a, b) => b.total_bags - a.total_bags);
+  }, [dealers, allSalesList]);
+
+  const formatUpcomingDate = (dateStr: string) => {
+    try {
+      const norm = normalizeDate(dateStr);
+      if (!norm) return { day: '??', month: '???' };
+      const d = parseISO(norm);
+      return { day: format(d, 'dd'), month: format(d, 'MMM').toUpperCase() };
+    } catch {
+      return { day: '??', month: '???' };
+    }
+  };
+
+  // Quick month switcher helper
+  const switchMonth = (direction: 'prev' | 'next') => {
+    const currentIndex = availableMonths.indexOf(selectedMonth);
+    if (direction === 'prev' && currentIndex < availableMonths.length - 1) {
+      setSelectedMonth(availableMonths[currentIndex + 1]);
+    } else if (direction === 'next' && currentIndex > 0) {
+      setSelectedMonth(availableMonths[currentIndex - 1]);
+    }
+  };
+
+  const formattedSelectedMonth = useMemo(() => {
+    try {
+      return format(parseISO(selectedMonth + '-01'), 'MMMM yyyy');
+    } catch {
+      return selectedMonth;
+    }
+  }, [selectedMonth]);
 
   return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={styles.content}
-      showsVerticalScrollIndicator={false}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#800E20" />}
-    >
-      {/* ── 1. LARGE EXECUTIVE TOP HEADER ── */}
-      <View style={styles.topHeader}>
-        <View style={styles.headerLeft}>
-          <Text style={styles.greetingSubtitle}>{greeting},</Text>
-          <Text style={styles.userNameBig}>{user?.name || 'Rehan'} 👋</Text>
-          <View style={styles.liveTeamBadge}>
-            <View style={styles.greenDot} />
-            <Text style={styles.liveTeamText}>{teamSetting} • {territorySetting}</Text>
-          </View>
-        </View>
+    <View style={styles.container}>
+      {/* Background styling for glassmorphism */}
+      <View style={[StyleSheet.absoluteFillObject, { backgroundColor: '#EFF2F7' }]} />
+      <View style={styles.blob1} />
+      <View style={styles.blob2} />
 
-        <View style={styles.headerRight}>
-          <TouchableOpacity style={styles.notificationBtn} activeOpacity={0.8} onPress={() => onRefresh()}>
-            <Ionicons name="notifications-outline" size={24} color="#1F0B10" />
-            <View style={styles.notifBadge}>
-              <Text style={styles.notifBadgeText}>3</Text>
+      <Animated.ScrollView 
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary} />}
+        showsVerticalScrollIndicator={false}
+        onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: false })}
+        scrollEventThrottle={16}
+      >
+        {/* HEADER */}
+        <View style={styles.header}>
+          <View style={styles.headerLeft}>
+            <View style={styles.avatarCircle}>
+              <Image source={{ uri: 'https://ui-avatars.com/api/?name=' + (user?.name || 'Rehan') + '&background=FDE8EA&color=C91F2B&size=120' }} style={{ width: '100%', height: '100%', borderRadius: 28 }} />
             </View>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.avatarCircle} activeOpacity={0.8} onPress={() => router.push('/admin')}>
-            <Text style={styles.avatarLetter}>
-              {user?.name ? user.name.charAt(0).toUpperCase() : 'R'}
-            </Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      {/* ── DYNAMIC TEAM MEMBER SELECTOR CHIP BAR ("SARE USER KA DATA") ── */}
-      <View style={styles.teamFilterContainer}>
-        <View style={styles.teamFilterHeaderRow}>
-          <View style={styles.teamFilterTitleWrap}>
-            <MaterialCommunityIcons name="account-group-outline" size={18} color="#800E20" />
-            <Text style={styles.teamFilterHeading}>Team Visibility</Text>
-          </View>
-          {selectedTE !== 'ALL' && (
-            <TouchableOpacity onPress={() => setSelectedTE('ALL')} style={styles.resetFilterBtn}>
-              <Text style={styles.resetFilterBtnText}>Show All Team ✕</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.teamFilterScroll}>
-          <TouchableOpacity
-            style={[styles.teamSelectChip, selectedTE === 'ALL' && styles.teamSelectChipActive]}
-            onPress={() => setSelectedTE('ALL')}
-            activeOpacity={0.8}
-          >
-            <MaterialCommunityIcons
-              name="account-multiple"
-              size={15}
-              color={selectedTE === 'ALL' ? '#FFFFFF' : '#800E20'}
-              style={{ marginRight: 6 }}
-            />
-            <Text style={[styles.teamSelectChipText, selectedTE === 'ALL' && styles.teamSelectChipTextActive]}>
-              All Team (Consolidated)
-            </Text>
-          </TouchableOpacity>
-
-          {uniqueTeamList.map((member) => {
-            const isSelected = selectedTE === member;
-            return (
-              <TouchableOpacity
-                key={member}
-                style={[styles.teamSelectChip, isSelected && styles.teamSelectChipActive]}
-                onPress={() => setSelectedTE(member)}
-                activeOpacity={0.8}
-              >
-                <Feather
-                  name="user"
-                  size={13}
-                  color={isSelected ? '#FFFFFF' : '#800E20'}
-                  style={{ marginRight: 5 }}
-                />
-                <Text style={[styles.teamSelectChipText, isSelected && styles.teamSelectChipTextActive]}>
-                  {member}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
-      </View>
-
-      {/* ── 2. BIG EXECUTIVE COMMAND HERO CARD (PROTON VAULT WINE) ── */}
-      <View style={styles.heroCardBig}>
-        <View style={styles.heroTopRow}>
-          <View>
-            <View style={styles.brandTitleRow}>
-              <Text style={styles.heroBrandTE}>TE </Text>
-              <Text style={styles.heroBrandCONNECT}>CONNECT</Text>
-            </View>
-            <Text style={styles.heroTeamSubtitle}>
-              {selectedTE === 'ALL' ? `${teamSetting.toUpperCase()} • CONSOLIDATED` : `${selectedTE.toUpperCase()} • FIELD METRICS`}
-            </Text>
-          </View>
-          <View style={styles.securityShieldCircle}>
-            <MaterialCommunityIcons name="shield-check" size={30} color="#FFFFFF" />
-          </View>
-        </View>
-
-        {/* Big Sales Volume Display */}
-        <View style={styles.heroMainMetricBox}>
-          <Text style={styles.heroMainMetricLabel}>TOTAL SALES VOLUME ({currentMonthLabel.toUpperCase()})</Text>
-          <View style={styles.heroMainMetricRow}>
-            <Text style={styles.heroMainMetricMT}>{monthlyTotalMT}</Text>
-            <Text style={styles.heroMainMetricUnit}>MT</Text>
-            <View style={styles.heroBagsPill}>
-              <Text style={styles.heroBagsPillText}>{monthlyTotalBags} Bags</Text>
-            </View>
-          </View>
-        </View>
-
-        <View style={styles.heroDivider} />
-
-        {/* Dual Target Status Badges */}
-        <View style={styles.heroTargetsRow}>
-          <View style={styles.heroTargetItem}>
-            <Text style={styles.heroTargetLabel}>80% BAG PUNCH TARGET</Text>
-            <Text style={styles.heroTargetVal}>{punchVolumePercent}% <Text style={styles.heroTargetSub}>({totalPunchBags}/{required80PercentPunch} Bg)</Text></Text>
-          </View>
-
-          <View style={styles.heroTargetDivider} />
-
-          <View style={styles.heroTargetItem}>
-            <Text style={styles.heroTargetLabel}>40% CONTR. ACTIVE</Text>
-            <Text style={styles.heroTargetVal}>{contractorActivePercent.toFixed(0)}% <Text style={styles.heroTargetSub}>({activeContractorsCount}/{totalContractorsCount} Active)</Text></Text>
-          </View>
-        </View>
-      </View>
-
-      {/* ── 3. DATE BAR ── */}
-      <View style={styles.dateBarRow}>
-        <Text style={styles.sectionHeaderTitle}>Live Field Metrics</Text>
-        <View style={styles.dateBadge}>
-          <Ionicons name="calendar" size={15} color="#800E20" style={{ marginRight: 6 }} />
-          <Text style={styles.dateBadgeText}>{formattedDate}</Text>
-        </View>
-      </View>
-
-      {/* ── 4. BIG 2x2 METRICS GRID (LARGE, BOLD, SPACIOUS) ── */}
-      <View style={styles.bigMetricsGrid}>
-        {/* Card 1: Slabs */}
-        <TouchableOpacity
-          style={styles.bigMetricCard}
-          onPress={() => router.push('/(tabs)/slab')}
-          activeOpacity={0.85}
-        >
-          <View style={styles.cardHeaderRow}>
-            <View style={[styles.largeIconBox, { backgroundColor: '#FBE8EC' }]}>
-              <MaterialCommunityIcons name="office-building" size={28} color="#800E20" />
-            </View>
-            <View style={styles.trendPill}>
-              <Text style={styles.trendPillText}>{todaySlabsList.length > 0 ? `${todaySlabsList.length} Today` : `${allSlabsList.length} Total`}</Text>
-            </View>
-          </View>
-          <Text style={styles.bigMetricNumber}>{allSlabsList.length}</Text>
-          <Text style={styles.bigMetricLabel}>Slabs Scheduled</Text>
-        </TouchableOpacity>
-
-        {/* Card 2: Sales */}
-        <TouchableOpacity
-          style={styles.bigMetricCard}
-          onPress={() => router.push('/(tabs)/sales')}
-          activeOpacity={0.85}
-        >
-          <View style={styles.cardHeaderRow}>
-            <View style={[styles.largeIconBox, { backgroundColor: '#FEF3C7' }]}>
-              <MaterialCommunityIcons name="package-variant-closed" size={28} color="#D97706" />
-            </View>
-            <View style={[styles.trendPill, { backgroundColor: '#FEF3C7' }]}>
-              <Text style={[styles.trendPillText, { color: '#B45309' }]}>{monthlyTotalMT} MT</Text>
-            </View>
-          </View>
-          <Text style={styles.bigMetricNumber}>{displaySalesBags}</Text>
-          <Text style={styles.bigMetricLabel}>Total Sales (Bags)</Text>
-        </TouchableOpacity>
-
-        {/* Card 3: 80% Bag Volume Punch */}
-        <TouchableOpacity
-          style={styles.bigMetricCard}
-          onPress={() => router.push('/(tabs)/sales')}
-          activeOpacity={0.85}
-        >
-          <View style={styles.cardHeaderRow}>
-            <View style={[styles.largeIconBox, { backgroundColor: '#DCFCE7' }]}>
-              <MaterialCommunityIcons name="cube-send" size={28} color="#15803D" />
-            </View>
-            <View style={[styles.trendPill, { backgroundColor: '#DCFCE7' }]}>
-              <Text style={[styles.trendPillText, { color: '#15803D' }]}>Target 80%</Text>
-            </View>
-          </View>
-          <Text style={[styles.bigMetricNumber, { color: punchVolumePercent >= 80 ? '#15803D' : '#800E20' }]}>
-            {punchVolumePercent}%
-          </Text>
-          <Text style={styles.bigMetricLabel}>Bag Punch Volume</Text>
-        </TouchableOpacity>
-
-        {/* Card 4: 40% Contractor Active Base */}
-        <TouchableOpacity
-          style={styles.bigMetricCard}
-          onPress={() => router.push('/(tabs)/sales')}
-          activeOpacity={0.85}
-        >
-          <View style={styles.cardHeaderRow}>
-            <View style={[styles.largeIconBox, { backgroundColor: '#EDE9FE' }]}>
-              <MaterialCommunityIcons name="account-hard-hat" size={28} color="#7C3AED" />
-            </View>
-            <View style={[styles.trendPill, { backgroundColor: '#EDE9FE' }]}>
-              <Text style={[styles.trendPillText, { color: '#6D28D9' }]}>Min 40%</Text>
-            </View>
-          </View>
-          <Text style={[styles.bigMetricNumber, { color: contractorActivePercent >= 40 ? '#15803D' : '#D97706' }]}>
-            {contractorActivePercent.toFixed(1)}%
-          </Text>
-          <Text style={styles.bigMetricLabel}>Contractor Active Base</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* ── 5. BIG FIELD QUICK ACTIONS (LARGE SPACIOUS TOUCH CARDS) ── */}
-      <View style={styles.sectionHeaderRow}>
-        <Text style={styles.sectionHeaderTitle}>Quick Field Actions</Text>
-        <TouchableOpacity onPress={() => router.push('/(tabs)/plus')}>
-          <Text style={styles.seeAllText}>All Actions ›</Text>
-        </TouchableOpacity>
-      </View>
-
-      <View style={styles.quickActionCardsCol}>
-        {/* Action 1: Add Slab */}
-        <TouchableOpacity
-          style={styles.actionBigButton}
-          onPress={() => router.push('/slab/add')}
-          activeOpacity={0.85}
-        >
-          <View style={[styles.actionIconContainer, { backgroundColor: '#800E20' }]}>
-            <MaterialCommunityIcons name="office-building-marker" size={26} color="#FFFFFF" />
-          </View>
-          <View style={styles.actionTextContainer}>
-            <Text style={styles.actionTitleBig}>Schedule New Slab</Text>
-            <Text style={styles.actionSubtitle}>Add casting date, contractor, and site GPS</Text>
-          </View>
-          <View style={styles.actionChevronCircle}>
-            <Feather name="arrow-up-right" size={20} color="#800E20" />
-          </View>
-        </TouchableOpacity>
-
-        {/* Action 2: Add Sale / Punch */}
-        <TouchableOpacity
-          style={styles.actionBigButton}
-          onPress={() => router.push('/sale/add')}
-          activeOpacity={0.85}
-        >
-          <View style={[styles.actionIconContainer, { backgroundColor: '#4A0611' }]}>
-            <MaterialCommunityIcons name="cart-plus" size={26} color="#FFFFFF" />
-          </View>
-          <View style={styles.actionTextContainer}>
-            <Text style={styles.actionTitleBig}>Record Sale & Punch</Text>
-            <Text style={styles.actionSubtitle}>Log ACC F2R / GOLD bags or contractor punch</Text>
-          </View>
-          <View style={styles.actionChevronCircle}>
-            <Feather name="arrow-up-right" size={20} color="#800E20" />
-          </View>
-        </TouchableOpacity>
-
-        {/* Action 3: Add Meeting */}
-        <TouchableOpacity
-          style={styles.actionBigButton}
-          onPress={() => router.push('/meeting/add')}
-          activeOpacity={0.85}
-        >
-          <View style={[styles.actionIconContainer, { backgroundColor: '#6B1224' }]}>
-            <MaterialCommunityIcons name="account-multiple-plus" size={26} color="#FFFFFF" />
-          </View>
-          <View style={styles.actionTextContainer}>
-            <Text style={styles.actionTitleBig}>Schedule Meeting</Text>
-            <Text style={styles.actionSubtitle}>Log customer, contractor or site meet</Text>
-          </View>
-          <View style={styles.actionChevronCircle}>
-            <Feather name="arrow-up-right" size={20} color="#800E20" />
-          </View>
-        </TouchableOpacity>
-      </View>
-
-      {/* ── 6. TODAY'S SCHEDULE (SPACIOUS GLASS CARDS) ── */}
-      <View style={styles.sectionHeaderRow}>
-        <Text style={styles.sectionHeaderTitle}>Today's Schedule & Slabs</Text>
-        <TouchableOpacity onPress={() => router.push('/(tabs)/slab')}>
-          <Text style={styles.seeAllText}>View Calendar ›</Text>
-        </TouchableOpacity>
-      </View>
-
-      {allSlabsList.length === 0 ? (
-        <View style={styles.emptyStateCard}>
-          <View style={styles.emptyIconCircle}>
-            <Ionicons name="calendar-outline" size={32} color="#800E20" />
-          </View>
-          <Text style={styles.emptyStateTitle}>No Slabs Scheduled Today</Text>
-          <Text style={styles.emptyStateSub}>Tap 'Schedule New Slab' above to add your first casting.</Text>
-        </View>
-      ) : (
-        <View style={styles.scheduleListCol}>
-          {allSlabsList.slice(0, 3).map((slab) => (
-            <TouchableOpacity
-              key={slab.slab_id}
-              style={styles.realScheduleCard}
-              onPress={() => router.push(`/slab/${slab.slab_id}` as any)}
-              activeOpacity={0.85}
-            >
-              <View style={[styles.realScheduleIcon, { backgroundColor: '#FBE8EC' }]}>
-                <MaterialCommunityIcons name="office-building" size={24} color="#800E20" />
+            <View style={styles.headerTextWrap}>
+              <Text style={styles.greeting}>{getGreeting()},</Text>
+              <Text style={styles.userName}>{user?.name ? user.name : 'Rehan'}</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
+                <Text style={styles.territoryText}>Team {territorySetting} | </Text>
+                <Ionicons name="location-outline" size={12} color={Colors.textPrimary} style={{ marginHorizontal: 2 }} />
+                <Text style={[styles.territoryText, { fontWeight: '700', color: Colors.textPrimary }]}>{territorySetting} Territory</Text>
               </View>
-              <View style={{ flex: 1 }}>
-                <View style={styles.rowBetween}>
-                  <Text style={styles.scheduleDealerTitle}>{slab.dealer_name}</Text>
-                  <View style={[
-                    styles.statusBadgeSmall,
-                    slab.status === 'COMPLETED' ? styles.statusComp : slab.status === 'CANCELLED' ? styles.statusCanc : styles.statusUpc
-                  ]}>
-                    <Text style={[
-                      styles.statusBadgeText,
-                      slab.status === 'COMPLETED' ? { color: '#15803D' } : slab.status === 'CANCELLED' ? { color: '#6B7280' } : { color: '#800E20' }
-                    ]}>
-                      {slab.status}
-                    </Text>
+            </View>
+          </View>
+          <View style={styles.headerRight}>
+            <View style={styles.iconCircle}>
+              <Ionicons name="notifications-outline" size={22} color={Colors.textPrimary} />
+              <View style={styles.badge}><Text style={styles.badgeText}>3</Text></View>
+            </View>
+            <TouchableOpacity style={styles.datePill} onPress={() => setShowMonthModal(true)} activeOpacity={0.8}>
+              <Ionicons name="calendar-outline" size={14} color={Colors.primary} />
+              <Text style={styles.datePillText}>{formatDateShort(today)}</Text>
+              <Ionicons name="chevron-down" size={14} color={Colors.textSecondary} />
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* HERO BANNER */}
+        <View style={styles.heroBannerContainer}>
+          <Image 
+            source={require('../../assets/images/hero-banner.png')} 
+            resizeMode="contain"
+            style={styles.heroImage}
+          />
+        </View>
+
+        {/* ── TODAY'S SCHEDULE & ACTION REMINDER BANNER ── */}
+        {pendingTasksTotal > 0 ? (
+          <View style={styles.reminderContainer}>
+            <View style={styles.reminderHeader}>
+              <View style={styles.reminderTitleWrap}>
+                <View style={styles.alertPulseDot} />
+                <Text style={styles.reminderTitle}>Action Required Today ({pendingTasksTotal})</Text>
+              </View>
+              <View style={styles.reminderBadge}>
+                <Text style={styles.reminderBadgeText}>ATTENDANCE DUE</Text>
+              </View>
+            </View>
+            <Text style={styles.reminderSubText}>
+              Attend today's scheduled activities below. Completing will turn off this alert:
+            </Text>
+
+            {pendingSlabs.map((slab) => (
+              <View key={slab.slab_id} style={styles.reminderCard}>
+                <View style={[styles.reminderIconCircle, { backgroundColor: '#FDE8EA' }]}>
+                  <MaterialCommunityIcons name="office-building" size={20} color={Colors.primary} />
+                </View>
+                <View style={{ flex: 1, marginLeft: 10 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <Text style={styles.reminderItemType}>SLAB CASTING</Text>
+                    <Text style={styles.reminderDateTag}>{formatDateShort(slab.slab_date)}</Text>
+                  </View>
+                  <Text style={styles.reminderItemName}>{slab.dealer_name}</Text>
+                  <Text style={styles.reminderItemDetail}>
+                    👷 {slab.contractor_name || 'No contractor'} • {slab.expected_cement ? `${slab.expected_cement} Bags` : 'Casting today'}
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  style={styles.doneActionBtn}
+                  onPress={() => markSlabAttended(slab)}
+                  disabled={updatingTaskId === slab.slab_id}
+                  activeOpacity={0.8}
+                >
+                  {updatingTaskId === slab.slab_id ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <Text style={styles.doneActionBtnText}>Attend ✓</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            ))}
+
+            {pendingMeetings.map((meeting) => (
+              <View key={meeting.meeting_id} style={styles.reminderCard}>
+                <View style={[styles.reminderIconCircle, { backgroundColor: '#EDE9FE' }]}>
+                  <Ionicons name="people" size={20} color="#7C3AED" />
+                </View>
+                <View style={{ flex: 1, marginLeft: 10 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <Text style={[styles.reminderItemType, { color: '#7C3AED' }]}>{meeting.meeting_type} MEET</Text>
+                    <Text style={styles.reminderDateTag}>{formatDateShort(meeting.meeting_date)}</Text>
+                  </View>
+                  <Text style={styles.reminderItemName}>{meeting.meeting_name || `${meeting.meeting_type} Meeting`}</Text>
+                  <Text style={styles.reminderItemDetail}>
+                    📍 {meeting.location || 'Jajpur'}{meeting.people_count ? ` • ${meeting.people_count} People` : ''}
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  style={[styles.doneActionBtn, { backgroundColor: '#7C3AED' }]}
+                  onPress={() => openAttendModal(meeting)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.doneActionBtnText}>Attend ✓</Text>
+                </TouchableOpacity>
+              </View>
+            ))}
+          </View>
+        ) : (
+          <View style={styles.allClearPill}>
+            <Ionicons name="checkmark-circle" size={16} color="#16A34A" />
+            <Text style={styles.allClearText}>All today's tasks completed. No pending attendance!</Text>
+          </View>
+        )}
+
+        {/* QUICK ACTIONS */}
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Quick Actions</Text>
+        </View>
+        <View style={styles.quickActionsContainer}>
+          <TouchableOpacity style={styles.qaItemIcon} onPress={() => router.push('/slab/add')}>
+            <View style={[styles.qaCircle, { backgroundColor: '#FDE8EA' }]}>
+              <MaterialCommunityIcons name="office-building" size={28} color={Colors.primary} />
+            </View>
+            <Text style={styles.qaLabelText}>Slab</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.qaItemIcon} onPress={() => router.push('/sale/add')}>
+            <View style={[styles.qaCircle, { backgroundColor: '#E0F2FE' }]}>
+              <MaterialCommunityIcons name="package-variant-closed" size={28} color={Colors.info} />
+            </View>
+            <Text style={styles.qaLabelText}>Sale</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.qaItemIcon} onPress={() => router.push('/meeting/add')}>
+            <View style={[styles.qaCircle, { backgroundColor: '#DCFCE7' }]}>
+              <Ionicons name="people" size={28} color={Colors.success} />
+            </View>
+            <Text style={styles.qaLabelText}>Meeting</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.qaItemIcon} onPress={() => router.push('/dealer/add')}>
+            <View style={[styles.qaCircle, { backgroundColor: '#FEF3C7' }]}>
+              <Ionicons name="storefront" size={28} color={Colors.warning} />
+            </View>
+            <Text style={styles.qaLabelText}>Dealer</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* MONTHLY PERFORMANCE (POORA MAHINE KA PERFORMANCE) */}
+        <View style={styles.sectionHeader}>
+          <View>
+            <Text style={styles.sectionTitle}>Monthly Performance</Text>
+            <Text style={styles.sectionSubtitle}>Complete month totals & metrics</Text>
+          </View>
+          <View style={styles.monthSelectorRow}>
+            <TouchableOpacity onPress={() => switchMonth('prev')} style={styles.monthArrowBtn}>
+              <Ionicons name="chevron-back" size={16} color={Colors.primary} />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.monthPillCapsule} onPress={() => setShowMonthModal(true)} activeOpacity={0.8}>
+              <Ionicons name="calendar" size={13} color={Colors.primary} />
+              <Text style={styles.monthPillCapsuleText}>{formattedSelectedMonth}</Text>
+              <Ionicons name="chevron-down" size={12} color={Colors.primary} />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => switchMonth('next')} style={styles.monthArrowBtn}>
+              <Ionicons name="chevron-forward" size={16} color={Colors.primary} />
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* 4 ULTRA-COMPACT KPI BOXES */}
+        <View style={styles.kpiGrid}>
+          {/* Box 1: Total Slabs in Month */}
+          <BlurView intensity={80} tint="light" style={styles.kpiCard}>
+            <View style={styles.kpiHeaderRow}>
+              <View style={[styles.kpiIconWrap, { backgroundColor: Colors.primaryLight }]}>
+                <MaterialCommunityIcons name="office-building" size={20} color={Colors.primary} />
+              </View>
+              <View style={styles.trendBadge}>
+                <Text style={styles.kpiTrend}>{monthCompletedSlabs} Done</Text>
+              </View>
+            </View>
+            <Text style={styles.kpiValue}>{allSlabsList.length}</Text>
+            <Text style={styles.kpiLabel}>Total Slabs</Text>
+          </BlurView>
+
+          {/* Box 2: Total Sales in Month */}
+          <BlurView intensity={80} tint="light" style={styles.kpiCard}>
+            <View style={styles.kpiHeaderRow}>
+              <View style={[styles.kpiIconWrap, { backgroundColor: Colors.infoLight }]}>
+                <MaterialCommunityIcons name="chart-bar" size={20} color={Colors.info} />
+              </View>
+              <View style={[styles.trendBadge, { backgroundColor: '#E0F2FE' }]}>
+                <Text style={[styles.kpiTrend, { color: Colors.info }]}>{totalSalesMT} MT</Text>
+              </View>
+            </View>
+            <Text style={styles.kpiValue}>{totalSalesBags.toLocaleString()}</Text>
+            <Text style={styles.kpiLabel}>Sales (Bags)</Text>
+          </BlurView>
+
+          {/* Box 3: Active % in Month */}
+          <BlurView intensity={80} tint="light" style={styles.kpiCard}>
+            <View style={styles.kpiHeaderRow}>
+              <View style={[styles.kpiIconWrap, { backgroundColor: Colors.successLight }]}>
+                <Ionicons name="flash" size={20} color={Colors.success} />
+              </View>
+              <View style={[styles.trendBadge, { backgroundColor: '#DCFCE7' }]}>
+                <Text style={[styles.kpiTrend, { color: Colors.success }]}>{activeContractorsCount}/{totalContractorsCount}</Text>
+              </View>
+            </View>
+            <Text style={styles.kpiValue}>{Math.round(activePercent)}%</Text>
+            <Text style={styles.kpiLabel}>Active %</Text>
+          </BlurView>
+
+          {/* Box 4: Total Meetings in Month */}
+          <BlurView intensity={80} tint="light" style={styles.kpiCard}>
+            <View style={styles.kpiHeaderRow}>
+              <View style={[styles.kpiIconWrap, { backgroundColor: Colors.warningLight }]}>
+                <Ionicons name="people" size={20} color={Colors.warning} />
+              </View>
+              <View style={[styles.trendBadge, { backgroundColor: '#FEF3C7' }]}>
+                <Text style={[styles.kpiTrend, { color: Colors.warning }]}>{monthCompletedMeetings} Done</Text>
+              </View>
+            </View>
+            <Text style={styles.kpiValue}>{allMeetingsList.length}</Text>
+            <Text style={styles.kpiLabel}>Total Meetings</Text>
+          </BlurView>
+        </View>
+
+        {/* MONTHLY TARGETS (4 Boxes) */}
+        <View style={styles.sectionHeader}>
+          <View>
+            <Text style={styles.sectionTitle}>Monthly Targets</Text>
+            <Text style={styles.sectionSubtitle}>
+              Target for {effectiveTargetTE === 'ALL' ? 'All Team' : (effectiveTargetTE === user?.name ? `${effectiveTargetTE} (Me)` : effectiveTargetTE)}
+            </Text>
+          </View>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <TouchableOpacity
+              style={styles.teTargetSwitcherBtn}
+              onPress={() => setShowTargetTeModal(true)}
+              activeOpacity={0.8}
+            >
+              <Feather name="user-check" size={13} color="#800E20" />
+              <Text style={styles.teTargetSwitcherBtnText}>
+                {effectiveTargetTE === 'ALL' ? 'All Team' : (effectiveTargetTE === user?.name ? 'My Target' : effectiveTargetTE)}
+              </Text>
+              <Ionicons name="chevron-down" size={11} color="#800E20" />
+            </TouchableOpacity>
+            <Text style={styles.monthSelectorText}>{formattedSelectedMonth}</Text>
+          </View>
+        </View>
+        
+        <View style={styles.targetGrid}>
+          {/* Box 1: Sales Target */}
+          <BlurView intensity={90} tint="light" style={styles.targetBox}>
+            <Text style={styles.targetBoxLabel}>Sales (Bags)</Text>
+            <Text style={styles.targetBoxValue}>{totalSalesBags.toLocaleString()}</Text>
+            <View style={styles.targetLineBg}>
+              <View style={[styles.targetLineFill, { width: `${Math.min(100, (totalSalesBags / 10000) * 100)}%`, backgroundColor: Colors.primary }]} />
+            </View>
+            <Text style={styles.targetSubText}>{totalSalesMT} MT achieved</Text>
+          </BlurView>
+
+          {/* Box 2: Contractor Activation */}
+          <BlurView intensity={90} tint="light" style={styles.targetBox}>
+            <Text style={styles.targetBoxLabel}>Active / Punch</Text>
+            <Text style={styles.targetBoxValue}>{activeContractorsCount} <Text style={{ fontSize: 16, color: Colors.textMuted }}>/ {totalContractorsCount}</Text></Text>
+            <View style={styles.targetLineBg}>
+              <View style={[styles.targetLineFill, { width: `${Math.min(100, totalContractorsCount > 0 ? (activeContractorsCount / totalContractorsCount) * 100 : 0)}%`, backgroundColor: Colors.success }]} />
+            </View>
+            <Text style={styles.targetSubText}>Min 45% Target ({Math.round(activePercent)}%)</Text>
+          </BlurView>
+
+          {/* Box 3: Contractor Meets */}
+          <BlurView intensity={90} tint="light" style={styles.targetBox}>
+            <Text style={styles.targetBoxLabel}>
+              Contractor Meet ({effectiveTargetTE === 'ALL' ? 'Team' : (effectiveTargetTE === user?.name ? 'My' : effectiveTargetTE)})
+            </Text>
+            <Text style={styles.targetBoxValue}>{contractorPeopleCount} <Text style={{ fontSize: 16, color: Colors.textMuted }}>/ 100</Text></Text>
+            <View style={styles.targetLineBg}>
+              <View style={[styles.targetLineFill, { width: `${Math.min(100, (contractorPeopleCount / 100) * 100)}%`, backgroundColor: '#EA580C' }]} />
+            </View>
+            <Text style={styles.targetSubText}>Target 100 Contractors ({Math.min(100, Math.round((contractorPeopleCount / 100) * 100))}%)</Text>
+          </BlurView>
+
+          {/* Box 4: IHB Meets */}
+          <BlurView intensity={90} tint="light" style={styles.targetBox}>
+            <Text style={styles.targetBoxLabel}>
+              IHB Meet ({effectiveTargetTE === 'ALL' ? 'Team' : (effectiveTargetTE === user?.name ? 'My' : effectiveTargetTE)})
+            </Text>
+            <Text style={styles.targetBoxValue}>{ihbPeopleCount} <Text style={{ fontSize: 16, color: Colors.textMuted }}>/ 50</Text></Text>
+            <View style={styles.targetLineBg}>
+              <View style={[styles.targetLineFill, { width: `${Math.min(100, (ihbPeopleCount / 50) * 100)}%`, backgroundColor: '#7C3AED' }]} />
+            </View>
+            <Text style={styles.targetSubText}>Target 50 IHB ({Math.min(100, Math.round((ihbPeopleCount / 50) * 100))}%)</Text>
+          </BlurView>
+        </View>
+
+        {/* UPCOMING / RECENT SLABS */}
+        <View style={styles.sectionHeader}>
+          <View>
+            <Text style={styles.sectionTitle}>
+              {upcomingSlabsList.length > 0 ? 'Upcoming Slabs' : 'Recent Slabs'}
+            </Text>
+            <Text style={styles.sectionSubtitle}>
+              {upcomingSlabsList.length > 0 ? 'Scheduled for casting' : 'Latest slabs from sheet'}
+            </Text>
+          </View>
+          <TouchableOpacity onPress={() => router.push('/(tabs)/slab')}>
+            <Text style={styles.viewAll}>View All</Text>
+          </TouchableOpacity>
+        </View>
+
+        {displaySlabs.length === 0 ? (
+          <BlurView intensity={80} tint="light" style={styles.emptyCard}>
+            <Text style={styles.emptyText}>No slabs found in sheet.</Text>
+          </BlurView>
+        ) : (
+          displaySlabs.map((slab) => {
+            const { day, month } = formatUpcomingDate(slab.slab_date);
+            const isCompleted = slab.status === 'COMPLETED';
+            return (
+              <Link href={`/slab/${slab.slab_id}` as any} asChild key={slab.slab_id}>
+                <TouchableOpacity activeOpacity={0.7}>
+                  <BlurView intensity={90} tint="light" style={styles.glassListRow}>
+                    <View style={styles.dateBox}>
+                      <Text style={styles.dateDay}>{day}</Text>
+                      <Text style={styles.dateMonth}>{month}</Text>
+                    </View>
+                    <View style={styles.listIconCircle}>
+                      <MaterialCommunityIcons name="office-building" size={24} color={Colors.primary} />
+                    </View>
+                    <View style={styles.listInfo}>
+                      <Text style={styles.listTitle}>{slab.dealer_name}</Text>
+                      <Text style={styles.listSub}>{slab.contractor_name || slab.customer_name || 'Jajpur Site'}</Text>
+                    </View>
+                    <View style={[styles.countPill, isCompleted && { backgroundColor: '#DCFCE7' }]}>
+                      <Text style={[styles.countPillText, isCompleted && { color: '#16A34A' }]}>
+                        {slab.status || '1 Slab'}
+                      </Text>
+                    </View>
+                  </BlurView>
+                </TouchableOpacity>
+              </Link>
+            );
+          })
+        )}
+
+        {/* UPCOMING / RECENT EVENTS */}
+        <View style={styles.sectionHeader}>
+          <View>
+            <Text style={styles.sectionTitle}>
+              {upcomingMeetingsList.length > 0 ? 'Upcoming Events' : 'Recent Events'}
+            </Text>
+            <Text style={styles.sectionSubtitle}>
+              {upcomingMeetingsList.length > 0 ? 'Scheduled meetings & meets' : 'Latest events from sheet'}
+            </Text>
+          </View>
+          <TouchableOpacity onPress={() => router.push('/(tabs)/meeting')}>
+            <Text style={styles.viewAll}>View All</Text>
+          </TouchableOpacity>
+        </View>
+
+        {displayMeetings.length === 0 ? (
+          <BlurView intensity={80} tint="light" style={styles.emptyCard}>
+            <Text style={styles.emptyText}>No events found in sheet.</Text>
+          </BlurView>
+        ) : (
+          displayMeetings.map((meeting) => {
+            const { day, month } = formatUpcomingDate(meeting.meeting_date);
+            const isCompleted = meeting.status === 'COMPLETED';
+            return (
+              <Link href={`/meeting/${meeting.meeting_id}` as any} asChild key={meeting.meeting_id}>
+                <TouchableOpacity activeOpacity={0.7}>
+                  <BlurView intensity={90} tint="light" style={styles.glassListRow}>
+                    <View style={styles.dateBox}>
+                      <Text style={styles.dateDay}>{day}</Text>
+                      <Text style={styles.dateMonth}>{month}</Text>
+                    </View>
+                    <View style={styles.listIconCircle}>
+                      <Ionicons name="people" size={22} color={Colors.info} />
+                    </View>
+                    <View style={styles.listInfo}>
+                      <Text style={styles.listTitle}>{meeting.meeting_name || `${meeting.meeting_type} Meet`}</Text>
+                      <Text style={styles.listSub}>{meeting.location || 'Jajpur'}{meeting.people_count ? ` · ${meeting.people_count} Attended` : ''}</Text>
+                    </View>
+                    <View style={[styles.countPill, isCompleted ? { backgroundColor: '#DCFCE7' } : { backgroundColor: '#EDE9FE' }]}>
+                      <Text style={[styles.countPillText, isCompleted ? { color: '#16A34A' } : { color: '#7C3AED' }]}>
+                        {meeting.status || 'PLANNED'}
+                      </Text>
+                    </View>
+                  </BlurView>
+                </TouchableOpacity>
+              </Link>
+            );
+          })
+        )}
+
+        {/* TOP DEALERS BY SALES (MTD) */}
+        <View style={styles.sectionHeader}>
+          <View>
+            <Text style={styles.sectionTitle}>Top Dealers by Sales</Text>
+            <Text style={styles.sectionSubtitle}>{formattedSelectedMonth}</Text>
+          </View>
+          <TouchableOpacity onPress={() => router.push('/(tabs)/sales')}>
+            <Text style={styles.viewAll}>View All</Text>
+          </TouchableOpacity>
+        </View>
+        
+        <BlurView intensity={90} tint="light" style={styles.largeCard}>
+          {computedTopDealers.length === 0 || computedTopDealers.every(d => d.total_bags === 0) ? (
+            <Text style={styles.emptyText}>No dealer sales recorded for {formattedSelectedMonth}.</Text>
+          ) : (
+            computedTopDealers.filter(d => d.total_bags > 0).slice(0, 3).map((dealer, index) => {
+              const maxBags = computedTopDealers[0].total_bags || 1;
+              const fillWidth = maxBags > 0 ? (dealer.total_bags / maxBags) * 100 : 0;
+              return (
+                <View key={dealer.dealer_id} style={[styles.dealerRow, index < 2 && { borderBottomWidth: 1, borderBottomColor: 'rgba(0,0,0,0.05)' }]}>
+                  <View style={styles.rankCircle}>
+                    <Text style={styles.rankText}>{index + 1}</Text>
+                  </View>
+                  <View style={styles.dealerInfo}>
+                    <Text style={styles.dealerName}>{dealer.dealer_name}</Text>
+                    <Text style={styles.dealerArea}>{dealer.area || 'Jajpur'}</Text>
+                    <View style={styles.dealerLineBg}>
+                      <View style={[styles.dealerLineFill, { width: `${fillWidth}%` }]} />
+                    </View>
+                  </View>
+                  <View style={styles.dealerSalesWrap}>
+                    <Text style={styles.dealerSalesValue}>{dealer.total_bags.toLocaleString()}</Text>
+                    <Text style={styles.dealerSalesSub}>{(dealer.total_bags / 20).toFixed(1)} MT</Text>
                   </View>
                 </View>
-                <Text style={styles.scheduleMetaText}>
-                  👷 {slab.contractor_name || 'No contractor'} • 🧱 {slab.expected_cement ? `${slab.expected_cement} Bags` : '200 Bags'}
-                </Text>
-              </View>
-            </TouchableOpacity>
-          ))}
-        </View>
-      )}
+              );
+            })
+          )}
+        </BlurView>
 
-      {/* ── 7. DEALER SALES LEADERBOARD (BIG EXECUTIVE GLASS CARDS) ── */}
-      <View style={styles.sectionHeaderRow}>
-        <Text style={styles.sectionHeaderTitle}>Dealer Leaderboard ({currentMonthLabel})</Text>
-        <TouchableOpacity onPress={() => router.push('/(tabs)/sales')}>
-          <Text style={styles.seeAllText}>Sales Screen ›</Text>
-        </TouchableOpacity>
-      </View>
+        <View style={{ height: 100 }} />
+      </Animated.ScrollView>
 
-      {topDealersList.length === 0 ? (
-        <View style={styles.emptyStateCard}>
-          <Text style={styles.emptyStateTitle}>No Sales Logged Yet</Text>
-          <Text style={styles.emptyStateSub}>Record sales to see dealer rankings here.</Text>
-        </View>
-      ) : (
-        <View style={styles.leaderboardContainer}>
-          {topDealersList.map((dealer, idx) => (
-            <View key={dealer.dealer_id} style={[styles.leaderRowItem, idx === topDealersList.length - 1 && { borderBottomWidth: 0 }]}>
-              <View style={[styles.rankBadgeCircle, idx === 0 ? styles.rankGold : idx === 1 ? styles.rankSilver : styles.rankBronze]}>
-                <Text style={styles.rankBadgeText}>{idx + 1}</Text>
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.leaderDealerName}>{dealer.dealer_name}</Text>
-                <Text style={styles.leaderDealerArea}>{dealer.area}</Text>
-              </View>
-              <View style={{ alignItems: 'flex-end' }}>
-                <Text style={styles.leaderDealerMT}>{(dealer.total_bags / 20).toFixed(1)} MT</Text>
-                <Text style={styles.leaderDealerBags}>{dealer.total_bags} bags</Text>
-              </View>
+      {/* Floating Action Menu with DiffClamp Hide on Scroll */}
+      <FloatingActionMenu scrollY={scrollY} />
+
+      {/* MONTH PICKER MODAL */}
+      <Modal visible={showMonthModal} transparent animationType="fade" onRequestClose={() => setShowMonthModal(false)}>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowMonthModal(false)}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select Performance Month</Text>
+              <TouchableOpacity onPress={() => setShowMonthModal(false)} style={styles.modalCloseBtn}>
+                <Ionicons name="close" size={20} color={Colors.textPrimary} />
+              </TouchableOpacity>
             </View>
-          ))}
-        </View>
-      )}
+            <FlatList
+              data={availableMonths}
+              keyExtractor={(item) => item}
+              renderItem={({ item }) => {
+                const isSelected = item === selectedMonth;
+                let monthLabel = item;
+                try {
+                  monthLabel = format(parseISO(item + '-01'), 'MMMM yyyy');
+                } catch {}
+                const isCurrent = item === currentMonthISO();
+                return (
+                  <TouchableOpacity
+                    style={[styles.monthOptionRow, isSelected && styles.monthOptionSelected]}
+                    onPress={() => {
+                      setSelectedMonth(item);
+                      setShowMonthModal(false);
+                    }}
+                  >
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                      <Ionicons 
+                        name={isSelected ? "radio-button-on" : "radio-button-off"} 
+                        size={18} 
+                        color={isSelected ? Colors.primary : Colors.textMuted} 
+                      />
+                      <Text style={[styles.monthOptionText, isSelected && styles.monthOptionTextSelected]}>
+                        {monthLabel} {isCurrent ? '(Current)' : ''}
+                      </Text>
+                    </View>
+                    {isSelected && (
+                      <Ionicons name="checkmark" size={18} color={Colors.primary} />
+                    )}
+                  </TouchableOpacity>
+                );
+              }}
+            />
+          </View>
+        </TouchableOpacity>
+      </Modal>
 
-      <View style={{ height: 60 }} />
-    </ScrollView>
+      {/* ── TE TARGET SWITCHER MODAL ── */}
+      <Modal
+        visible={showTargetTeModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowTargetTeModal(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowTargetTeModal(false)}
+        >
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select TE for Monthly Target</Text>
+              <TouchableOpacity onPress={() => setShowTargetTeModal(false)} style={styles.modalCloseBtn}>
+                <Ionicons name="close" size={20} color={Colors.textPrimary} />
+              </TouchableOpacity>
+            </View>
+            <FlatList
+              data={['ALL', ...teList]}
+              keyExtractor={(item) => item}
+              renderItem={({ item }) => {
+                const isSelected = effectiveTargetTE === item;
+                const isMe = item === user?.name;
+                const label = item === 'ALL'
+                  ? 'All Team Consolidated'
+                  : (isMe ? `${item} (My Target)` : item);
+
+                return (
+                  <TouchableOpacity
+                    style={[styles.monthOptionRow, isSelected && styles.monthOptionSelected]}
+                    onPress={() => {
+                      setTargetTE(item);
+                      setShowTargetTeModal(false);
+                    }}
+                  >
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                      <Ionicons
+                        name={isSelected ? "radio-button-on" : "radio-button-off"}
+                        size={18}
+                        color={isSelected ? Colors.primary : Colors.textMuted}
+                      />
+                      <Text style={[styles.monthOptionText, isSelected && styles.monthOptionTextSelected]}>
+                        {label}
+                      </Text>
+                    </View>
+                    {isSelected && <Ionicons name="checkmark" size={18} color={Colors.primary} />}
+                  </TouchableOpacity>
+                );
+              }}
+            />
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* ── ATTEND MEETING & TARGET CREDIT MODAL ── */}
+      <Modal
+        visible={!!meetingToAttend}
+        transparent
+        animationType="slide"
+        onRequestClose={() => { if (!isSubmittingAttendance) setMeetingToAttend(null); }}
+      >
+        <KeyboardAvoidingView
+          style={styles.attendModalOverlay}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
+          <View style={styles.attendModalCard}>
+            {meetingToAttend && (
+              <>
+                {/* Header */}
+                <View style={styles.attendModalHeader}>
+                  <View style={{ flex: 1 }}>
+                    <View style={styles.attendBadgeRow}>
+                      <View style={[styles.attendTypeBadge, { backgroundColor: meetingToAttend.meeting_type === 'CUSTOMER' ? '#FBE8EC' : '#FFEDD5' }]}>
+                        <Text style={[styles.attendTypeBadgeText, { color: meetingToAttend.meeting_type === 'CUSTOMER' ? '#800E20' : '#C2410C' }]}>
+                          {meetingToAttend.meeting_type} MEET
+                        </Text>
+                      </View>
+                      <Text style={styles.attendDateTag}>{formatDateShort(meetingToAttend.meeting_date)}</Text>
+                    </View>
+                    <Text style={styles.attendModalTitle}>
+                      {meetingToAttend.meeting_name || `${meetingToAttend.meeting_type} Meeting`}
+                    </Text>
+                    {meetingToAttend.location ? (
+                      <Text style={styles.attendModalLocation}>📍 {meetingToAttend.location}</Text>
+                    ) : null}
+                  </View>
+                  <TouchableOpacity
+                    onPress={() => setMeetingToAttend(null)}
+                    disabled={isSubmittingAttendance}
+                    style={styles.modalCloseBtn}
+                  >
+                    <Ionicons name="close" size={22} color={Colors.textPrimary} />
+                  </TouchableOpacity>
+                </View>
+
+                <View style={styles.modalDivider} />
+
+                <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 360 }}>
+                  {/* 1. Who Attended / Credit Target To */}
+                  <View style={styles.attendFieldGroup}>
+                    <Text style={styles.attendFieldLabel}>
+                      Kisne Attend Kiya? (Target Credit To) <Text style={{ color: '#800E20' }}>*</Text>
+                    </Text>
+                    <Text style={styles.attendFieldSubtext}>
+                      Is meeting ka target is TE ke account me judega (Target: 100 Contractor / 50 IHB):
+                    </Text>
+                    <View style={styles.teChipsContainer}>
+                      {teList.map((teName) => {
+                        const isSelected = attendCreditTE === teName;
+                        const isMe = teName === user?.name;
+                        return (
+                          <TouchableOpacity
+                            key={teName}
+                            style={[styles.teAttendChip, isSelected && styles.teAttendChipActive]}
+                            onPress={() => setAttendCreditTE(teName)}
+                            activeOpacity={0.8}
+                          >
+                            <Feather
+                              name="user"
+                              size={13}
+                              color={isSelected ? '#FFFFFF' : '#800E20'}
+                              style={{ marginRight: 4 }}
+                            />
+                            <Text style={[styles.teAttendChipText, isSelected && styles.teAttendChipTextActive]}>
+                              {teName} {isMe ? '(Me)' : ''}
+                            </Text>
+                            {isSelected && (
+                              <Ionicons name="checkmark" size={14} color="#FFFFFF" style={{ marginLeft: 4 }} />
+                            )}
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  </View>
+
+                  {/* 2. Number of Attendees */}
+                  <View style={styles.attendFieldGroup}>
+                    <Text style={styles.attendFieldLabel}>
+                      Kitne Log Aaye? (Attendees Count) <Text style={{ color: '#800E20' }}>*</Text>
+                    </Text>
+                    <Text style={styles.attendFieldSubtext}>
+                      Ye attendees count {attendCreditTE || 'TE'} ke target me add hoga:
+                    </Text>
+                    <TextInput
+                      style={styles.attendInput}
+                      keyboardType="numeric"
+                      placeholder="e.g. 25"
+                      placeholderTextColor={Colors.textMuted}
+                      value={attendPeopleCount}
+                      onChangeText={setAttendPeopleCount}
+                    />
+                    <View style={styles.quickCountRow}>
+                      {[10, 25, 50, 100].map((num) => (
+                        <TouchableOpacity
+                          key={num}
+                          style={styles.quickCountBtn}
+                          onPress={() => setAttendPeopleCount(String(num))}
+                          activeOpacity={0.8}
+                        >
+                          <Text style={styles.quickCountBtnText}>+{num}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
+
+                  {/* 3. Meeting Outcome / Notes */}
+                  <View style={styles.attendFieldGroup}>
+                    <Text style={styles.attendFieldLabel}>Meeting Outcome / Remark (Optional)</Text>
+                    <TextInput
+                      style={[styles.attendInput, { height: 60, textAlignVertical: 'top' }]}
+                      multiline
+                      placeholder="Key discussion points, feedback, etc."
+                      placeholderTextColor={Colors.textMuted}
+                      value={attendOutcome}
+                      onChangeText={setAttendOutcome}
+                    />
+                  </View>
+                </ScrollView>
+
+                {/* Action Buttons */}
+                <View style={styles.attendModalActions}>
+                  <TouchableOpacity
+                    style={styles.attendCancelBtn}
+                    onPress={() => setMeetingToAttend(null)}
+                    disabled={isSubmittingAttendance}
+                  >
+                    <Text style={styles.attendCancelBtnText}>Cancel</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.attendConfirmBtn}
+                    onPress={confirmMeetingAttendance}
+                    disabled={isSubmittingAttendance}
+                    activeOpacity={0.85}
+                  >
+                    {isSubmittingAttendance ? (
+                      <ActivityIndicator size="small" color="#FFFFFF" />
+                    ) : (
+                      <Text style={styles.attendConfirmBtnText}>
+                        Confirm & Credit to {attendCreditTE ? attendCreditTE.split(' ')[0] : 'TE'} ✓
+                      </Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F9F5F6',
-  },
-  content: {
-    paddingHorizontal: 18,
-    paddingTop: Platform.OS === 'ios' ? 60 : 44,
-    paddingBottom: 40,
-  },
+  container: { flex: 1, backgroundColor: '#EFF2F7' },
+  
+  blob1: { position: 'absolute', top: -100, right: -50, width: 300, height: 300, borderRadius: 150, backgroundColor: 'rgba(253, 232, 234, 0.6)' },
+  blob2: { position: 'absolute', top: 300, left: -100, width: 250, height: 250, borderRadius: 125, backgroundColor: 'rgba(224, 242, 254, 0.5)' },
 
-  // 1. Top Header
-  topHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  headerLeft: {
-    flex: 1,
-  },
-  greetingSubtitle: {
-    fontFamily: FontFamily.sansSemiBold,
-    fontSize: 14,
-    color: '#8A7277',
-    fontWeight: '600',
-  },
-  userNameBig: {
-    fontFamily: FontFamily.displayBlack,
-    fontSize: 28,
-    fontWeight: '900',
-    color: '#1F0B10',
-    letterSpacing: -0.5,
-    marginTop: 2,
-  },
-  liveTeamBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FBE8EC',
-    alignSelf: 'flex-start',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-    marginTop: 6,
-    borderWidth: 1,
-    borderColor: '#E8D5DA',
-  },
-  greenDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#16A34A',
-    marginRight: 6,
-  },
-  liveTeamText: {
-    fontFamily: FontFamily.sansBold,
-    fontSize: 11,
-    fontWeight: '800',
-    color: '#800E20',
-  },
-  headerRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  notificationBtn: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-    backgroundColor: '#FFFFFF',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1.5,
-    borderColor: '#EEDCE1',
-    shadowColor: 'rgba(78, 5, 17, 0.08)',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 1,
-    shadowRadius: 10,
-    elevation: 3,
-    position: 'relative',
-  },
-  notifBadge: {
-    position: 'absolute',
-    top: 6,
-    right: 6,
-    backgroundColor: '#E53935',
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1.5,
-    borderColor: '#FFFFFF',
-  },
-  notifBadgeText: {
-    fontFamily: FontFamily.displayBold,
-    color: '#FFFFFF',
-    fontSize: 10,
-    fontWeight: '900',
-  },
-  avatarCircle: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-    backgroundColor: '#800E20',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: '#FBE8EC',
-  },
-  avatarLetter: {
-    fontFamily: FontFamily.displayBold,
-    color: '#FFFFFF',
-    fontSize: 19,
-    fontWeight: '900',
-  },
+  scroll: { flex: 1 },
+  scrollContent: { paddingHorizontal: 16, paddingBottom: 100, paddingTop: Platform.OS === 'ios' ? 60 : 40 },
 
-  // Team Filter Bar
-  teamFilterContainer: {
-    marginBottom: 20,
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 },
+  headerLeft: { flexDirection: 'row', alignItems: 'center', flex: 1 },
+  avatarCircle: { width: 56, height: 56, borderRadius: 28, backgroundColor: Colors.primaryLight, marginRight: 12, overflow: 'hidden' },
+  headerTextWrap: { flex: 1 },
+  greeting: { fontFamily: FontFamily.sansMedium, fontSize: 13, color: '#6B7280' },
+  userName: { fontFamily: FontFamily.displayBlack, fontSize: 24, fontWeight: '900', color: '#172033', letterSpacing: -0.5, marginTop: -2 },
+  territoryText: { fontFamily: FontFamily.sansMedium, fontSize: 11, color: '#6B7280' },
+  
+  datePill: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFFFF', paddingHorizontal: 8, paddingVertical: 6, borderRadius: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2, gap: 4 },
+  datePillText: { fontFamily: FontFamily.sansBold, fontSize: 11, color: '#172033' },
+  headerRight: { flexDirection: 'column', alignItems: 'flex-end', justifyContent: 'space-between', height: 56 },
+  iconCircle: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#EFF2F7' },
+  badge: { position: 'absolute', top: -2, right: -2, backgroundColor: Colors.primary, width: 14, height: 14, borderRadius: 7, alignItems: 'center', justifyContent: 'center' },
+  badgeText: { fontSize: 8, color: Colors.white, fontFamily: FontFamily.sansBold },
+  
+  heroBannerContainer: { width: '100%', aspectRatio: 2.3, marginBottom: 24, borderRadius: 20, overflow: 'hidden' },
+  heroImage: { width: '100%', height: '100%' },
+  
+  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 14, marginTop: 12 },
+  sectionTitle: { fontFamily: FontFamily.displayBold, fontSize: 20, color: Colors.textPrimary },
+  sectionSubtitle: { fontFamily: FontFamily.sansMedium, fontSize: 11, color: Colors.textSecondary, marginTop: 2 },
+  monthSelectorText: { fontFamily: FontFamily.sansBold, fontSize: 13, color: Colors.primary },
+  viewAll: { fontFamily: FontFamily.sansBold, fontSize: 13, color: Colors.primary },
+
+  monthSelectorRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  monthArrowBtn: { width: 28, height: 28, borderRadius: 14, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center', elevation: 1 },
+  monthPillCapsule: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFFFF', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 14, gap: 5, elevation: 1 },
+  monthPillCapsuleText: { fontFamily: FontFamily.sansBold, fontSize: 12, color: Colors.primary },
+
+  // TODAY'S REMINDER / ALERT STYLES
+  reminderContainer: {
     backgroundColor: '#FFFFFF',
     borderRadius: 20,
-    padding: 14,
+    padding: 16,
+    marginBottom: 20,
     borderWidth: 1.5,
-    borderColor: '#EEDCE1',
-    shadowColor: 'rgba(78, 5, 17, 0.05)',
+    borderColor: '#FCA5A5',
+    shadowColor: '#DC2626',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 1,
-    shadowRadius: 8,
-    elevation: 2,
+    shadowOpacity: 0.12,
+    shadowRadius: 10,
+    elevation: 4,
   },
-  teamFilterHeaderRow: {
+  reminderHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 10,
+    marginBottom: 4,
   },
-  teamFilterTitleWrap: {
+  reminderTitleWrap: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 8,
   },
-  teamFilterHeading: {
+  alertPulseDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#DC2626',
+  },
+  reminderTitle: {
     fontFamily: FontFamily.displayBold,
-    fontSize: 13,
+    fontSize: 15,
     fontWeight: '800',
-    color: '#1F0B10',
-    marginLeft: 6,
+    color: '#991B1B',
+    letterSpacing: -0.3,
   },
-  resetFilterBtn: {
-    backgroundColor: '#FAF0F2',
+  reminderBadge: {
+    backgroundColor: '#FEE2E2',
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 8,
   },
-  resetFilterBtnText: {
+  reminderBadgeText: {
     fontFamily: FontFamily.sansBold,
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#DC2626',
+  },
+  reminderSubText: {
+    fontFamily: FontFamily.sansRegular,
+    fontSize: 12,
+    color: '#6B7280',
+    marginBottom: 12,
+  },
+  reminderCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEF2F2',
+    borderRadius: 14,
+    padding: 12,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#FECACA',
+  },
+  reminderIconCircle: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  reminderItemType: {
+    fontFamily: FontFamily.sansBold,
+    fontSize: 10,
+    fontWeight: '800',
+    color: Colors.primary,
+    letterSpacing: 0.5,
+  },
+  reminderDateTag: {
+    fontFamily: FontFamily.sansMedium,
+    fontSize: 10,
+    color: '#9CA3AF',
+  },
+  reminderItemName: {
+    fontFamily: FontFamily.displayBold,
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#1F2937',
+    marginTop: 1,
+  },
+  reminderItemDetail: {
+    fontFamily: FontFamily.sansRegular,
     fontSize: 11,
+    color: '#4B5563',
+    marginTop: 2,
+  },
+  doneActionBtn: {
+    backgroundColor: Colors.primary,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 70,
+  },
+  doneActionBtnText: {
+    fontFamily: FontFamily.sansBold,
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  allClearPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#DCFCE7',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 14,
+    marginBottom: 18,
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
+  },
+  allClearText: {
+    fontFamily: FontFamily.sansMedium,
+    fontSize: 12,
+    color: '#15803D',
+    fontWeight: '600',
+  },
+
+  quickActionsContainer: { flexDirection: 'row', justifyContent: 'space-around', marginBottom: 20, paddingHorizontal: 10 },
+  qaItemIcon: { alignItems: 'center', justifyContent: 'center' },
+  qaCircle: { width: 60, height: 60, borderRadius: 30, alignItems: 'center', justifyContent: 'center', marginBottom: 6, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 6, elevation: 3 },
+  qaLabelText: { fontFamily: FontFamily.sansBold, fontSize: 13, color: Colors.textPrimary },
+
+  // ULTRA-COMPACT KPI CARDS
+  kpiGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', marginBottom: 12 },
+  kpiCard: { width: '48%', backgroundColor: 'rgba(255,255,255,0.7)', borderRadius: 14, padding: 10, paddingVertical: 10, marginBottom: 12, borderWidth: 1, borderColor: 'rgba(255,255,255,0.9)', overflow: 'hidden' },
+  kpiHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
+  kpiIconWrap: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
+  trendBadge: { backgroundColor: '#FDE8EA', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8 },
+  kpiTrend: { fontFamily: FontFamily.sansBold, fontSize: 11, color: Colors.primary },
+  kpiValue: { fontFamily: FontFamily.displayBold, fontSize: 26, color: Colors.textPrimary, letterSpacing: -0.5 },
+  kpiLabel: { fontFamily: FontFamily.sansMedium, fontSize: 12, color: Colors.textSecondary },
+
+  targetGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', marginBottom: 24 },
+  targetBox: { width: '48%', backgroundColor: 'rgba(255,255,255,0.6)', borderRadius: 20, padding: 14, marginBottom: 14, borderWidth: 1, borderColor: 'rgba(255,255,255,0.8)', overflow: 'hidden' },
+  targetBoxLabel: { fontFamily: FontFamily.sansMedium, fontSize: 12, color: Colors.textSecondary, marginBottom: 4 },
+  targetBoxValue: { fontFamily: FontFamily.displayBold, fontSize: 22, color: Colors.textPrimary, marginBottom: 8, letterSpacing: -0.5 },
+  targetLineBg: { height: 6, backgroundColor: 'rgba(0,0,0,0.05)', borderRadius: 3, overflow: 'hidden', marginBottom: 6 },
+  targetLineFill: { height: '100%', borderRadius: 3 },
+  targetSubText: { fontFamily: FontFamily.sansMedium, fontSize: 11, color: Colors.textSecondary },
+
+  largeCard: { backgroundColor: 'rgba(255,255,255,0.6)', borderRadius: 24, padding: 20, marginBottom: 24, borderWidth: 1, borderColor: 'rgba(255,255,255,0.8)', overflow: 'hidden' },
+
+  emptyText: { fontFamily: FontFamily.sansMedium, fontSize: 14, color: Colors.textSecondary, textAlign: 'center', padding: 20 },
+  emptyCard: { backgroundColor: 'rgba(255,255,255,0.6)', borderRadius: 20, padding: 24, alignItems: 'center', justifyContent: 'center', marginBottom: 24 },
+
+  glassListRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.6)', borderRadius: 20, padding: 12, marginBottom: 12 },
+  dateBox: { width: 52, height: 52, backgroundColor: '#FFFFFF', borderRadius: 16, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 },
+  dateDay: { fontFamily: FontFamily.displayBold, fontSize: 18, color: Colors.primary },
+  dateMonth: { fontFamily: FontFamily.sansBold, fontSize: 11, color: Colors.textSecondary, textTransform: 'uppercase' },
+
+  listIconCircle: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(255,255,255,0.7)', alignItems: 'center', justifyContent: 'center', marginLeft: 10 },
+  listInfo: { flex: 1, marginLeft: 12 },
+  listTitle: { fontFamily: FontFamily.sansBold, fontSize: 15, color: Colors.textPrimary },
+  listSub: { fontFamily: FontFamily.sansMedium, fontSize: 12, color: Colors.textSecondary },
+  countPill: { backgroundColor: Colors.primaryLight, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
+  countPillText: { fontFamily: FontFamily.sansBold, fontSize: 11, color: Colors.primary },
+
+  dealerRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
+  rankCircle: { width: 30, height: 30, borderRadius: 15, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2, marginRight: 12 },
+  rankText: { fontFamily: FontFamily.sansBold, fontSize: 13, color: Colors.textSecondary },
+  dealerInfo: { flex: 1 },
+  dealerName: { fontFamily: FontFamily.sansBold, fontSize: 15, color: Colors.textPrimary, marginBottom: 2 },
+  dealerArea: { fontFamily: FontFamily.sansMedium, fontSize: 12, color: Colors.textSecondary },
+  dealerLineBg: { height: 6, backgroundColor: 'rgba(0,0,0,0.05)', borderRadius: 3, overflow: 'hidden', marginTop: 6 },
+  dealerLineFill: { height: '100%', borderRadius: 3, backgroundColor: Colors.primary },
+  dealerSalesWrap: { alignItems: 'flex-end', marginLeft: 12 },
+  dealerSalesValue: { fontFamily: FontFamily.displayBold, fontSize: 17, color: Colors.primary, letterSpacing: -0.5 },
+  dealerSalesSub: { fontFamily: FontFamily.sansMedium, fontSize: 11, color: Colors.textSecondary },
+
+  // MODAL STYLES
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center', padding: 24 },
+  modalContent: { backgroundColor: '#FFFFFF', width: '100%', maxWidth: 360, borderRadius: 24, padding: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.15, shadowRadius: 20, elevation: 10 },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, borderBottomWidth: 1, borderBottomColor: '#F3F4F6', paddingBottom: 12 },
+  modalTitle: { fontFamily: FontFamily.sansBold, fontSize: 16, color: Colors.textPrimary },
+  modalCloseBtn: { padding: 4 },
+  monthOptionRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12, paddingHorizontal: 12, borderRadius: 12, marginBottom: 6 },
+  monthOptionSelected: { backgroundColor: '#FDE8EA' },
+  monthOptionText: { fontFamily: FontFamily.sansMedium, fontSize: 14, color: Colors.textPrimary },
+  monthOptionTextSelected: { fontFamily: FontFamily.sansBold, color: Colors.primary },
+
+  // TE Target Switcher Pill
+  teTargetSwitcherBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#FDE8EA',
+    borderWidth: 1,
+    borderColor: '#F8B4BD',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 14,
+  },
+  teTargetSwitcherBtnText: {
+    fontFamily: FontFamily.sansBold,
+    fontSize: 12,
     color: '#800E20',
     fontWeight: '700',
   },
-  teamFilterScroll: {
-    gap: 8,
-    paddingRight: 10,
+
+  // Attend Meeting Modal Styles
+  attendModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    justifyContent: 'flex-end',
   },
-  teamSelectChip: {
+  attendModalCard: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: Platform.OS === 'ios' ? 36 : 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 16,
+    elevation: 20,
+  },
+  attendModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  attendBadgeRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FAF0F2',
-    paddingHorizontal: 13,
-    paddingVertical: 8,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: '#EEDCE1',
+    gap: 8,
+    marginBottom: 6,
   },
-  teamSelectChipActive: {
+  attendTypeBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+  },
+  attendTypeBadgeText: {
+    fontFamily: FontFamily.sansBold,
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  attendDateTag: {
+    fontFamily: FontFamily.sansMedium,
+    fontSize: 11,
+    color: '#6B7280',
+  },
+  attendModalTitle: {
+    fontFamily: FontFamily.displayBold,
+    fontSize: 18,
+    color: '#111827',
+    fontWeight: '800',
+  },
+  attendModalLocation: {
+    fontFamily: FontFamily.sansMedium,
+    fontSize: 12,
+    color: '#4B5563',
+    marginTop: 3,
+  },
+  modalDivider: {
+    height: 1,
+    backgroundColor: '#F3F4F6',
+    marginBottom: 16,
+  },
+  attendFieldGroup: {
+    marginBottom: 16,
+  },
+  attendFieldLabel: {
+    fontFamily: FontFamily.sansBold,
+    fontSize: 13,
+    color: '#1F2937',
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  attendFieldSubtext: {
+    fontFamily: FontFamily.sansRegular,
+    fontSize: 11,
+    color: '#6B7280',
+    marginBottom: 8,
+  },
+  teChipsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  teAttendChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+    backgroundColor: '#F9FAFB',
+    borderWidth: 1.5,
+    borderColor: '#E5E7EB',
+  },
+  teAttendChipActive: {
     backgroundColor: '#800E20',
     borderColor: '#800E20',
   },
-  teamSelectChipText: {
-    fontFamily: FontFamily.sansSemiBold,
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#800E20',
-  },
-  teamSelectChipTextActive: {
-    color: '#FFFFFF',
-  },
-
-  // 2. Big Hero Command Card
-  heroCardBig: {
-    backgroundColor: '#4A0611',
-    borderRadius: 28,
-    padding: 22,
-    marginBottom: 24,
-    shadowColor: '#4A0611',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.35,
-    shadowRadius: 20,
-    elevation: 10,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.15)',
-  },
-  heroTopRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  brandTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  heroBrandTE: {
-    fontFamily: FontFamily.displayBlack,
-    fontSize: 26,
-    fontWeight: '900',
-    color: '#FFFFFF',
-    letterSpacing: 1,
-  },
-  heroBrandCONNECT: {
-    fontFamily: FontFamily.displayBlack,
-    fontSize: 26,
-    fontWeight: '900',
-    color: '#E53935',
-    letterSpacing: 1,
-  },
-  heroTeamSubtitle: {
-    fontFamily: FontFamily.sansBold,
-    fontSize: 11,
-    fontWeight: '800',
-    color: 'rgba(255, 255, 255, 0.75)',
-    letterSpacing: 1.5,
-    marginTop: 3,
-  },
-  securityShieldCircle: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: 'rgba(255, 255, 255, 0.12)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.25)',
-  },
-  heroMainMetricBox: {
-    marginTop: 18,
-  },
-  heroMainMetricLabel: {
-    fontFamily: FontFamily.sansBold,
-    fontSize: 10,
-    fontWeight: '800',
-    color: 'rgba(255, 255, 255, 0.7)',
-    letterSpacing: 1,
-  },
-  heroMainMetricRow: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    gap: 8,
-    marginTop: 4,
-  },
-  heroMainMetricMT: {
-    fontFamily: FontFamily.displayBlack,
-    fontSize: 38,
-    fontWeight: '900',
-    color: '#FFFFFF',
-    letterSpacing: -1,
-  },
-  heroMainMetricUnit: {
-    fontFamily: FontFamily.displayBold,
-    fontSize: 20,
-    fontWeight: '800',
-    color: '#E53935',
-  },
-  heroBagsPill: {
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 10,
-    marginLeft: 'auto',
-  },
-  heroBagsPillText: {
+  teAttendChipText: {
     fontFamily: FontFamily.sansBold,
     fontSize: 12,
-    fontWeight: '800',
-    color: '#FFFFFF',
-  },
-  heroDivider: {
-    height: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
-    marginVertical: 16,
-  },
-  heroTargetsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  heroTargetItem: {
-    flex: 1,
-  },
-  heroTargetLabel: {
-    fontFamily: FontFamily.sansBold,
-    fontSize: 9,
-    fontWeight: '800',
-    color: 'rgba(255, 255, 255, 0.65)',
-    letterSpacing: 0.8,
-  },
-  heroTargetVal: {
-    fontFamily: FontFamily.displayBold,
-    fontSize: 16,
-    fontWeight: '900',
-    color: '#FFFFFF',
-    marginTop: 3,
-  },
-  heroTargetSub: {
-    fontFamily: FontFamily.sansMedium,
-    fontSize: 10,
+    color: '#374151',
     fontWeight: '600',
-    color: 'rgba(255, 255, 255, 0.75)',
   },
-  heroTargetDivider: {
-    width: 1,
-    height: 28,
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
-    marginHorizontal: 12,
+  teAttendChipTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '700',
   },
-
-  // 3. Date Bar
-  dateBarRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 14,
-  },
-  sectionHeaderTitle: {
-    fontFamily: FontFamily.displayBold,
-    fontSize: 18,
-    fontWeight: '900',
-    color: '#1F0B10',
-    letterSpacing: -0.3,
-  },
-  dateBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  attendInput: {
+    borderWidth: 1.5,
+    borderColor: '#E5E7EB',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    fontSize: 15,
+    color: '#111827',
     backgroundColor: '#FFFFFF',
+    fontFamily: FontFamily.sansRegular,
+  },
+  quickCountRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 8,
+  },
+  quickCountBtn: {
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 14,
-    borderWidth: 1.5,
-    borderColor: '#EEDCE1',
-  },
-  dateBadgeText: {
-    fontFamily: FontFamily.sansSemiBold,
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#554246',
-  },
-
-  // 4. Big 2x2 Metrics Grid
-  bigMetricsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-    marginBottom: 24,
-  },
-  bigMetricCard: {
-    flexBasis: '47%',
-    flexGrow: 1,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 24,
-    padding: 18,
-    borderWidth: 1.5,
-    borderColor: '#EEDCE1',
-    shadowColor: 'rgba(78, 5, 17, 0.06)',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 1,
-    shadowRadius: 12,
-    elevation: 3,
-  },
-  cardHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  largeIconBox: {
-    width: 48,
-    height: 48,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  trendPill: {
-    backgroundColor: '#FBE8EC',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 10,
-  },
-  trendPillText: {
-    fontFamily: FontFamily.sansBold,
-    fontSize: 10,
-    fontWeight: '800',
-    color: '#800E20',
-  },
-  bigMetricNumber: {
-    fontFamily: FontFamily.displayBlack,
-    fontSize: 32,
-    fontWeight: '900',
-    color: '#1F0B10',
-    letterSpacing: -0.5,
-  },
-  bigMetricLabel: {
-    fontFamily: FontFamily.sansBold,
-    fontSize: 12,
-    color: '#8A7277',
-    fontWeight: '700',
-    marginTop: 4,
-  },
-
-  // 5. Quick Actions
-  sectionHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  seeAllText: {
-    fontFamily: FontFamily.sansBold,
-    fontSize: 13,
-    fontWeight: '800',
-    color: '#800E20',
-  },
-  quickActionCardsCol: {
-    gap: 12,
-    marginBottom: 24,
-  },
-  actionBigButton: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 24,
-    padding: 18,
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1.5,
-    borderColor: '#EEDCE1',
-    shadowColor: 'rgba(78, 5, 17, 0.06)',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 1,
-    shadowRadius: 10,
-    elevation: 3,
-  },
-  actionIconContainer: {
-    width: 52,
-    height: 52,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 14,
-    shadowColor: '#4A0611',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 6,
-  },
-  actionTextContainer: {
-    flex: 1,
-  },
-  actionTitleBig: {
-    fontFamily: FontFamily.displayBold,
-    fontSize: 16,
-    fontWeight: '800',
-    color: '#1F0B10',
-  },
-  actionSubtitle: {
-    fontFamily: FontFamily.sansMedium,
-    fontSize: 12,
-    color: '#8A7277',
-    fontWeight: '500',
-    marginTop: 2,
-  },
-  actionChevronCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#FAF0F2',
-    alignItems: 'center',
-    justifyContent: 'center',
+    borderRadius: 8,
+    backgroundColor: '#FDE8EA',
     borderWidth: 1,
-    borderColor: '#EEDCE1',
+    borderColor: '#F8B4BD',
   },
-
-  // 6. Schedule List & Cards
-  emptyStateCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 24,
-    padding: 24,
-    alignItems: 'center',
-    borderWidth: 1.5,
-    borderColor: '#EEDCE1',
-    marginBottom: 24,
-  },
-  emptyIconCircle: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: '#FBE8EC',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 12,
-  },
-  emptyStateTitle: {
-    fontFamily: FontFamily.displayBold,
-    fontSize: 15,
-    fontWeight: '800',
-    color: '#1F0B10',
-    marginBottom: 4,
-  },
-  emptyStateSub: {
-    fontFamily: FontFamily.sansRegular,
-    fontSize: 12,
-    color: '#8A7277',
-    textAlign: 'center',
-  },
-  scheduleListCol: {
-    gap: 12,
-    marginBottom: 24,
-  },
-  realScheduleCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 22,
-    padding: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1.5,
-    borderColor: '#EEDCE1',
-    shadowColor: 'rgba(78, 5, 17, 0.06)',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 1,
-    shadowRadius: 10,
-    elevation: 3,
-  },
-  realScheduleIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 14,
-  },
-  rowBetween: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  scheduleDealerTitle: {
-    fontFamily: FontFamily.displayBold,
-    fontSize: 16,
-    fontWeight: '800',
-    color: '#1F0B10',
-  },
-  statusBadgeSmall: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 10,
-  },
-  statusUpc: {
-    backgroundColor: '#FBE8EC',
-  },
-  statusComp: {
-    backgroundColor: '#DCFCE7',
-  },
-  statusCanc: {
-    backgroundColor: '#F3F4F6',
-  },
-  statusBadgeText: {
+  quickCountBtnText: {
     fontFamily: FontFamily.sansBold,
-    fontSize: 11,
-    fontWeight: '800',
+    fontSize: 12,
+    color: '#800E20',
+    fontWeight: '700',
   },
-  scheduleMetaText: {
+  attendModalActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginTop: 16,
+  },
+  attendCancelBtn: {
+    flex: 1,
+    paddingVertical: 13,
+    borderRadius: 14,
+    backgroundColor: '#F3F4F6',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  attendCancelBtnText: {
     fontFamily: FontFamily.sansMedium,
-    fontSize: 13,
-    color: '#6B4E55',
-    marginTop: 4,
+    fontSize: 14,
+    color: '#4B5563',
     fontWeight: '600',
   },
-
-  // 7. Leaderboard
-  leaderboardContainer: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 24,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderWidth: 1.5,
-    borderColor: '#EEDCE1',
-    marginBottom: 24,
-    shadowColor: 'rgba(78, 5, 17, 0.06)',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 1,
-    shadowRadius: 10,
-    elevation: 3,
-  },
-  leaderRowItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F7EFF1',
-  },
-  rankBadgeCircle: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+  attendConfirmBtn: {
+    flex: 2,
+    paddingVertical: 13,
+    borderRadius: 14,
+    backgroundColor: '#800E20',
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
+    shadowColor: '#800E20',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 4,
   },
-  rankGold: { backgroundColor: '#FBBF24' },
-  rankSilver: { backgroundColor: '#CBD5E1' },
-  rankBronze: { backgroundColor: '#FDBA74' },
-  rankBadgeText: {
-    fontFamily: FontFamily.displayBlack,
+  attendConfirmBtnText: {
+    fontFamily: FontFamily.sansBold,
     fontSize: 14,
-    fontWeight: '900',
-    color: '#1F0B10',
-  },
-  leaderDealerName: {
-    fontFamily: FontFamily.displayBold,
-    fontSize: 15,
-    fontWeight: '800',
-    color: '#1F0B10',
-  },
-  leaderDealerArea: {
-    fontFamily: FontFamily.sansMedium,
-    fontSize: 12,
-    color: '#8A7277',
-    marginTop: 2,
-  },
-  leaderDealerMT: {
-    fontFamily: FontFamily.displayBold,
-    fontSize: 16,
-    fontWeight: '900',
-    color: '#800E20',
-  },
-  leaderDealerBags: {
-    fontFamily: FontFamily.sansRegular,
-    fontSize: 11,
-    color: '#8A7277',
+    color: '#FFFFFF',
+    fontWeight: '700',
   },
 });

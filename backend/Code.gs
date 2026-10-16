@@ -28,11 +28,11 @@ const SHEETS = {
 // ── COLUMN HEADERS ────────────────────────────────────────────
 const HEADERS = {
   USERS: ['user_id','login_id','password_hash','name','role','team','district','territory','phone','active','photo_url','created_at'],
-  DEALERS: ['dealer_id','dealer_name','owner_name','phone','address','area','latitude','longitude','assigned_te','active','qr_id','qr_token','public_slab_link','created_at'],
+  DEALERS: ['dealer_id','dealer_name','owner_name','phone','address','area','latitude','longitude','assigned_te','active','qr_id','qr_token','public_slab_link','created_at','sap_code'],
   CONTRACTORS: ['contractor_id','contractor_name','mobile','area','assigned_te','active','created_at'],
   SLABS: ['slab_id','slab_date','dealer_id','dealer_name','contractor_name','customer_name','expected_cement','latitude','longitude','assigned_te','status','remark','source','created_by','created_at','updated_at'],
   SALES: ['sale_id','sale_date','dealer_id','dealer_name','product','quantity_bags','assigned_te','source','created_by','created_at','updated_at'],
-  ACTIVE_TRACKER: ['tracker_id','date','month','te','total_contractors','active_contractors','inactive_contractors','punched_quantity_bags','updated_by','updated_at'],
+  ACTIVE_TRACKER: ['tracker_id','date','month','te','total_contractors','active_contractors','inactive_contractors','punched_quantity_bags','f2r_punch_bags','gold_punch_bags','updated_by','updated_at'],
   MEETINGS: ['meeting_id','meeting_date','te','meeting_type','meeting_name','location','purpose','people_count','status','outcome','next_followup','expense_amount','source','created_by','created_at','updated_at'],
   TARGETS: ['target_id','month','year','te','active_target','customer_meeting_target','contractor_meeting_target'],
   SETTINGS: ['setting','value'],
@@ -378,6 +378,7 @@ function handleGetDealerSalesSummary(params) {
     dealerMap[d.dealer_id] = {
       dealer_id: d.dealer_id,
       dealer_name: d.dealer_name,
+      sap_code: d.sap_code || '',
       area: d.area,
       assigned_te: d.assigned_te,
       active: d.active,
@@ -394,6 +395,7 @@ function handleGetDealerSalesSummary(params) {
       dealerMap[did] = {
         dealer_id: did,
         dealer_name: sale.dealer_name,
+        sap_code: '',
         area: '',
         assigned_te: sale.assigned_te,
         active: true,
@@ -649,8 +651,142 @@ function handleCreateSale(data) {
   return success(saleObj, 'Sale added successfully.');
 }
 
+function handleCreateBatchSales(data) {
+  const salesList = data.sales || [];
+  if (!salesList || !salesList.length) return error('No sales data provided.');
+
+  const now = new Date().toISOString();
+  const createdBy = data.created_by || 'OCR_SCAN';
+
+  // 1. Fetch dealers and index by SAP code and dealer_name
+  const dealersSheet = getSheet(SHEETS.DEALERS);
+  const dealers = sheetToObjects(dealersSheet);
+  const dealerMapBySap = {};
+  const dealerMapByName = {};
+
+  dealers.forEach(d => {
+    if (d.sap_code) dealerMapBySap[String(d.sap_code).trim()] = d;
+    if (d.dealer_name) dealerMapByName[String(d.dealer_name).toLowerCase().trim()] = d;
+  });
+
+  // Ensure sap_code header exists in DEALERS sheet
+  const dealerLastCol = Math.max(1, dealersSheet.getLastColumn());
+  const dealerHeaders = dealersSheet.getRange(1, 1, 1, dealerLastCol).getValues()[0].map(h => String(h).trim());
+  if (!dealerHeaders.includes('sap_code')) {
+    dealersSheet.getRange(1, dealerHeaders.length + 1).setValue('sap_code');
+    dealerHeaders.push('sap_code');
+  }
+
+  let newDealersCount = 0;
+  const newDealerRowsToAppend = [];
+  const salesSheet = getSheet(SHEETS.SALES);
+  const salesLastCol = Math.max(1, salesSheet.getLastColumn());
+  const salesHeaders = salesSheet.getRange(1, 1, 1, salesLastCol).getValues()[0].map(h => String(h).trim());
+  const salesRowsToAppend = [];
+
+  salesList.forEach(item => {
+    const qty = Number(item.quantity_bags) || 0;
+    if (qty <= 0) return; // skip zero quantity items
+
+    const sapCode = item.sap_code ? String(item.sap_code).trim() : '';
+    const dealerName = item.dealer_name ? String(item.dealer_name).trim() : (sapCode ? 'Dealer ' + sapCode : 'Counter Sale');
+
+    let dealerId = item.dealer_id || '';
+    let assignedTe = item.assigned_te || '';
+
+    // Check if dealer exists
+    let existingDealer = (sapCode && dealerMapBySap[sapCode]) || (dealerName && dealerMapByName[dealerName.toLowerCase()]);
+    if (existingDealer) {
+      dealerId = existingDealer.dealer_id;
+      if (!assignedTe && existingDealer.assigned_te) assignedTe = existingDealer.assigned_te;
+    } else {
+      // Auto-create missing dealer so it's registered with SAP code
+      dealerId = generateId('DLR');
+      const token = generateToken();
+      const newDealerObj = {
+        dealer_id: dealerId,
+        dealer_name: dealerName,
+        owner_name: '',
+        phone: '',
+        address: '',
+        area: 'Jajpur Territory',
+        sap_code: sapCode,
+        latitude: '',
+        longitude: '',
+        assigned_te: assignedTe || '',
+        active: true,
+        qr_id: generateId('QR'),
+        qr_token: token,
+        public_slab_link: '',
+        created_at: now,
+      };
+
+      const dlrRow = dealerHeaders.map(h => newDealerObj[h] !== undefined ? newDealerObj[h] : '');
+      newDealerRowsToAppend.push(dlrRow);
+
+      dealerMapBySap[sapCode] = newDealerObj;
+      dealerMapByName[dealerName.toLowerCase()] = newDealerObj;
+      newDealersCount++;
+    }
+
+    const sale_id = generateId('SAL');
+    const saleDate = item.sale_date || now.substring(0, 10);
+    const product = item.product || 'ACC F2R';
+
+    const saleObj = {
+      sale_id: sale_id,
+      sale_date: saleDate,
+      dealer_id: dealerId,
+      dealer_name: dealerName,
+      product: product,
+      quantity_bags: qty,
+      assigned_te: assignedTe || '',
+      source: 'OCR_SCAN',
+      created_by: createdBy,
+      created_at: now,
+      updated_at: now,
+    };
+
+    const row = salesHeaders.map(h => saleObj[h] !== undefined ? saleObj[h] : '');
+    salesRowsToAppend.push(row);
+  });
+
+  // Batch append new dealers in 1 operation
+  if (newDealerRowsToAppend.length > 0) {
+    const lastDlrRow = dealersSheet.getLastRow();
+    const neededRows = (lastDlrRow + newDealerRowsToAppend.length) - dealersSheet.getMaxRows();
+    if (neededRows > 0) {
+      dealersSheet.insertRowsAfter(dealersSheet.getMaxRows(), neededRows + 20);
+    }
+    dealersSheet.getRange(lastDlrRow + 1, 1, newDealerRowsToAppend.length, dealerHeaders.length).setValues(newDealerRowsToAppend);
+  }
+
+  // Batch append sales in 1 operation
+  if (salesRowsToAppend.length > 0) {
+    const lastRow = salesSheet.getLastRow();
+    const neededRows = (lastRow + salesRowsToAppend.length) - salesSheet.getMaxRows();
+    if (neededRows > 0) {
+      salesSheet.insertRowsAfter(salesSheet.getMaxRows(), neededRows + 50);
+    }
+    salesSheet.getRange(lastRow + 1, 1, salesRowsToAppend.length, salesHeaders.length).setValues(salesRowsToAppend);
+  }
+
+  logActivity(createdBy, createdBy, 'CREATE_BATCH_SALES', 'SALES', generateId('BATCH'), 'Batch added ' + salesRowsToAppend.length + ' sales via OCR scan');
+
+  return success({
+    count: salesRowsToAppend.length,
+    dealersAdded: newDealersCount
+  }, salesRowsToAppend.length + ' sales recorded successfully from image scan.');
+}
+
 function handleAddPunch(data) {
-  if (!data.date || !data.te || !data.punch_quantity_bags) return error('Date, TE, and punch quantity are required.');
+  const f2rBags = Number(data.f2r_bags) || 0;
+  const goldBags = Number(data.gold_bags) || 0;
+  const punchQty = (Number(data.punch_quantity_bags) || 0) || (f2rBags + goldBags);
+
+  if (!data.date || !data.te || (!punchQty && data.total_contractors === undefined && data.active_contractors === undefined)) {
+    return error('Date, TE, and punch quantity or contractor counts are required.');
+  }
 
   const month = String(data.date).substring(0, 7);
   const sheet = getSheet(SHEETS.ACTIVE_TRACKER);
@@ -666,31 +802,53 @@ function handleAddPunch(data) {
 
   if (existingIdx >= 0) {
     const existing = trackers[existingIdx];
-    const newPunch = (Number(existing.punched_quantity_bags) || 0) + Number(data.punch_quantity_bags);
+    const newPunch = (Number(existing.punched_quantity_bags) || 0) + punchQty;
+    const newF2r = (Number(existing.f2r_punch_bags) || 0) + f2rBags;
+    const newGold = (Number(existing.gold_punch_bags) || 0) + goldBags;
+
+    const totalC = (data.total_contractors !== undefined && data.total_contractors !== '')
+      ? Number(data.total_contractors)
+      : (Number(existing.total_contractors) || 0);
+
+    const activeC = (data.active_contractors !== undefined && data.active_contractors !== '')
+      ? Number(data.active_contractors)
+      : (Number(existing.active_contractors) || 0);
+
+    const inactiveC = Math.max(0, totalC - activeC);
+
     const updates = {
       punched_quantity_bags: newPunch,
+      f2r_punch_bags: newF2r,
+      gold_punch_bags: newGold,
+      total_contractors: totalC,
+      active_contractors: activeC,
+      inactive_contractors: inactiveC,
       updated_by: data.updated_by || data.te,
       updated_at: now,
     };
     updateRowById(SHEETS.ACTIVE_TRACKER, 'tracker_id', existing.tracker_id, updates, HEADERS.ACTIVE_TRACKER);
-    logActivity(data.updated_by, data.updated_by, 'ADD_PUNCH', 'ACTIVE_TRACKER', existing.tracker_id, 'Added ' + data.punch_quantity_bags + ' bags punch for ' + data.te);
+    logActivity(data.updated_by, data.updated_by, 'ADD_PUNCH', 'ACTIVE_TRACKER', existing.tracker_id, 'Added ' + punchQty + ' bags punch for ' + data.te);
     return success({ ...existing, ...updates }, 'Punch recorded.');
   } else {
     const tracker_id = generateId('TRK');
+    const totalC = Number(data.total_contractors) || 0;
+    const activeC = Number(data.active_contractors) || 0;
     const trackerObj = {
       tracker_id,
       date: data.date,
       month,
       te: data.te,
-      total_contractors: data.total_contractors || 0,
-      active_contractors: data.active_contractors || 0,
-      inactive_contractors: 0,
-      punched_quantity_bags: Number(data.punch_quantity_bags),
+      total_contractors: totalC,
+      active_contractors: activeC,
+      inactive_contractors: Math.max(0, totalC - activeC),
+      punched_quantity_bags: punchQty,
+      f2r_punch_bags: f2rBags,
+      gold_punch_bags: goldBags,
       updated_by: data.updated_by || data.te,
       updated_at: now,
     };
     appendRow(SHEETS.ACTIVE_TRACKER, trackerObj, HEADERS.ACTIVE_TRACKER);
-    logActivity(data.updated_by, data.updated_by, 'ADD_PUNCH', 'ACTIVE_TRACKER', tracker_id, 'Added ' + data.punch_quantity_bags + ' bags punch for ' + data.te);
+    logActivity(data.updated_by, data.updated_by, 'ADD_PUNCH', 'ACTIVE_TRACKER', tracker_id, 'Added ' + punchQty + ' bags punch for ' + data.te);
     return success(trackerObj, 'Punch recorded.');
   }
 }
@@ -814,6 +972,7 @@ function handleAddDealer(data) {
     phone: data.phone || '',
     address: data.address || '',
     area: data.area || '',
+    sap_code: data.sap_code || '',
     latitude: data.latitude || '',
     longitude: data.longitude || '',
     assigned_te: data.assigned_te || '',
@@ -974,6 +1133,7 @@ function doPost(e) {
       case 'createSlab': return handleCreateSlab(data);
       case 'updateSlab': return handleUpdateSlab(data);
       case 'createSale': return handleCreateSale(data);
+      case 'createBatchSales': return handleCreateBatchSales(data);
       case 'createMeeting': return handleCreateMeeting(data);
       case 'updateMeeting': return handleUpdateMeeting(data);
       case 'addPunch': return handleAddPunch(data);
