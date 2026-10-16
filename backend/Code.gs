@@ -325,11 +325,16 @@ function handleGetDealerByToken(params) {
   const dealers = sheetToObjects(sheet);
   const dealer = dealers.find(d => String(d.dealer_id) === String(dealer_id) && String(d.qr_token) === String(token));
   if (!dealer) return error('Invalid dealer link.');
-  // Only return public-safe info
+  // Return complete dealer info for auto-hatch in QR page
   return success({
     dealer_id: dealer.dealer_id,
     dealer_name: dealer.dealer_name,
-    area: dealer.area,
+    owner_name: dealer.owner_name || '',
+    phone: dealer.phone || '',
+    area: dealer.area || '',
+    address: dealer.address || '',
+    latitude: dealer.latitude || '',
+    longitude: dealer.longitude || '',
   });
 }
 
@@ -998,27 +1003,41 @@ function handlePublicSlabSubmit(data) {
 
   const slab_id = generateId('SLB');
   const now = new Date().toISOString();
+
+  const mobileStr = data.mobile ? String(data.mobile).trim() : '';
+  let contractorName = data.contractor_name ? String(data.contractor_name).trim() : '';
+  if (!contractorName && mobileStr) {
+    contractorName = 'Mistri (' + mobileStr + ')';
+  } else if (contractorName && mobileStr && !contractorName.includes(mobileStr)) {
+    contractorName += ' (' + mobileStr + ')';
+  }
+
+  let finalRemark = data.remark || '';
+  if (mobileStr && !finalRemark.includes(mobileStr)) {
+    finalRemark = 'Mobile: ' + mobileStr + (finalRemark ? ' | ' + finalRemark : '');
+  }
+
   const slabObj = {
     slab_id,
     slab_date: data.slab_date,
     dealer_id: dealer.dealer_id,
     dealer_name: dealer.dealer_name,
-    contractor_name: data.contractor_name || '',
+    contractor_name: contractorName,
     customer_name: data.customer_name || '',
     expected_cement: data.expected_cement || '',
-    latitude: data.latitude || '',
-    longitude: data.longitude || '',
+    latitude: data.latitude || dealer.latitude || '',
+    longitude: data.longitude || dealer.longitude || '',
     assigned_te: dealer.assigned_te || '',
     status: 'UPCOMING',
-    remark: data.remark || '',
+    remark: finalRemark,
     source: 'DEALER_QR',
-    created_by: 'DEALER_QR:' + dealer.dealer_name,
+    created_by: 'DEALER_QR:' + dealer.dealer_name + (mobileStr ? ' [' + mobileStr + ']' : ''),
     created_at: now,
     updated_at: now,
   };
   appendRow(SHEETS.SLABS, slabObj, HEADERS.SLABS);
-  logActivity('', dealer.dealer_name, 'PUBLIC_SLAB_SUBMIT', 'SLABS', slab_id, 'Dealer QR submission');
-  return success(null, 'Slab submitted successfully! Your team will be notified.');
+  logActivity('', dealer.dealer_name, 'PUBLIC_SLAB_SUBMIT', 'SLABS', slab_id, 'Dealer QR submission - ' + (data.expected_cement || 'Slab') + ' for ' + (contractorName || mobileStr));
+  return success(slabObj, 'Slab submitted successfully! Your team will be notified.');
 }
 
 function handlePublicMeetingSubmit(data) {
@@ -1162,93 +1181,265 @@ function serveHtml(html) {
 
 function handlePublicPageSlab(params) {
   const { dealer_id, token } = params;
-  let dealerName = 'Your Store';
+  let dealerName = 'Authorized Counter';
+  let dealerArea = 'Jajpur Territory';
 
   if (dealer_id && token) {
     try {
       const dealers = sheetToObjects(getSheet(SHEETS.DEALERS));
       const dealer = dealers.find(d => String(d.dealer_id) === String(dealer_id) && String(d.qr_token) === String(token));
-      if (dealer) dealerName = dealer.dealer_name;
-      else return serveHtml(publicErrorPage('Invalid or expired dealer link. Please contact your TE.'));
+      if (dealer) {
+        dealerName = dealer.dealer_name || dealerName;
+        dealerArea = dealer.area || dealer.address || dealerArea;
+      } else {
+        return serveHtml(publicErrorPage('Invalid or expired dealer link. Please contact your TE.'));
+      }
     } catch (e) {}
   }
 
   const scriptUrl = ScriptApp.getService().getUrl();
-  const html = '<!DOCTYPE html>\n' +
-'<html lang="en">\n' +
-'<head>\n' +
-'<meta charset="UTF-8">\n' +
-'<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">\n' +
-'<title>TE CONNECT - Add Slab</title>\n' +
-'<style>\n' +
-'*{box-sizing:border-box;margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',sans-serif}\n' +
-'body{background:#F6F7F9;min-height:100vh;padding:20px 16px 40px}\n' +
-'.header{text-align:center;margin-bottom:24px}\n' +
-'.logo{font-size:22px;font-weight:800;color:#C91F2B;letter-spacing:1px}\n' +
-'.subtitle{font-size:13px;color:#6B7280;margin-top:4px}\n' +
-'.card{background:#fff;border-radius:16px;padding:20px;box-shadow:0 2px 12px rgba(0,0,0,0.08)}\n' +
-'.dealer-badge{background:#FDE8EA;border-radius:10px;padding:10px 14px;margin-bottom:20px;text-align:center}\n' +
-'.dealer-badge .label{font-size:12px;color:#6B7280;font-weight:500}\n' +
-'.dealer-badge .name{font-size:18px;font-weight:700;color:#C91F2B;margin-top:2px}\n' +
-'.form-group{margin-bottom:16px}\n' +
-'label{display:block;font-size:13px;font-weight:600;color:#172033;margin-bottom:6px}\n' +
-'input,select,textarea{width:100%;border:1.5px solid #E5E7EB;border-radius:10px;padding:12px 14px;font-size:15px;color:#172033;background:#fff;outline:none;transition:border-color 0.2s}\n' +
-'input:focus,select:focus,textarea:focus{border-color:#C91F2B}\n' +
-'.optional{color:#9CA3AF;font-weight:400;font-size:11px;margin-left:4px}\n' +
-'.btn{width:100%;background:#C91F2B;color:#fff;border:none;border-radius:12px;padding:16px;font-size:17px;font-weight:700;cursor:pointer;margin-top:8px;letter-spacing:0.3px}\n' +
-'.btn:active{background:#A91420}\n' +
-'.success{background:#DCFCE7;border:1.5px solid #16A34A;border-radius:12px;padding:16px;text-align:center;color:#166534;font-weight:600;display:none}\n' +
-'.error-msg{background:#FEE2E2;border:1.5px solid #DC2626;border-radius:12px;padding:12px;text-align:center;color:#991B1B;font-size:14px;display:none;margin-top:8px}\n' +
-'<\/style>\n' +
-'<\/head>\n' +
-'<body>\n' +
-'<div class="header">\n' +
-'  <div class="logo">TE CONNECT</div>\n' +
-'  <div class="subtitle">Slab Casting Request</div>\n' +
-'<\/div>\n' +
-'<div class="card">\n' +
-'  <div class="dealer-badge">\n' +
-'    <div class="label">Dealer<\/div>\n' +
-'    <div class="name">' + dealerName + '<\/div>\n' +
-'  <\/div>\n' +
-'  <div id="successMsg" class="success">Slab submitted successfully!<br>Your team will be notified.<\/div>\n' +
-'  <div id="errorMsg" class="error-msg"><\/div>\n' +
-'  <form id="slabForm">\n' +
-'    <div class="form-group"><label>Slab Date *<\/label><input type="date" id="slab_date" required><\/div>\n' +
-'    <div class="form-group"><label>Contractor Name<\/label><input type="text" id="contractor_name" placeholder="Contractor name"><\/div>\n' +
-'    <div class="form-group"><label>Customer / Site <span class="optional">(Optional)<\/span><\/label><input type="text" id="customer_name" placeholder="Customer or site name"><\/div>\n' +
-'    <div class="form-group"><label>Expected Cement<\/label><input type="text" id="expected_cement" placeholder="e.g. 50 bags"><\/div>\n' +
-'    <div class="form-group"><label>Remark <span class="optional">(Optional)<\/span><\/label><textarea id="remark" rows="2" placeholder="Any notes..."><\/textarea><\/div>\n' +
-'    <button type="submit" class="btn" id="submitBtn">Submit Slab<\/button>\n' +
-'  <\/form>\n' +
-'<\/div>\n' +
-'<script>\n' +
-'document.getElementById(\'slabForm\').addEventListener(\'submit\', async function(e) {\n' +
-'  e.preventDefault();\n' +
-'  const btn = document.getElementById(\'submitBtn\');\n' +
-'  btn.textContent = \'Submitting...\';\n' +
-'  btn.disabled = true;\n' +
-'  document.getElementById(\'errorMsg\').style.display = \'none\';\n' +
-'  const payload = {\n' +
-'    action: \'publicSlabSubmit\',\n' +
-'    dealer_id: \'' + dealer_id + '\',\n' +
-'    token: \'' + token + '\',\n' +
-'    slab_date: document.getElementById(\'slab_date\').value,\n' +
-'    contractor_name: document.getElementById(\'contractor_name\').value,\n' +
-'    customer_name: document.getElementById(\'customer_name\').value,\n' +
-'    expected_cement: document.getElementById(\'expected_cement\').value,\n' +
-'    remark: document.getElementById(\'remark\').value,\n' +
-'  };\n' +
-'  try {\n' +
-'    const res = await fetch(\'' + scriptUrl + '\', {method:\'POST\',headers:{\'Content-Type\':\'application/json\'},body:JSON.stringify(payload)});\n' +
-'    const json = await res.json();\n' +
-'    if(json.success){document.getElementById(\'slabForm\').style.display=\'none\';document.getElementById(\'successMsg\').style.display=\'block\';}\n' +
-'    else{document.getElementById(\'errorMsg\').textContent=json.message||\'Error\';document.getElementById(\'errorMsg\').style.display=\'block\';btn.textContent=\'Submit Slab\';btn.disabled=false;}\n' +
-'  }catch(err){document.getElementById(\'errorMsg\').textContent=\'Network error. Try again.\';document.getElementById(\'errorMsg\').style.display=\'block\';btn.textContent=\'Submit Slab\';btn.disabled=false;}\n' +
-'});\n' +
-'document.getElementById(\'slab_date\').value=new Date().toISOString().split(\'T\')[0];\n' +
-'<\/script>\n' +
-'<\/body><\/html>';
+  const html = '<!DOCTYPE html>' +
+'<html lang="hi">' +
+'<head>' +
+'<meta charset="UTF-8">' +
+'<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">' +
+'<title>TE CONNECT - स्लैब ढलाई बुकिंग</title>' +
+'<style>' +
+'*{box-sizing:border-box;margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Roboto,sans-serif}' +
+'body{background:#F3F4F6;color:#1F2937;min-height:100vh;padding:14px}' +
+'.header{text-align:center;padding:16px 10px 14px;background:#fff;border-radius:16px;margin-bottom:14px;border:1px solid #E5E7EB}' +
+'.logo{font-size:22px;font-weight:900;letter-spacing:1px;color:#111827}' +
+'.logo span{color:#C91F2B}' +
+'.subtitle{font-size:14px;font-weight:700;color:#374151;margin-top:4px}' +
+'.sub-desc{font-size:12px;color:#6B7280;margin-top:2px}' +
+'.dealer-card{background:#fff;border:1.5px solid #DCFCE7;border-radius:16px;padding:16px;margin-bottom:14px;box-shadow:0 2px 8px rgba(22,163,74,0.08)}' +
+'.verified{display:inline-flex;align-items:center;gap:4px;background:#DCFCE7;color:#15803D;font-size:11px;font-weight:800;padding:4px 8px;border-radius:6px;text-transform:uppercase;margin-bottom:8px}' +
+'.dealer-name{font-size:20px;font-weight:800;color:#111827}' +
+'.dealer-area{font-size:13px;color:#4B5563;margin-top:4px}' +
+'.card{background:#fff;border-radius:16px;padding:16px;margin-bottom:14px;border:1px solid #E5E7EB}' +
+'.card-highlight{border:2px solid #C91F2B;background:#fff}' +
+'.step-title{display:flex;align-items:center;gap:10px;margin-bottom:12px}' +
+'.step-num{width:26px;height:26px;background:#C91F2B;color:#fff;border-radius:13px;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800}' +
+'.step-num-gray{background:#E5E7EB;color:#374151}' +
+'.step-text{font-size:15px;font-weight:800;color:#111827}' +
+'.step-text span{color:#DC2626;font-size:12px}' +
+'.phone-box{display:flex;align-items:center;border:2px solid #C91F2B;border-radius:12px;background:#FEF2F2;overflow:hidden}' +
+'.code{background:#FDE8EA;color:#991B1B;font-weight:800;padding:14px 12px;font-size:15px;border-right:1.5px solid #FCA5A5}' +
+'.phone-input{flex:1;border:none;background:transparent;padding:14px;font-size:18px;font-weight:800;color:#111827;outline:none}' +
+'.hint{font-size:11px;color:#6B7280;margin-top:8px}' +
+'.chips{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:10px}' +
+'.chip{border:1.5px solid #E5E7EB;border-radius:10px;background:#F9FAFB;padding:10px 4px;text-align:center;cursor:pointer}' +
+'.chip.active{border-color:#C91F2B;background:#FDE8EA;color:#C91F2B}' +
+'.chip-val{font-size:16px;font-weight:800;display:block}' +
+'.chip-lbl{font-size:10px;font-weight:600;color:#6B7280}' +
+'.chip.active .chip-lbl{color:#C91F2B}' +
+'.custom-row{display:flex;align-items:center;gap:8px;padding-top:10px;border-top:1px solid #F3F4F6}' +
+'.custom-input{width:90px;border:1.5px solid #D1D5DB;border-radius:8px;padding:8px 10px;font-size:15px;font-weight:700;text-align:center;outline:none}' +
+'.date-chips{display:flex;gap:8px;margin-bottom:8px}' +
+'.date-chip{flex:1;border:1.5px solid #E5E7EB;border-radius:10px;background:#F9FAFB;padding:10px 6px;text-align:center;cursor:pointer}' +
+'.date-chip.active{border-color:#C91F2B;background:#FDE8EA;color:#C91F2B}' +
+'.date-chip .lbl{font-size:13px;font-weight:700;display:block}' +
+'.date-chip .sub{font-size:11px;color:#6B7280;margin-top:2px}' +
+'.date-chip.active .sub{color:#C91F2B}' +
+'.input-group{margin-bottom:12px}' +
+'.input-label{display:block;font-size:13px;font-weight:600;color:#374151;margin-bottom:6px}' +
+'.text-input{width:100%;border:1.5px solid #E5E7EB;border-radius:10px;padding:12px 14px;font-size:15px;outline:none;background:#fff}' +
+'.gps-btn{width:100%;border:1.5px solid #C91F2B;background:#FEF2F2;color:#C91F2B;border-radius:10px;padding:12px;font-size:14px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px}' +
+'.gps-btn.saved{border-color:#16A34A;background:#DCFCE7;color:#16A34A}' +
+'.btn-submit{width:100%;background:#C91F2B;color:#fff;border:none;border-radius:14px;padding:16px;cursor:pointer;margin-top:8px}' +
+'.btn-submit .t1{font-size:18px;font-weight:900;display:block}' +
+'.btn-submit .t2{font-size:12px;color:rgba(255,255,255,0.85);margin-top:2px;display:block}' +
+'.success-box{background:#fff;border:2px solid #16A34A;border-radius:16px;padding:24px 18px;text-align:center;display:none}' +
+'.success-icon{width:70px;height:70px;background:#DCFCE7;color:#15803D;border-radius:35px;display:inline-flex;align-items:center;justify-content:center;font-size:36px;margin-bottom:14px}' +
+'.success-h{font-size:22px;font-weight:900;color:#15803D;margin-bottom:8px}' +
+'.success-p{font-size:14px;color:#4B5563;line-height:1.5;margin-bottom:16px}' +
+'.summary-card{background:#F9FAFB;border-radius:12px;padding:14px;text-align:left;font-size:13px;margin-bottom:16px}' +
+'.summary-row{display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #E5E7EB}' +
+'.summary-row:last-child{border:none}' +
+'.summary-val{font-weight:700;color:#111827}' +
+'.btn-again{background:#16A34A;color:#fff;border:none;border-radius:10px;padding:14px 20px;font-size:15px;font-weight:700;cursor:pointer;width:100%}' +
+'</style>' +
+'</head>' +
+'<body>' +
+'<div class="header">' +
+'  <div class="logo">TE <span>CONNECT</span></div>' +
+'  <div class="subtitle">स्लैब ढलाई बुकिंग (Slab Booking)</div>' +
+'  <div class="sub-desc">आसान और तेज़ स्लैब बुकिंग सेवा</div>' +
+'</div>' +
+'<div class="dealer-card">' +
+'  <div class="verified">✓ अधिकृत काउंटर (Authorized Dealer)</div>' +
+'  <div class="dealer-name">' + dealerName + '</div>' +
+'  <div class="dealer-area">📍 ' + dealerArea + '</div>' +
+'</div>' +
+'<div id="successBox" class="success-box">' +
+'  <div class="success-icon">✓</div>' +
+'  <div class="success-h">स्लैब ढलाई दर्ज हो गई! 🎉</div>' +
+'  <div class="success-p">धन्यवाद! आपकी ढलाई की जानकारी हमारे टेक्निकल इंजीनियर (TE) के पास पहुँच गई है।</div>' +
+'  <div class="summary-card" id="summaryCard"></div>' +
+'  <button class="btn-again" onclick="resetForm()">+ एक और स्लैब जोड़ें (Add Another)</button>' +
+'</div>' +
+'<form id="slabForm">' +
+'  <div class="card card-highlight">' +
+'    <div class="step-title">' +
+'      <div class="step-num">1</div>' +
+'      <div class="step-text">मिस्त्री / ठेकेदार का मोबाइल नंबर <span>* (जरूरी)</span></div>' +
+'    </div>' +
+'    <div class="phone-box">' +
+'      <div class="code">🇮🇳 +91</div>' +
+'      <input type="tel" id="mobile" class="phone-input" placeholder="10 अंकों का नंबर" maxlength="10" required autofocus>' +
+'    </div>' +
+'    <div class="hint">ℹ️ हमारी टेक्निकल टीम (TE) स्लैब सहायता के लिए इस नंबर पर संपर्क करेगी।</div>' +
+'  </div>' +
+'  <div class="card">' +
+'    <div class="step-title">' +
+'      <div class="step-num step-num-gray">2</div>' +
+'      <div class="step-text">सीमेंट बैग की मात्रा (Select Bags)</div>' +
+'    </div>' +
+'    <div class="chips">' +
+'      <div class="chip" onclick="selectBags(25, this)"><span class="chip-val">25</span><span class="chip-lbl">बैग</span></div>' +
+'      <div class="chip active" onclick="selectBags(50, this)"><span class="chip-val">50</span><span class="chip-lbl">बैग</span></div>' +
+'      <div class="chip" onclick="selectBags(75, this)"><span class="chip-val">75</span><span class="chip-lbl">बैग</span></div>' +
+'      <div class="chip" onclick="selectBags(100, this)"><span class="chip-val">100</span><span class="chip-lbl">बैग</span></div>' +
+'      <div class="chip" onclick="selectBags(150, this)"><span class="chip-val">150</span><span class="chip-lbl">बैग</span></div>' +
+'      <div class="chip" onclick="selectBags(200, this)"><span class="chip-val">200</span><span class="chip-lbl">बैग</span></div>' +
+'      <div class="chip" onclick="selectBags(250, this)"><span class="chip-val">250</span><span class="chip-lbl">बैग</span></div>' +
+'      <div class="chip" onclick="selectBags(300, this)"><span class="chip-val">300</span><span class="chip-lbl">बैग</span></div>' +
+'    </div>' +
+'    <div class="custom-row">' +
+'      <span style="font-size:13px;color:#4B5563;font-weight:600">या अन्य मात्रा:</span>' +
+'      <input type="number" id="customBags" class="custom-input" placeholder="उदा. 80" oninput="customBagsTyped()">' +
+'      <span style="font-size:13px;color:#6B7280;font-weight:600">बैग</span>' +
+'    </div>' +
+'  </div>' +
+'  <div class="card">' +
+'    <div class="step-title">' +
+'      <div class="step-num step-num-gray">3</div>' +
+'      <div class="step-text">ढलाई की तारीख (Slab Date)</div>' +
+'    </div>' +
+'    <div class="date-chips">' +
+'      <div class="date-chip active" id="dChipToday" onclick="selectDate(0, this)"><span class="lbl">आज (Today)</span><span class="sub" id="subToday"></span></div>' +
+'      <div class="date-chip" id="dChipTom" onclick="selectDate(1, this)"><span class="lbl">कल (Tomorrow)</span><span class="sub" id="subTom"></span></div>' +
+'      <div class="date-chip" id="dChipNext" onclick="selectDate(2, this)"><span class="lbl">परसों (In 2 Days)</span><span class="sub" id="subNext"></span></div>' +
+'    </div>' +
+'    <input type="date" id="slab_date" style="display:none">' +
+'  </div>' +
+'  <div class="card">' +
+'    <div class="step-title">' +
+'      <div class="step-num step-num-gray">4</div>' +
+'      <div class="step-text">अतिरिक्त विवरण (Optional Details)</div>' +
+'    </div>' +
+'    <div class="input-group">' +
+'      <label class="input-label">👷 मिस्त्री का नाम (Contractor Name)</label>' +
+'      <input type="text" id="contractor_name" class="text-input" placeholder="उदा. रमेश मिस्त्री">' +
+'    </div>' +
+'    <div class="input-group">' +
+'      <label class="input-label">🏠 मकान मालिक / गांव (Site / Village)</label>' +
+'      <input type="text" id="customer_name" class="text-input" placeholder="उदा. कुआखिया बाजार">' +
+'    </div>' +
+'    <div class="input-group">' +
+'      <label class="input-label">📍 साइट लोकेशन (Current GPS Location)</label>' +
+'      <button type="button" id="gpsBtn" class="gps-btn" onclick="captureGPS()">📍 अभी की लोकेशन जोड़ें (1-Tap GPS)</button>' +
+'    </div>' +
+'  </div>' +
+'  <button type="submit" id="submitBtn" class="btn-submit">' +
+'    <span class="t1">स्लैब ढलाई बुक करें 🏗️</span>' +
+'    <span class="t2">Submit Slab Casting Request →</span>' +
+'  </button>' +
+'</form>' +
+'<script>' +
+'var currentBags = 50;' +
+'var currentLat = "";' +
+'var currentLng = "";' +
+'var today = new Date();' +
+'function fmtDate(d){ return d.toISOString().split("T")[0]; }' +
+'function fmtDisp(d){ var m=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]; return d.getDate() + " " + m[d.getMonth()]; }' +
+'document.getElementById("slab_date").value = fmtDate(today);' +
+'document.getElementById("subToday").textContent = fmtDisp(today);' +
+'var tom = new Date(today); tom.setDate(tom.getDate()+1);' +
+'document.getElementById("subTom").textContent = fmtDisp(tom);' +
+'var nxt = new Date(today); nxt.setDate(nxt.getDate()+2);' +
+'document.getElementById("subNext").textContent = fmtDisp(nxt);' +
+'function selectBags(val, el){' +
+'  currentBags = val;' +
+'  document.getElementById("customBags").value = "";' +
+'  document.querySelectorAll(".chip").forEach(function(c){ c.classList.remove("active"); });' +
+'  el.classList.add("active");' +
+'}' +
+'function customBagsTyped(){' +
+'  var v = document.getElementById("customBags").value;' +
+'  if(v){ currentBags = v; document.querySelectorAll(".chip").forEach(function(c){ c.classList.remove("active"); }); }' +
+'}' +
+'function selectDate(offset, el){' +
+'  var d = new Date(); d.setDate(d.getDate()+offset);' +
+'  document.getElementById("slab_date").value = fmtDate(d);' +
+'  document.querySelectorAll(".date-chip").forEach(function(c){ c.classList.remove("active"); });' +
+'  el.classList.add("active");' +
+'}' +
+'function captureGPS(){' +
+'  if(navigator.geolocation){' +
+'    navigator.geolocation.getCurrentPosition(function(pos){' +
+'      currentLat = pos.coords.latitude;' +
+'      currentLng = pos.coords.longitude;' +
+'      var b = document.getElementById("gpsBtn");' +
+'      b.classList.add("saved");' +
+'      b.innerHTML = "✓ GPS सुरक्षित: " + currentLat.toFixed(4) + ", " + currentLng.toFixed(4);' +
+'    }, function(err){ alert("GPS ऑन रखें या परमिशन दें।"); });' +
+'  } else { alert("GPS समर्थित नहीं है।"); }' +
+'}' +
+'document.getElementById("slabForm").addEventListener("submit", async function(e){' +
+'  e.preventDefault();' +
+'  var mob = document.getElementById("mobile").value.trim().replace(/[^0-9]/g, "");' +
+'  if(!mob || mob.length < 10){ alert("कृपया 10 अंकों का सही मोबाइल नंबर दर्ज करें।"); return; }' +
+'  var btn = document.getElementById("submitBtn");' +
+'  btn.disabled = true;' +
+'  btn.innerHTML = "<span class=\'t1\'>दर्ज हो रहा है...</span>";' +
+'  var cName = document.getElementById("contractor_name").value.trim() || ("मिस्त्री (" + mob + ")");' +
+'  var sDate = document.getElementById("slab_date").value;' +
+'  var bagsText = currentBags + " बैग";' +
+'  var payload = {' +
+'    action: "publicSlabSubmit",' +
+'    dealer_id: "' + dealer_id + '",' +
+'    token: "' + token + '",' +
+'    slab_date: sDate,' +
+'    contractor_name: cName,' +
+'    mobile: mob,' +
+'    customer_name: document.getElementById("customer_name").value.trim(),' +
+'    expected_cement: bagsText,' +
+'    latitude: currentLat,' +
+'    longitude: currentLng,' +
+'    remark: "मोबाइल: " + mob' +
+'  };' +
+'  try {' +
+'    var res = await fetch("' + scriptUrl + '", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});' +
+'    var json = await res.json();' +
+'    if(json.success){' +
+'      document.getElementById("slabForm").style.display = "none";' +
+'      var s = "<div class=\'summary-row\'><span>डीलर:</span><span class=\'summary-val\'>" + dealerName.replace(/"/g, \'\') + "</span></div>" +' +
+'              "<div class=\'summary-row\'><span>मोबाइल:</span><span class=\'summary-val\'>" + mob + "</span></div>" +' +
+'              "<div class=\'summary-row\'><span>सीमेंट:</span><span class=\'summary-val\'>" + bagsText + "</span></div>" +' +
+'              "<div class=\'summary-row\'><span>ढलाई तारीख:</span><span class=\'summary-val\'>" + sDate + "</span></div>";' +
+'      document.getElementById("summaryCard").innerHTML = s;' +
+'      document.getElementById("successBox").style.display = "block";' +
+'    } else {' +
+'      alert(json.message || "एरर। कृपया पुनः प्रयास करें।");' +
+'      btn.disabled = false;' +
+'      btn.innerHTML = "<span class=\'t1\'>स्लैब ढलाई बुक करें 🏗️</span><span class=\'t2\'>Submit Slab Casting Request →</span>";' +
+'    }' +
+'  } catch(err){' +
+'    alert("नेटवर्क एरर। इंटरनेट चेक करें।");' +
+'    btn.disabled = false;' +
+'    btn.innerHTML = "<span class=\'t1\'>स्लैब ढलाई बुक करें 🏗️</span><span class=\'t2\'>Submit Slab Casting Request →</span>";' +
+'  }' +
+'});' +
+'function resetForm(){' +
+'  document.getElementById("successBox").style.display = "none";' +
+'  document.getElementById("slabForm").style.display = "block";' +
+'  document.getElementById("mobile").value = "";' +
+'  document.getElementById("submitBtn").disabled = false;' +
+'  document.getElementById("submitBtn").innerHTML = "<span class=\'t1\'>स्लैब ढलाई बुक करें 🏗️</span><span class=\'t2\'>Submit Slab Casting Request →</span>";' +
+'}' +
+'</script>' +
+'</body></html>';
   return serveHtml(html);
 }
 

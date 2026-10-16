@@ -262,9 +262,10 @@ export interface PublicSlabForm {
   dealer_name: string;
   token: string;
   slab_date: string;
-  contractor_name: string;
+  contractor_name?: string;
+  mobile?: string;
   customer_name?: string;
-  expected_cement: string;
+  expected_cement?: string;
   latitude?: number;
   longitude?: number;
   remark?: string;
