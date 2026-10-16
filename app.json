@@ -35,7 +35,13 @@
     },
     "web": {
       "favicon": "./assets/favicon.png",
-      "bundler": "metro"
+      "bundler": "metro",
+      "name": "TE CONNECT",
+      "shortName": "TE CONNECT",
+      "themeColor": "#C91F2B",
+      "backgroundColor": "#C91F2B",
+      "display": "standalone",
+      "orientation": "portrait"
     },
     "plugins": [
       "expo-router",
