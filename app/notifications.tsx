@@ -10,6 +10,7 @@ import { Typography, FontFamily, FontSize } from '../src/theme/typography';
 import {
   AppNotification, NotificationType, getNotifications,
   markNotificationAsRead, markAllNotificationsAsRead, clearAllNotifications,
+  requestPushPermission, playNotificationSound,
 } from '../src/services/notifications';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { formatDistanceToNow, parseISO } from 'date-fns';
@@ -117,7 +118,7 @@ export default function NotificationsScreen() {
         </TouchableOpacity>
         <View style={styles.headerTitleWrap}>
           <Text style={styles.headerTitle}>Notifications</Text>
-          <Text style={styles.headerSub}>ସମସ୍ତ ବାର୍ତ୍ତା ଏବଂ ଅପଡେଟ୍</Text>
+          <Text style={styles.headerSub}>All alerts and system updates</Text>
         </View>
         <View style={styles.headerActions}>
           {unreadCount > 0 ? (
@@ -131,6 +132,32 @@ export default function NotificationsScreen() {
             </TouchableOpacity>
           ) : null}
         </View>
+      </View>
+
+      {/* Push Permission Enable Banner */}
+      <View style={styles.permissionBanner}>
+        <View style={styles.permissionLeft}>
+          <Ionicons name="notifications-circle" size={24} color={Colors.primary} />
+          <View style={{ flex: 1, marginLeft: 8 }}>
+            <Text style={styles.permissionTitle}>Live Background Alerts</Text>
+            <Text style={styles.permissionSub}>Get instant sound alerts even when app is closed</Text>
+          </View>
+        </View>
+        <TouchableOpacity
+          style={styles.permissionBtn}
+          onPress={async () => {
+            const granted = await requestPushPermission();
+            playNotificationSound();
+            if (granted) {
+              Alert.alert('Notifications Enabled! 🔔', 'You will now receive instant push alerts and sound notifications.');
+            } else {
+              Alert.alert('Sound Played 🎵', 'Notification sound tested successfully.');
+            }
+          }}
+          activeOpacity={0.85}
+        >
+          <Text style={styles.permissionBtnText}>Enable 🔔</Text>
+        </TouchableOpacity>
       </View>
 
       {/* Filter Tabs */}
@@ -165,7 +192,7 @@ export default function NotificationsScreen() {
           <View style={styles.emptyIconCircle}>
             <Ionicons name="notifications-off-outline" size={42} color={Colors.textMuted} />
           </View>
-          <Text style={styles.emptyTitle}>କୌଣସି ନୂଆ ବାର୍ତ୍ତା ନାହିଁ</Text>
+          <Text style={styles.emptyTitle}>No New Notifications</Text>
           <Text style={styles.emptySub}>No notifications found in this category.</Text>
         </View>
       ) : (
@@ -285,4 +312,26 @@ const styles = StyleSheet.create({
   emptyIconCircle: { width: 80, height: 80, borderRadius: 40, backgroundColor: '#F3F4F6', alignItems: 'center', justifyContent: 'center', marginBottom: 14 },
   emptyTitle: { fontFamily: FontFamily.displayBold, fontSize: 16, color: Colors.textPrimary },
   emptySub: { fontFamily: FontFamily.sansRegular, fontSize: 13, color: Colors.textSecondary, marginTop: 4, textAlign: 'center' },
+
+  permissionBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#FEF2F2',
+    borderBottomWidth: 1,
+    borderBottomColor: '#FCA5A5',
+    paddingHorizontal: Spacing.base,
+    paddingVertical: 10,
+    gap: 10,
+  },
+  permissionLeft: { flexDirection: 'row', alignItems: 'center', flex: 1 },
+  permissionTitle: { fontFamily: FontFamily.sansBold, fontSize: 13, color: '#991B1B' },
+  permissionSub: { fontFamily: FontFamily.sansRegular, fontSize: 11, color: '#7F1D1D' },
+  permissionBtn: {
+    backgroundColor: Colors.primary,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  permissionBtnText: { color: Colors.white, fontFamily: FontFamily.sansBold, fontSize: 12 },
 });

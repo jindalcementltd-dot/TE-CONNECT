@@ -1,27 +1,44 @@
-import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, TouchableOpacity, Text, Platform } from 'react-native';
+import React, { useEffect, useState, useRef } from 'react';
+import { View, StyleSheet, Text, Platform, Animated } from 'react-native';
 import { Tabs, router } from 'expo-router';
 import { Colors } from '../../src/theme/colors';
 import { Ionicons } from '@expo/vector-icons';
 import { getSession } from '../../src/services/auth';
 
 function TabIcon({ name, focused, label }: { name: any; focused: boolean; label: string }) {
+  const scaleAnim = useRef(new Animated.Value(focused ? 1.05 : 1)).current;
+  const pillOpacity = useRef(new Animated.Value(focused ? 1 : 0)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.spring(scaleAnim, {
+        toValue: focused ? 1.06 : 1,
+        friction: 7,
+        tension: 120,
+        useNativeDriver: Platform.OS !== 'web',
+      }),
+      Animated.timing(pillOpacity, {
+        toValue: focused ? 1 : 0,
+        duration: 180,
+        useNativeDriver: Platform.OS !== 'web',
+      }),
+    ]).start();
+  }, [focused]);
+
   return (
-    <View style={tabStyles.iconContainer}>
-      <Ionicons 
-        name={name} 
-        size={24} 
-        color={focused ? Colors.primary : Colors.textSecondary} 
-        style={focused ? {
-          textShadowColor: Colors.primary,
-          textShadowOffset: { width: 0, height: 0 },
-          textShadowRadius: 10,
-        } : undefined}
-      />
+    <Animated.View style={[tabStyles.iconContainer, { transform: [{ scale: scaleAnim }] }]}>
+      <View style={tabStyles.iconWrapper}>
+        <Animated.View style={[tabStyles.activePill, { opacity: pillOpacity }]} />
+        <Ionicons 
+          name={name} 
+          size={22} 
+          color={focused ? Colors.primary : '#64748B'} 
+        />
+      </View>
       <Text style={[tabStyles.label, focused && tabStyles.labelActive]}>
         {label}
       </Text>
-    </View>
+    </Animated.View>
   );
 }
 
@@ -100,17 +117,17 @@ export default function TabsLayout() {
 
 const styles = StyleSheet.create({
   tabBar: {
-    height: Platform.OS === 'ios' ? 88 : 72,
-    backgroundColor: Colors.surface,
+    height: Platform.OS === 'ios' ? 84 : 68,
+    backgroundColor: '#FFFFFF',
     borderTopWidth: 1,
-    borderTopColor: Colors.border,
-    shadowColor: Colors.shadowMedium,
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 1,
-    shadowRadius: 12,
-    elevation: 10,
-    paddingBottom: Platform.OS === 'ios' ? 24 : 10,
-    paddingTop: 8,
+    borderTopColor: '#E2E8F0',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: -3 },
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    elevation: 12,
+    paddingBottom: Platform.OS === 'ios' ? 22 : 8,
+    paddingTop: 6,
   }
 });
 
@@ -118,15 +135,33 @@ const tabStyles = StyleSheet.create({
   iconContainer: {
     alignItems: 'center',
     justifyContent: 'center',
+    width: 64,
+  },
+  iconWrapper: {
+    width: 44,
+    height: 30,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+  },
+  activePill: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: '#FDE8EA',
+    borderRadius: 15,
   },
   label: {
-    fontSize: 11,
-    color: Colors.textSecondary,
-    marginTop: 4,
+    fontSize: 10,
+    color: '#64748B',
+    marginTop: 2,
     fontWeight: '600',
+    letterSpacing: 0.2,
   },
   labelActive: {
     color: Colors.primary,
-    fontWeight: '700',
+    fontWeight: '800',
   }
 });

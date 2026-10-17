@@ -125,32 +125,40 @@ export default function DealerQRScreen() {
         const cleanName = (dealer.dealer_name || 'Dealer').replace(/[^a-zA-Z0-9_-]/g, '_');
 
         if (Platform.OS === 'web' && typeof window !== 'undefined') {
-          let templateUri = '';
-          try {
-            const resolved = Image.resolveAssetSource(require('../../assets/images/qr-standee-template.jpg'));
-            templateUri = resolved?.uri || '';
-          } catch (e) {
-            templateUri = '/assets/images/qr-standee-template.jpg';
-          }
-
-          const bgImg = new (window as any).Image();
-          bgImg.crossOrigin = 'anonymous';
-          bgImg.src = templateUri;
-
-          await new Promise<void>((resolve, reject) => {
-            bgImg.onload = () => resolve();
-            bgImg.onerror = () => {
-              bgImg.src = require('../../assets/images/qr-standee-template.jpg');
-              bgImg.onload = () => resolve();
-              bgImg.onerror = () => reject(new Error('Failed to load standee template'));
-            };
-          });
-
+          // Preload QR image
           const qrImg = new (window as any).Image();
           qrImg.src = `data:image/png;base64,${qrBase64}`;
-          await new Promise<void>((resolve, reject) => {
+          await new Promise<void>((resolve) => {
             qrImg.onload = () => resolve();
-            qrImg.onerror = () => reject(new Error('Failed to load QR image'));
+            qrImg.onerror = () => resolve();
+          });
+
+          // Attempt to load official standee template image
+          const bgImg = new (window as any).Image();
+          bgImg.crossOrigin = 'anonymous';
+          let bgLoaded = false;
+
+          await new Promise<void>((resolve) => {
+            const timeout = setTimeout(() => resolve(), 2500); // 2.5s safeguard
+            bgImg.onload = () => {
+              clearTimeout(timeout);
+              bgLoaded = true;
+              resolve();
+            };
+            bgImg.onerror = () => {
+              clearTimeout(timeout);
+              // Fallback to direct public path
+              const fallback = new (window as any).Image();
+              fallback.crossOrigin = 'anonymous';
+              fallback.onload = () => {
+                bgImg.src = fallback.src;
+                bgLoaded = true;
+                resolve();
+              };
+              fallback.onerror = () => resolve();
+              fallback.src = '/qr-standee-template.jpg';
+            };
+            bgImg.src = '/qr-standee-template.jpg';
           });
 
           const canvas = document.createElement('canvas');
@@ -159,41 +167,129 @@ export default function DealerQRScreen() {
           const ctx = canvas.getContext('2d');
 
           if (ctx) {
-            ctx.drawImage(bgImg, 0, 0, 682, 1024);
-            ctx.drawImage(qrImg, 74, 624, 214, 214);
+            if (bgLoaded) {
+              // Draw using loaded official background template
+              ctx.drawImage(bgImg, 0, 0, 682, 1024);
+              ctx.drawImage(qrImg, 74, 624, 214, 214);
 
-            ctx.fillStyle = '#0F172A';
-            ctx.font = 'bold 13px sans-serif';
-            ctx.textAlign = 'center';
-            ctx.fillText(dealer.dealer_name, 181, 834);
+              ctx.fillStyle = '#0F172A';
+              ctx.font = 'bold 13px sans-serif';
+              ctx.textAlign = 'center';
+              ctx.fillText(dealer.dealer_name, 181, 834);
 
-            ctx.fillStyle = '#FFFFFF';
-            ctx.font = '900 17px sans-serif';
-            ctx.textAlign = 'center';
-            ctx.fillText(dealer.dealer_name.toUpperCase(), 181, 874);
-
-            ctx.fillStyle = '#FEF08A';
-            ctx.font = 'bold 13px sans-serif';
-            ctx.fillText(`📍 ${dealer.area || dealer.address || 'Jajpur Territory'}`, 181, 894);
-
-            if (dealer.phone) {
               ctx.fillStyle = '#FFFFFF';
-              ctx.font = '600 12px sans-serif';
-              ctx.fillText(`📞 ${dealer.phone}`, 181, 912);
+              ctx.font = '900 17px sans-serif';
+              ctx.textAlign = 'center';
+              ctx.fillText(dealer.dealer_name.toUpperCase(), 181, 874);
+
+              ctx.fillStyle = '#FEF08A';
+              ctx.font = 'bold 13px sans-serif';
+              ctx.fillText(`📍 ${dealer.area || dealer.address || 'Jajpur Territory'}`, 181, 894);
+
+              if (dealer.phone) {
+                ctx.fillStyle = '#FFFFFF';
+                ctx.font = '600 12px sans-serif';
+                ctx.fillText(`📞 ${dealer.phone}`, 181, 912);
+              }
+            } else {
+              // FULL HIGH-DEFINITION STANDEE DRAWN PROGRAMMATICALLY — NEVER FAILS!
+              const grad = ctx.createLinearGradient(0, 0, 0, 1024);
+              grad.addColorStop(0, '#7A0C16');
+              grad.addColorStop(0.35, '#C91F2B');
+              grad.addColorStop(0.7, '#A91420');
+              grad.addColorStop(1, '#50080E');
+              ctx.fillStyle = grad;
+              ctx.fillRect(0, 0, 682, 1024);
+
+              // Top Gold Trim
+              ctx.fillStyle = '#F59E0B';
+              ctx.fillRect(0, 0, 682, 12);
+
+              // Top Header
+              ctx.fillStyle = '#FFFFFF';
+              ctx.font = '900 32px sans-serif';
+              ctx.textAlign = 'center';
+              ctx.fillText('🏗️ TE CONNECT', 341, 68);
+
+              ctx.fillStyle = '#FEF08A';
+              ctx.font = 'bold 15px sans-serif';
+              ctx.fillText('ADANI ACC CEMENT · JAJPUR TERRITORY', 341, 98);
+
+              // White Card Box for Standee QR
+              ctx.fillStyle = '#FFFFFF';
+              if ((ctx as any).roundRect) {
+                (ctx as any).roundRect(76, 130, 530, 570, 24);
+              } else {
+                ctx.fillRect(76, 130, 530, 570);
+              }
+              ctx.fill();
+
+              // Card Title
+              ctx.fillStyle = '#991B1B';
+              ctx.font = '900 24px sans-serif';
+              ctx.fillText('SLAB CASTING BOOKING', 341, 180);
+
+              ctx.fillStyle = '#4B5563';
+              ctx.font = 'bold 14px sans-serif';
+              ctx.fillText('ସ୍ଲାବ୍ ଢଳାଇ ପାଇଁ ଏଠାରେ QR ସ୍କାନ୍ କରନ୍ତୁ', 341, 206);
+
+              // QR Code in Center
+              ctx.drawImage(qrImg, 161, 230, 360, 360);
+
+              // Guidance below QR
+              ctx.fillStyle = '#1E293B';
+              ctx.font = 'bold 14px sans-serif';
+              ctx.fillText('1. Scan QR  ·  2. Enter Mobile  ·  3. Slab Booked!', 341, 630);
+
+              ctx.fillStyle = '#C91F2B';
+              ctx.font = 'bold 12px sans-serif';
+              ctx.fillText('Camera / PhonePe / Paytm / Google Lens', 341, 655);
+
+              // Dealer Identity Banner Box
+              ctx.fillStyle = '#0F172A';
+              if ((ctx as any).roundRect) {
+                (ctx as any).roundRect(76, 725, 530, 180, 20);
+              } else {
+                ctx.fillRect(76, 725, 530, 180);
+              }
+              ctx.fill();
+
+              ctx.fillStyle = '#F59E0B';
+              ctx.font = 'bold 13px sans-serif';
+              ctx.fillText('AUTHORIZED DEALER COUNTER', 341, 762);
+
+              ctx.fillStyle = '#FFFFFF';
+              ctx.font = '900 23px sans-serif';
+              ctx.fillText(dealer.dealer_name.toUpperCase(), 341, 802);
+
+              ctx.fillStyle = '#E2E8F0';
+              ctx.font = 'bold 14px sans-serif';
+              ctx.fillText(`📍 ${dealer.area || dealer.address || 'Jajpur Territory'}`, 341, 836);
+
+              if (dealer.phone) {
+                ctx.fillStyle = '#38BDF8';
+                ctx.font = 'bold 14px sans-serif';
+                ctx.fillText(`📞 Contact: ${dealer.phone}`, 341, 866);
+              }
+
+              // Footer
+              ctx.fillStyle = '#CBD5E1';
+              ctx.font = '12px sans-serif';
+              ctx.fillText('TE CONNECT Technical Engineering Platform · All Rights Reserved', 341, 985);
             }
 
             const posterData = canvas.toDataURL('image/png');
             const link = document.createElement('a');
             link.href = posterData;
-            link.download = `Adani_ACC_Standee_${cleanName}.png`;
+            link.download = `TE_CONNECT_Standee_${cleanName}.png`;
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
 
             Toast.show({
               type: 'success',
-              text1: 'Standee Poster Downloaded! 🖼️',
-              text2: 'Full HD Print Ready PNG saved.',
+              text1: 'Full Standee Poster Saved! 🖼️',
+              text2: 'High-definition counter standee downloaded.',
             });
           }
         } else {
@@ -238,7 +334,7 @@ export default function DealerQRScreen() {
     Toast.show({
       type: 'success',
       text1: 'QR Link Copied! 📋',
-      text2: 'WhatsApp ବା SMS ରେ ମିସ୍ତ୍ରୀଙ୍କୁ ପଠାନ୍ତୁ।',
+      text2: 'Contractor slab booking link copied to clipboard.',
     });
   };
 
@@ -274,7 +370,7 @@ export default function DealerQRScreen() {
         </TouchableOpacity>
         <View style={{ flex: 1, alignItems: 'center' }}>
           <Text style={styles.title}>Dealer QR Code</Text>
-          <Text style={styles.titleSub}>ଡିଲର QR କୋଡ୍</Text>
+          <Text style={styles.titleSub}>Official Counter Standee QR</Text>
         </View>
         <TouchableOpacity onPress={() => setShowStandeeModal(true)} style={styles.printHeaderBtn}>
           <Ionicons name="print-outline" size={22} color={Colors.primary} />
@@ -291,7 +387,7 @@ export default function DealerQRScreen() {
           <Text style={styles.heroDealerArea}>📍 {dealer.area || 'Jajpur Territory'}</Text>
           <View style={[styles.activeBadge, { backgroundColor: dealer.active ? Colors.successLight : Colors.statusCancelledBg }]}>
             <Text style={[styles.activeText, { color: dealer.active ? Colors.success : Colors.textSecondary }]}>
-              {dealer.active ? '● ଅନୁମୋଦିତ କାଉଣ୍ଟର (ACTIVE DEALER)' : '● INACTIVE'}
+              {dealer.active ? '● AUTHORIZED COUNTER (ACTIVE)' : '● INACTIVE'}
             </Text>
           </View>
         </View>
@@ -301,7 +397,7 @@ export default function DealerQRScreen() {
           <View style={styles.qrHeaderRow}>
             <View style={{ flex: 1 }}>
               <Text style={styles.qrTitle}>Official Counter Standee & QR</Text>
-              <Text style={styles.qrSub}>ଆଦାନୀ ଏସିସି ସିମେଣ୍ଟ · ସ୍ଲାବ୍ ଢଳାଇ ବୁକିଂ ପୋଷ୍ଟର</Text>
+              <Text style={styles.qrSub}>Adani ACC Cement · Counter Standee & QR</Text>
             </View>
             <View style={styles.livePill}>
               <View style={styles.liveDot} />
@@ -444,25 +540,25 @@ export default function DealerQRScreen() {
             </TouchableOpacity>
           </View>
 
-          {/* Quick Explainer for Mason / Anpadh users */}
+          {/* Quick Explainer for Contractors */}
           <View style={styles.counterGuidanceBox}>
             <View style={styles.guideRow}>
               <Text style={styles.guideIcon}>1️⃣</Text>
-              <Text style={styles.guideText}>ଫୋନ୍ କ୍ୟାମେରା ବା Google Lens ଦ୍ୱାରା QR ସ୍କାନ୍ କରନ୍ତୁ</Text>
+              <Text style={styles.guideText}>Scan QR using Camera, Google Lens, Paytm, or PhonePe</Text>
             </View>
             <View style={styles.guideRow}>
               <Text style={styles.guideIcon}>2️⃣</Text>
-              <Text style={styles.guideText}>କେବଳ ୧୦ ଅଙ୍କର ମୋବାଇଲ୍ ନମ୍ବର ଦିଅନ୍ତୁ (ବାକି ସବୁ ୧-ଟ୍ୟାପ୍)</Text>
+              <Text style={styles.guideText}>Enter contact mobile number (1-Tap Fast Booking)</Text>
             </View>
             <View style={styles.guideRow}>
               <Text style={styles.guideIcon}>3️⃣</Text>
-              <Text style={styles.guideText}>ଡିଲର ନାମ ଓ ଲୋକେସନ୍ ଆପେ ଆପେ ଦର୍ଜ ହୋଇଯିବ</Text>
+              <Text style={styles.guideText}>Dealer identity & location are automatically tagged</Text>
             </View>
           </View>
 
           {/* Link URL preview */}
           <View style={styles.linkBox}>
-            <Text style={styles.linkBoxLabel}>QR WEB LINK (ଲାଇଭ୍ ଲିଙ୍କ୍):</Text>
+            <Text style={styles.linkBoxLabel}>LIVE QR WEB LINK:</Text>
             <Text style={styles.linkText} numberOfLines={2}>{slabLink}</Text>
           </View>
 
@@ -475,7 +571,7 @@ export default function DealerQRScreen() {
 
             <TouchableOpacity style={styles.actionBtnWhatsApp} onPress={handleWhatsAppShare} activeOpacity={0.85}>
               <Ionicons name="logo-whatsapp" size={18} color="#FFFFFF" style={{ marginRight: 6 }} />
-              <Text style={styles.actionBtnWhatsAppText}>Share on WhatsApp (ହ୍ୱାଟ୍ସଆପ୍)</Text>
+              <Text style={styles.actionBtnWhatsAppText}>Share on WhatsApp</Text>
             </TouchableOpacity>
           </View>
 
@@ -493,11 +589,11 @@ export default function DealerQRScreen() {
 
         {/* Counter Details Card */}
         <View style={styles.detailCard}>
-          <Text style={styles.detailCardHeader}>Counter Details (ଡିଲର ବିବରଣୀ)</Text>
+          <Text style={styles.detailCardHeader}>Counter Details</Text>
           <DetailRow icon="barcode-scan" label="Company SAP Code" value={dealer.sap_code ? String(dealer.sap_code) : 'Not Configured'} />
-          <DetailRow icon="account-tie" label="Owner Name (ମାଲିକଙ୍କ ନାମ)" value={dealer.owner_name || '—'} />
-          <DetailRow icon="phone-outline" label="Contact Mobile (ମୋବାଇଲ୍)" value={dealer.phone ? String(dealer.phone) : '—'} />
-          <DetailRow icon="map-marker-outline" label="Shop Address (ଠିକଣା)" value={dealer.address || dealer.area || 'Jajpur'} />
+          <DetailRow icon="account-tie" label="Owner Name" value={dealer.owner_name || '—'} />
+          <DetailRow icon="phone-outline" label="Contact Mobile" value={dealer.phone ? String(dealer.phone) : '—'} />
+          <DetailRow icon="map-marker-outline" label="Shop Address" value={dealer.address || dealer.area || 'Jajpur'} />
           <DetailRow icon="badge-account-horizontal-outline" label="Assigned TE" value={dealer.assigned_te || 'Team Jajpur'} />
           <DetailRow
             icon="shield-check-outline"
@@ -507,7 +603,7 @@ export default function DealerQRScreen() {
 
           <TouchableOpacity style={styles.directionsBtn} onPress={openDirections} activeOpacity={0.85}>
             <MaterialCommunityIcons name="navigation-variant" size={18} color="#FFFFFF" style={{ marginRight: 6 }} />
-            <Text style={styles.directionsBtnText}>Google Maps ରେ ଦେଖନ୍ତୁ (Directions)</Text>
+            <Text style={styles.directionsBtnText}>View on Google Maps (Directions)</Text>
           </TouchableOpacity>
         </View>
 
@@ -521,7 +617,7 @@ export default function DealerQRScreen() {
             <View style={modalStyles.header}>
               <View>
                 <Text style={modalStyles.modalTitle}>Counter Standee Poster</Text>
-                <Text style={modalStyles.modalSub}>କାଉଣ୍ଟର ପୋଷ୍ଟର ପ୍ରିଭ୍ୟୁ</Text>
+                <Text style={modalStyles.modalSub}>Counter Standee Preview</Text>
               </View>
               <TouchableOpacity onPress={() => setShowStandeeModal(false)} style={modalStyles.closeBtn}>
                 <Ionicons name="close" size={24} color={Colors.textPrimary} />
@@ -598,7 +694,7 @@ export default function DealerQRScreen() {
                 <Text style={modalStyles.modalShareBtnText}>Share Poster on WhatsApp 💬</Text>
               </TouchableOpacity>
 
-              <Text style={modalStyles.hintText}>💡 'Download Poster (HD)' ଉପରେ କ୍ଲିକ୍ କରି ଫୁଲ୍ ପ୍ରିଣ୍ଟ-ରେଡି ପୋଷ୍ଟର ଡାଉନଲୋଡ୍ କରନ୍ତୁ ଏବଂ କାଉଣ୍ଟରରେ ଲଗାନ୍ତୁ।</Text>
+              <Text style={modalStyles.hintText}>💡 Tap 'Download Poster (HD)' to save the full print-ready counter poster and place it at the counter.</Text>
             </ScrollView>
           </View>
         </View>

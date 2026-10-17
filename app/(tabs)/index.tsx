@@ -63,6 +63,12 @@ export default function HomeScreen() {
     getUnreadNotificationsCount().then(setUnreadNotifCount);
   }, []);
 
+  const firstName = useMemo(() => {
+    if (!user?.name) return 'Rehan';
+    return user.name.trim().split(' ')[0];
+  }, [user]);
+
+
   const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: () => apiGetSettings() });
   const { data: usersList, refetch: refetchUsers } = useQuery({ queryKey: ['users'], queryFn: () => apiGetUsers() });
   const { data: allSales, refetch: refetchSales } = useQuery({ queryKey: ['sales'], queryFn: () => apiGetSales() });
@@ -372,33 +378,31 @@ export default function HomeScreen() {
               <Image 
                 source={require('../../assets/images/app-logo.jpg')} 
                 style={styles.headerAppLogo} 
-                resizeMode="cover" 
+                resizeMode="contain" 
               />
             </View>
             <View style={styles.headerTextWrap}>
               <Text style={styles.greeting}>{getGreeting()},</Text>
-              <Text style={styles.userName}>{user?.name ? user.name : 'Rehan'}</Text>
-              <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
-                <Text style={styles.territoryText}>Team {territorySetting} | </Text>
-                <Ionicons name="location-outline" size={12} color={Colors.textPrimary} style={{ marginHorizontal: 2 }} />
-                <Text style={[styles.territoryText, { fontWeight: '700', color: Colors.textPrimary }]}>{territorySetting} Territory</Text>
+              <Text style={styles.userName} numberOfLines={1}>{firstName}</Text>
+              <View style={styles.territoryRow}>
+                <Ionicons name="location-sharp" size={11} color={Colors.primary} style={{ marginRight: 2 }} />
+                <Text style={styles.territoryText} numberOfLines={1}>{territorySetting} Territory</Text>
               </View>
             </View>
           </View>
           <View style={styles.headerRight}>
             <TouchableOpacity style={styles.iconCircle} onPress={() => router.push('/notifications')} activeOpacity={0.8}>
-              <Ionicons name="notifications-outline" size={22} color={Colors.textPrimary} />
+              <Ionicons name="notifications-outline" size={20} color={Colors.textPrimary} />
               {unreadNotifCount > 0 ? (
                 <View style={styles.badge}><Text style={styles.badgeText}>{unreadNotifCount}</Text></View>
               ) : null}
             </TouchableOpacity>
             <TouchableOpacity style={styles.iconCircle} onPress={() => router.push('/profile')} activeOpacity={0.8}>
-              <Ionicons name="person-outline" size={20} color={Colors.textPrimary} />
+              <Ionicons name="person-outline" size={19} color={Colors.textPrimary} />
             </TouchableOpacity>
             <TouchableOpacity style={styles.datePill} onPress={() => setShowMonthModal(true)} activeOpacity={0.8}>
-              <Ionicons name="calendar-outline" size={14} color={Colors.primary} />
+              <Ionicons name="calendar-outline" size={13} color={Colors.primary} />
               <Text style={styles.datePillText}>{formatDateShort(today)}</Text>
-              <Ionicons name="chevron-down" size={14} color={Colors.textSecondary} />
             </TouchableOpacity>
           </View>
         </View>
@@ -1082,41 +1086,51 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#EFF2F7' },
+  container: {
+    flex: 1,
+    backgroundColor: '#EFF2F7',
+    overflow: 'hidden',
+    width: '100%',
+    maxWidth: '100%',
+  },
   
-  blob1: { position: 'absolute', top: -100, right: -50, width: 300, height: 300, borderRadius: 150, backgroundColor: 'rgba(253, 232, 234, 0.6)' },
-  blob2: { position: 'absolute', top: 300, left: -100, width: 250, height: 250, borderRadius: 125, backgroundColor: 'rgba(224, 242, 254, 0.5)' },
+  blob1: { position: 'absolute', top: -100, right: -50, width: 300, height: 300, borderRadius: 150, backgroundColor: 'rgba(253, 232, 234, 0.4)' },
+  blob2: { position: 'absolute', top: 300, left: -100, width: 250, height: 250, borderRadius: 125, backgroundColor: 'rgba(224, 242, 254, 0.35)' },
 
-  scroll: { flex: 1 },
-  scrollContent: { paddingHorizontal: 16, paddingBottom: 100, paddingTop: Platform.OS === 'ios' ? 60 : 40 },
+  scroll: { flex: 1, width: '100%' },
+  scrollContent: { paddingHorizontal: 14, paddingBottom: 100, paddingTop: Platform.OS === 'ios' ? 56 : 38 },
 
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 },
-  headerLeft: { flexDirection: 'row', alignItems: 'center', flex: 1 },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18, width: '100%' },
+  headerLeft: { flexDirection: 'row', alignItems: 'center', flex: 1, minWidth: 0 },
   appLogoWrap: {
-    width: 52,
-    height: 52,
-    borderRadius: 14,
+    width: 46,
+    height: 46,
+    borderRadius: 12,
     backgroundColor: '#FFFFFF',
     borderWidth: 1.5,
     borderColor: '#E2E8F0',
     overflow: 'hidden',
-    marginRight: 12,
+    marginRight: 10,
+    padding: 3,
+    justifyContent: 'center',
+    alignItems: 'center',
     shadowColor: Colors.primary,
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 6,
+    shadowOpacity: 0.12,
+    shadowRadius: 5,
     elevation: 3,
   },
   headerAppLogo: { width: '100%', height: '100%' },
-  headerTextWrap: { flex: 1 },
-  greeting: { fontFamily: FontFamily.sansMedium, fontSize: 13, color: '#6B7280' },
-  userName: { fontFamily: FontFamily.displayBlack, fontSize: 24, fontWeight: '900', color: '#172033', letterSpacing: -0.5, marginTop: -2 },
+  headerTextWrap: { flex: 1, minWidth: 0 },
+  greeting: { fontFamily: FontFamily.sansMedium, fontSize: 12, color: '#6B7280' },
+  userName: { fontFamily: FontFamily.displayBlack, fontSize: 21, fontWeight: '900', color: '#172033', letterSpacing: -0.4, marginTop: -2 },
+  territoryRow: { flexDirection: 'row', alignItems: 'center', marginTop: 1 },
   territoryText: { fontFamily: FontFamily.sansMedium, fontSize: 11, color: '#6B7280' },
   
-  datePill: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFFFF', paddingHorizontal: 8, paddingVertical: 6, borderRadius: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2, gap: 4 },
+  datePill: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFFFF', paddingHorizontal: 8, paddingVertical: 6, borderRadius: 10, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 3, elevation: 1, gap: 4 },
   datePillText: { fontFamily: FontFamily.sansBold, fontSize: 11, color: '#172033' },
-  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  iconCircle: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#EFF2F7' },
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 5, flexShrink: 0 },
+  iconCircle: { width: 34, height: 34, borderRadius: 17, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#EFF2F7' },
   badge: { position: 'absolute', top: -2, right: -2, backgroundColor: Colors.primary, width: 14, height: 14, borderRadius: 7, alignItems: 'center', justifyContent: 'center' },
   badgeText: { fontSize: 8, color: Colors.white, fontFamily: FontFamily.sansBold },
   

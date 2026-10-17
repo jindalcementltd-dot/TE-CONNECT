@@ -72,8 +72,8 @@ export default function ProfileScreen() {
         setNewPassword('');
         setConfirmPassword('');
         await addNotification(
-          '🔒 ପାସୱାର୍ଡ଼ ବଦଳିଲା (Password Changed)',
-          'ଆପଣଙ୍କ ଏକାଉଣ୍ଟ ପାସୱାର୍ଡ଼ ସଫଳତାର ସହ ପରିବର୍ତ୍ତନ ହୋଇଛି।',
+          '🔒 Password Changed',
+          'Your account password has been updated successfully.',
           'SYSTEM'
         );
       } else {
@@ -88,7 +88,7 @@ export default function ProfileScreen() {
 
   const handleLogout = () => {
     Alert.alert(
-      'Logout / ଲଗ୍ ଆଉଟ୍',
+      'Logout',
       'Are you sure you want to log out from TE CONNECT?',
       [
         { text: 'Cancel', style: 'cancel' },
@@ -149,7 +149,7 @@ export default function ProfileScreen() {
 
         {/* User Details Section */}
         <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>Account Details (ବିବରଣୀ)</Text>
+          <Text style={styles.sectionTitle}>Account Details</Text>
           <InfoRow icon="shield-account-outline" label="Designation / Role" value={user?.role || 'Technical Engineer'} />
           <InfoRow icon="account-group-outline" label="Team" value={user?.team || 'Team Jajpur'} />
           <InfoRow icon="map-marker-radius-outline" label="Territory" value={`${user?.territory || 'Jajpur'} Territory`} />
@@ -161,12 +161,12 @@ export default function ProfileScreen() {
         <View style={styles.sectionCard}>
           <View style={styles.passHeaderRow}>
             <Ionicons name="lock-closed-outline" size={20} color={Colors.primary} />
-            <Text style={styles.sectionTitle}>Change Password (ପାସୱାର୍ଡ଼ ବଦଳାନ୍ତୁ)</Text>
+            <Text style={styles.sectionTitle}>Change Password</Text>
           </View>
 
           {/* Current Password */}
           <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Current Password (ପୂର୍ବ ପାସୱାର୍ଡ଼)</Text>
+            <Text style={styles.inputLabel}>Current Password</Text>
             <View style={styles.passInputWrap}>
               <TextInput
                 style={styles.passInput}
@@ -184,7 +184,7 @@ export default function ProfileScreen() {
 
           {/* New Password */}
           <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>New Password (ନୂଆ ପାସୱାର୍ଡ଼ - Min 6 chars)</Text>
+            <Text style={styles.inputLabel}>New Password (Min 6 chars)</Text>
             <View style={styles.passInputWrap}>
               <TextInput
                 style={styles.passInput}
@@ -202,7 +202,7 @@ export default function ProfileScreen() {
 
           {/* Confirm Password */}
           <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Confirm New Password (ନୂଆ ପାସୱାର୍ଡ଼ ପୁନର୍ବାର ଦିଅନ୍ତୁ)</Text>
+            <Text style={styles.inputLabel}>Confirm New Password</Text>
             <View style={styles.passInputWrap}>
               <TextInput
                 style={styles.passInput}
@@ -244,7 +244,7 @@ export default function ProfileScreen() {
         {/* Logout Action Button */}
         <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout} activeOpacity={0.85}>
           <Ionicons name="log-out-outline" size={20} color={Colors.white} style={{ marginRight: 8 }} />
-          <Text style={styles.logoutBtnText}>Logout from App (ଲଗ୍ ଆଉଟ୍)</Text>
+          <Text style={styles.logoutBtnText}>Logout from App</Text>
         </TouchableOpacity>
 
         <View style={{ height: Spacing['5xl'] }} />

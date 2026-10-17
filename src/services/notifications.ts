@@ -18,17 +18,109 @@ export interface AppNotification {
   data?: Record<string, any>;
 }
 
-// Default initial notifications if empty
+// Default initial notifications in clean English
 const DEFAULT_NOTIFICATIONS: AppNotification[] = [
   {
     id: 'notif_welcome',
-    title: '🎉 TE CONNECT ରେ ସ୍ୱାଗତ (Welcome to TE CONNECT)',
-    body: 'ଜାଜପୁର ଓ ଭଦ୍ରକ ଟେରିଟୋରୀର ସମସ୍ତ ସ୍ଲାବ୍, ବିକ୍ରୟ ଏବଂ ପଞ୍ଚିଂ ଏଠାରେ ଟ୍ରାକ୍ କରନ୍ତୁ।',
+    title: '🎉 Welcome to TE CONNECT',
+    body: 'Track all slabs, sales, contractor meetings and active punching across Jajpur territory.',
     type: 'SYSTEM',
     timestamp: new Date().toISOString(),
     read: false,
   },
 ];
+
+/**
+ * Signature Distinct Audio Chime
+ * Synthesizes a crisp, melodious 3-tone chime (E6 -> G#6 -> B6) using Web Audio API
+ * Runs natively in all browsers/webviews with 0ms latency and no external audio file dependencies.
+ */
+export function playNotificationSound() {
+  try {
+    if (typeof window !== 'undefined') {
+      const AudioCtx = (window as any).AudioContext || (window as any).webkitAudioContext;
+      if (AudioCtx) {
+        const ctx = new AudioCtx();
+        if (ctx.state === 'suspended') {
+          ctx.resume();
+        }
+        const now = ctx.currentTime;
+
+        const playTone = (freq: number, start: number, duration: number, peakVol: number) => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(freq, start);
+
+          gain.gain.setValueAtTime(0, start);
+          gain.gain.linearRampToValueAtTime(peakVol, start + 0.02);
+          gain.gain.exponentialRampToValueAtTime(0.0005, start + duration);
+
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+
+          osc.start(start);
+          osc.stop(start + duration);
+        };
+
+        // Signature distinct harmonic chime: 1318.5Hz (E6) -> 1661.2Hz (G#6) -> 1975.5Hz (B6)
+        playTone(1318.51, now, 0.28, 0.22);
+        playTone(1661.22, now + 0.08, 0.32, 0.25);
+        playTone(1975.53, now + 0.16, 0.45, 0.28);
+      }
+    }
+  } catch (e) {
+    // Audio synthesis not available or blocked by autoplay policy
+  }
+}
+
+/**
+ * Request OS Browser Push Notification permission
+ */
+export async function requestPushPermission(): Promise<boolean> {
+  if (typeof window !== 'undefined' && 'Notification' in window) {
+    if (Notification.permission === 'granted') return true;
+    if (Notification.permission !== 'denied') {
+      try {
+        const result = await Notification.requestPermission();
+        return result === 'granted';
+      } catch (e) {
+        return false;
+      }
+    }
+  }
+  return false;
+}
+
+/**
+ * Send a native browser OS push notification (displays in status bar / notification center)
+ */
+export async function sendBrowserPushNotification(title: string, body: string, iconUrl: string = '/icon.png') {
+  if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+    try {
+      if ('serviceWorker' in navigator) {
+        const reg = await navigator.serviceWorker.getRegistration();
+        if (reg) {
+          reg.showNotification(title, {
+            body,
+            icon: iconUrl,
+            badge: '/favicon.png',
+            vibrate: [200, 100, 200],
+            data: { url: '/' },
+          } as any);
+          return;
+        }
+      }
+    } catch (e) {}
+
+    try {
+      new Notification(title, {
+        body,
+        icon: iconUrl,
+      });
+    } catch (e) {}
+  }
+}
 
 export async function getNotifications(): Promise<AppNotification[]> {
   try {
@@ -69,13 +161,20 @@ export async function addNotification(
   const updated = [newNotif, ...list].slice(0, 50); // Keep latest 50
   await AsyncStorage.setItem(NOTIFICATIONS_STORAGE_KEY, JSON.stringify(updated));
 
-  // Trigger tactile / visual real notification
+  // 1. Play signature custom sound
+  playNotificationSound();
+
+  // 2. Trigger vibration on native mobile
   try {
     if (Platform.OS !== 'web') {
-      Vibration.vibrate([0, 80, 40, 80]);
+      Vibration.vibrate([0, 90, 50, 90]);
     }
   } catch (e) {}
 
+  // 3. Send OS Native Web Push notification if allowed
+  sendBrowserPushNotification(title, body);
+
+  // 4. In-App visual toast banner
   Toast.show({
     type: 'info',
     text1: title,
@@ -109,13 +208,15 @@ export async function checkAndNotifyNewSlabs(slabs: Slab[]): Promise<void> {
     const seenIds: string[] = rawSeen ? JSON.parse(rawSeen) : [];
 
     // Find new slabs from DEALER_QR or PUBLIC_LINK that haven't been notified yet
-    const newQrSlabs = slabs.filter(s => s.slab_id && !seenIds.includes(s.slab_id) && (s.source === 'DEALER_QR' || s.source === 'PUBLIC_LINK'));
+    const newQrSlabs = slabs.filter(
+      s => s.slab_id && !seenIds.includes(s.slab_id) && (s.source === 'DEALER_QR' || s.source === 'PUBLIC_LINK')
+    );
 
     if (newQrSlabs.length > 0) {
       for (const slab of newQrSlabs.slice(0, 3)) {
         await addNotification(
-          `🏗️ ନୂଆ QR ସ୍ଲାବ୍ ବୁକିଂ! (${slab.dealer_name || 'Dealer'})`,
-          `ସିମେଣ୍ଟ: ${slab.expected_cement || '50 ବସ୍ତା'} | ତାରିଖ: ${slab.slab_date} | ଯୋଗାଯୋଗ: ${slab.contractor_name || slab.remark || 'N/A'}`,
+          `🏗️ New QR Slab Booking! (${slab.dealer_name || 'Dealer'})`,
+          `Cement: ${slab.expected_cement || '50 Bags'} | Date: ${slab.slab_date} | Contact: ${slab.contractor_name || slab.remark || 'Counter Booking'}`,
           'SLAB',
           { slab_id: slab.slab_id, dealer_id: slab.dealer_id }
         );
