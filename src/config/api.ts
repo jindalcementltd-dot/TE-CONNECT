@@ -22,3 +22,13 @@ export const CACHE = {
   MEDIUM: 5 * 60 * 1000,   // 5 minutes
   LONG: 30 * 60 * 1000,    // 30 minutes
 };
+
+// Generates the active live QR scan URL for any dealer
+export function getDealerPublicSlabUrl(dealer: { dealer_id: string; qr_token?: string; public_slab_link?: string }): string {
+  if (dealer.public_slab_link && dealer.public_slab_link.startsWith('http')) {
+    return dealer.public_slab_link;
+  }
+  const tokenPart = dealer.qr_token ? `&token=${encodeURIComponent(dealer.qr_token)}` : '';
+  return `${APPS_SCRIPT_URL}?action=page&page=slab&dealer_id=${encodeURIComponent(dealer.dealer_id)}${tokenPart}`;
+}
+

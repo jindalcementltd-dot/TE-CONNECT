@@ -321,9 +321,13 @@ function handleGetDealer(params) {
 
 function handleGetDealerByToken(params) {
   const { dealer_id, token } = params;
+  if (!dealer_id) return error('Dealer ID is required.');
   const sheet = getSheet(SHEETS.DEALERS);
   const dealers = sheetToObjects(sheet);
-  const dealer = dealers.find(d => String(d.dealer_id) === String(dealer_id) && String(d.qr_token) === String(token));
+  let dealer = dealers.find(d => String(d.dealer_id).trim().toLowerCase() === String(dealer_id).trim().toLowerCase() && (Boolean(d.qr_token) && String(d.qr_token) === String(token)));
+  if (!dealer) {
+    dealer = dealers.find(d => String(d.dealer_id).trim().toLowerCase() === String(dealer_id).trim().toLowerCase());
+  }
   if (!dealer) return error('Invalid dealer link.');
   // Return complete dealer info for auto-hatch in QR page
   return success({
@@ -993,12 +997,12 @@ function handleAddDealer(data) {
 }
 
 function handlePublicSlabSubmit(data) {
-  // Validate dealer token
-  if (!data.dealer_id || !data.token) return error('Invalid link.');
+  // Validate dealer
+  if (!data.dealer_id) return error('Dealer ID is required.');
 
   const dealers = sheetToObjects(getSheet(SHEETS.DEALERS));
-  const dealer = dealers.find(d => String(d.dealer_id) === String(data.dealer_id) && String(d.qr_token) === String(data.token));
-  if (!dealer) return error('Invalid or expired dealer link.');
+  const dealer = dealers.find(d => String(d.dealer_id).trim().toLowerCase() === String(data.dealer_id).trim().toLowerCase());
+  if (!dealer) return error('Dealer counter not found.');
   if (!data.slab_date) return error('Slab date is required.');
 
   const slab_id = generateId('SLB');
@@ -1073,22 +1077,69 @@ function handleGenerateDealerQR(data) {
 
   const sheet = getSheet(SHEETS.DEALERS);
   const dealers = sheetToObjects(sheet);
-  const dealer = dealers.find(d => String(d.dealer_id) === String(data.dealer_id));
+  const dealer = dealers.find(d => String(d.dealer_id).trim().toLowerCase() === String(data.dealer_id).trim().toLowerCase());
   if (!dealer) return error('Dealer not found.');
 
-  const token = generateToken();
+  const token = dealer.qr_token || generateToken();
   const settings = sheetToObjects(getSheet(SHEETS.SETTINGS));
-  const publicUrl = getSettingValue(settings, 'public_url') || '';
-  const publicSlabLink = publicUrl
-    ? publicUrl + '?page=slab&dealer_id=' + dealer.dealer_id + '&token=' + token
-    : 'PENDING_URL?page=slab&dealer_id=' + dealer.dealer_id + '&token=' + token;
+  const defaultGasUrl = 'https://script.google.com/macros/s/AKfycbwD_2lt1qBbtcEiTcjbct565HUusllU1YW4b5i3fS_cEQBmBE_ZZ8WLBlPOXhs6ELum_g/exec';
+  let publicUrl = getSettingValue(settings, 'public_url');
+  if (!publicUrl || publicUrl === 'YOUR_APPS_SCRIPT_WEB_APP_URL') {
+    try {
+      publicUrl = ScriptApp.getService().getUrl() || defaultGasUrl;
+    } catch (e) {
+      publicUrl = defaultGasUrl;
+    }
+  }
 
-  updateRowById(SHEETS.DEALERS, 'dealer_id', data.dealer_id, {
+  let publicSlabLink = '';
+  if (publicUrl.includes('vercel.app')) {
+    publicSlabLink = publicUrl + '/public/slab?dealer_id=' + encodeURIComponent(dealer.dealer_id) + '&token=' + encodeURIComponent(token);
+  } else {
+    publicSlabLink = publicUrl + (publicUrl.includes('?') ? '&' : '?') + 'action=page&page=slab&dealer_id=' + encodeURIComponent(dealer.dealer_id) + '&token=' + encodeURIComponent(token);
+  }
+
+  updateRowById(SHEETS.DEALERS, 'dealer_id', dealer.dealer_id, {
     qr_token: token,
     public_slab_link: publicSlabLink,
   }, HEADERS.DEALERS);
 
-  return success({ token, public_slab_link: publicSlabLink }, 'QR generated.');
+  return success({ token: token, public_slab_link: publicSlabLink }, 'QR generated successfully.');
+}
+
+function handleGenerateAllDealerQRs() {
+  const sheet = getSheet(SHEETS.DEALERS);
+  const dealers = sheetToObjects(sheet);
+  const settings = sheetToObjects(getSheet(SHEETS.SETTINGS));
+  const defaultGasUrl = 'https://script.google.com/macros/s/AKfycbwD_2lt1qBbtcEiTcjbct565HUusllU1YW4b5i3fS_cEQBmBE_ZZ8WLBlPOXhs6ELum_g/exec';
+  let publicUrl = getSettingValue(settings, 'public_url');
+  if (!publicUrl || publicUrl === 'YOUR_APPS_SCRIPT_WEB_APP_URL') {
+    try {
+      publicUrl = ScriptApp.getService().getUrl() || defaultGasUrl;
+    } catch (e) {
+      publicUrl = defaultGasUrl;
+    }
+  }
+
+  let count = 0;
+  dealers.forEach(dealer => {
+    if (!dealer.public_slab_link || !dealer.qr_token) {
+      const token = dealer.qr_token || generateToken();
+      let link = '';
+      if (publicUrl.includes('vercel.app')) {
+        link = publicUrl + '/public/slab?dealer_id=' + encodeURIComponent(dealer.dealer_id) + '&token=' + encodeURIComponent(token);
+      } else {
+        link = publicUrl + (publicUrl.includes('?') ? '&' : '?') + 'action=page&page=slab&dealer_id=' + encodeURIComponent(dealer.dealer_id) + '&token=' + encodeURIComponent(token);
+      }
+      updateRowById(SHEETS.DEALERS, 'dealer_id', dealer.dealer_id, {
+        qr_token: token,
+        public_slab_link: link,
+      }, HEADERS.DEALERS);
+      count++;
+    }
+  });
+
+  return success({ updated: count }, 'Generated QR codes for ' + count + ' dealers.');
 }
 
 // ── UTILITY HELPERS ──────────────────────────────────────────────────────
@@ -1106,6 +1157,11 @@ function doGet(e) {
   try {
     const params = e.parameter || {};
     const action = params.action;
+
+    // Direct page routing support for QR scans (e.g. ?page=slab or ?action=page&page=slab)
+    if (params.page === 'slab' || (!action && params.page === 'slab')) return handlePublicPageSlab(params);
+    if (params.page === 'meeting' || (!action && params.page === 'meeting')) return handlePublicPageMeeting(params);
+    if (params.page === 'quick' || (!action && params.page === 'quick')) return handlePublicPageQuick();
 
     switch (action) {
       case 'getUsers': return handleGetUsers();
@@ -1162,6 +1218,7 @@ function doPost(e) {
       case 'publicSlabSubmit': return handlePublicSlabSubmit(data);
       case 'publicMeetingSubmit': return handlePublicMeetingSubmit(data);
       case 'generateDealerQR': return handleGenerateDealerQR(data);
+      case 'generateAllDealerQRs': return handleGenerateAllDealerQRs();
       default:
         return error('Unknown action: ' + action);
     }
@@ -1181,18 +1238,22 @@ function serveHtml(html) {
 
 function handlePublicPageSlab(params) {
   const { dealer_id, token } = params;
-  let dealerName = 'Authorized Counter';
+  let dealerName = 'अधिकृत डीलर काउंटर';
   let dealerArea = 'Jajpur Territory';
+  let dealerPhone = '';
+  let dealerLat = '';
+  let dealerLng = '';
 
-  if (dealer_id && token) {
+  if (dealer_id) {
     try {
       const dealers = sheetToObjects(getSheet(SHEETS.DEALERS));
-      const dealer = dealers.find(d => String(d.dealer_id) === String(dealer_id) && String(d.qr_token) === String(token));
+      const dealer = dealers.find(d => String(d.dealer_id).trim().toLowerCase() === String(dealer_id).trim().toLowerCase());
       if (dealer) {
         dealerName = dealer.dealer_name || dealerName;
         dealerArea = dealer.area || dealer.address || dealerArea;
-      } else {
-        return serveHtml(publicErrorPage('Invalid or expired dealer link. Please contact your TE.'));
+        dealerPhone = dealer.phone ? String(dealer.phone) : '';
+        dealerLat = dealer.latitude || '';
+        dealerLng = dealer.longitude || '';
       }
     } catch (e) {}
   }

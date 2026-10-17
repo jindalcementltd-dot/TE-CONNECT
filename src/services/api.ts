@@ -108,6 +108,14 @@ export async function apiGetDealerByToken(dealer_id: string, token: string): Pro
   return get<Dealer>('getDealerByToken', { dealer_id, token });
 }
 
+export async function apiGenerateDealerQR(dealer_id: string): Promise<ApiResponse<{ token: string; public_slab_link: string }>> {
+  return post('generateDealerQR', { dealer_id });
+}
+
+export async function apiGenerateAllDealerQRs(): Promise<ApiResponse<{ updated: number }>> {
+  return post('generateAllDealerQRs', {});
+}
+
 export async function apiAddDealer(data: {
   dealer_name: string;
   owner_name?: string;
