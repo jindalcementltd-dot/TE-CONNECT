@@ -15,6 +15,7 @@ import {
 import { getUser } from '../../src/services/auth';
 import { currentDateISO, currentMonthISO, normalizeDate } from '../../src/utils/helpers';
 import { User, ActiveTracker } from '../../src/types';
+import { addNotification } from '../../src/services/notifications';
 import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
 
 export default function AddPunchScreen() {
@@ -138,6 +139,11 @@ export default function AddPunchScreen() {
         queryClient.invalidateQueries({ queryKey: ['activeTrackers'] });
         queryClient.invalidateQueries({ queryKey: ['teActiveSummary'] });
         queryClient.invalidateQueries({ queryKey: ['todaySummary'] });
+        addNotification(
+          `🔨 Punch Recorded (${effectiveTE})`,
+          `${totalBagsToAdd} bags punched · Active Contractors: ${finalActiveContractors}/${totalContractors}`,
+          'PUNCH'
+        );
         router.back();
       } else {
         Toast.show({ type: 'error', text1: 'Error', text2: res?.message || 'Failed to record punch.' });

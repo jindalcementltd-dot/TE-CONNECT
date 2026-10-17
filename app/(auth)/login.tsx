@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
-  KeyboardAvoidingView, Platform, ScrollView, ActivityIndicator,
+  KeyboardAvoidingView, Platform, ScrollView, ActivityIndicator, Image,
 } from 'react-native';
 import { router } from 'expo-router';
 import { Colors } from '../../src/theme/colors';
@@ -51,9 +51,11 @@ export default function LoginScreen() {
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
         <View style={styles.brandSection}>
           <View style={styles.logoContainer}>
-            <View style={styles.logoInner}>
-              <MaterialCommunityIcons name="shield-crown-outline" size={44} color={Colors.white} />
-            </View>
+            <Image
+              source={require('../../assets/images/app-logo.jpg')}
+              style={styles.logoImage}
+              resizeMode="contain"
+            />
           </View>
           
           <View style={styles.brandTitleRow}>
@@ -135,8 +137,8 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.primaryDark },
   scroll: { flexGrow: 1, paddingHorizontal: Spacing.lg, paddingTop: Platform.OS === 'ios' ? 70 : 50, paddingBottom: 40 },
   brandSection: { alignItems: 'center', marginBottom: Spacing.xl },
-  logoContainer: { width: 88, height: 88, borderRadius: BorderRadius['2xl'], backgroundColor: 'rgba(255, 255, 255, 0.12)', alignItems: 'center', justifyContent: 'center', marginBottom: Spacing.base, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.25)', shadowColor: Colors.primaryDark, shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.6, shadowRadius: 16 },
-  logoInner: { width: 68, height: 68, borderRadius: BorderRadius.xl, backgroundColor: Colors.primary, alignItems: 'center', justifyContent: 'center' },
+  logoContainer: { width: 96, height: 96, borderRadius: BorderRadius['2xl'], backgroundColor: Colors.white, alignItems: 'center', justifyContent: 'center', marginBottom: Spacing.base, borderWidth: 1.5, borderColor: 'rgba(255, 255, 255, 0.4)', shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.35, shadowRadius: 16, overflow: 'hidden' },
+  logoImage: { width: 92, height: 92, borderRadius: BorderRadius.xl },
   brandTitleRow: { flexDirection: 'row', alignItems: 'center' },
   appNameTE: { fontFamily: FontFamily.displayBlack, fontSize: FontSize['4xl'], color: Colors.white, letterSpacing: 1 },
   appNameCONNECT: { fontFamily: FontFamily.displayBlack, fontSize: FontSize['4xl'], color: Colors.primaryLight, letterSpacing: 1 },

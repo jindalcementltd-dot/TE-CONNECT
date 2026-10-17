@@ -17,6 +17,7 @@ import {
 import { getUser } from '../../src/services/auth';
 import { currentDateISO } from '../../src/utils/helpers';
 import { User, Dealer, Contractor } from '../../src/types';
+import { addNotification } from '../../src/services/notifications';
 import { Ionicons, Feather } from '@expo/vector-icons';
 
 export default function AddSlabScreen() {
@@ -69,6 +70,11 @@ export default function AddSlabScreen() {
         Toast.show({ type: 'success', text1: 'Slab Added', text2: 'Slab scheduled successfully.' });
         queryClient.invalidateQueries({ queryKey: ['slabs'] });
         queryClient.invalidateQueries({ queryKey: ['todaySummary'] });
+        addNotification(
+          `🏗️ New Slab Booked (${selectedDealer?.dealer_name || 'Dealer'})`,
+          `Contractor: ${contractorName || 'N/A'} · Cement: ${expectedCement || 'N/A'}`,
+          'SLAB'
+        );
         router.back();
       } else {
         Toast.show({ type: 'error', text1: 'Error', text2: res.message });

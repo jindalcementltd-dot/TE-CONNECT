@@ -23,6 +23,7 @@ import { FontFamily } from '../../src/theme/typography';
 import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
 import { format, parseISO } from 'date-fns';
 import { Colors } from '../../src/theme/colors';
+import { getUnreadNotificationsCount, checkAndNotifyNewSlabs } from '../../src/services/notifications';
 
 const { width } = Dimensions.get('window');
 
@@ -49,6 +50,9 @@ export default function HomeScreen() {
   // Scroll animation for FAB
   const scrollY = useRef(new Animated.Value(0)).current;
 
+  // Unread notifications state
+  const [unreadNotifCount, setUnreadNotifCount] = useState(0);
+
   useEffect(() => {
     getUser().then(u => {
       setUser(u);
@@ -56,6 +60,7 @@ export default function HomeScreen() {
         setTargetTE(u.name);
       }
     });
+    getUnreadNotificationsCount().then(setUnreadNotifCount);
   }, []);
 
   const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: () => apiGetSettings() });
@@ -66,6 +71,14 @@ export default function HomeScreen() {
   const { data: activeTrackers, refetch: refetchActive } = useQuery({ queryKey: ['activeTrackers'], queryFn: () => apiGetActiveTracker() });
   const { data: allSlabs, refetch: refetchSlabs } = useQuery({ queryKey: ['slabs'], queryFn: () => apiGetSlabs() });
   const { data: allMeetings, refetch: refetchMeetings } = useQuery({ queryKey: ['meetings'], queryFn: () => apiGetMeetings() });
+
+  useEffect(() => {
+    if (allSlabs && allSlabs.length > 0) {
+      checkAndNotifyNewSlabs(allSlabs).then(() => {
+        getUnreadNotificationsCount().then(setUnreadNotifCount);
+      });
+    }
+  }, [allSlabs]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -355,8 +368,12 @@ export default function HomeScreen() {
         {/* HEADER */}
         <View style={styles.header}>
           <View style={styles.headerLeft}>
-            <View style={styles.avatarCircle}>
-              <Image source={{ uri: 'https://ui-avatars.com/api/?name=' + (user?.name || 'Rehan') + '&background=FDE8EA&color=C91F2B&size=120' }} style={{ width: '100%', height: '100%', borderRadius: 28 }} />
+            <View style={styles.appLogoWrap}>
+              <Image 
+                source={require('../../assets/images/app-logo.jpg')} 
+                style={styles.headerAppLogo} 
+                resizeMode="cover" 
+              />
             </View>
             <View style={styles.headerTextWrap}>
               <Text style={styles.greeting}>{getGreeting()},</Text>
@@ -369,10 +386,15 @@ export default function HomeScreen() {
             </View>
           </View>
           <View style={styles.headerRight}>
-            <View style={styles.iconCircle}>
+            <TouchableOpacity style={styles.iconCircle} onPress={() => router.push('/notifications')} activeOpacity={0.8}>
               <Ionicons name="notifications-outline" size={22} color={Colors.textPrimary} />
-              <View style={styles.badge}><Text style={styles.badgeText}>3</Text></View>
-            </View>
+              {unreadNotifCount > 0 ? (
+                <View style={styles.badge}><Text style={styles.badgeText}>{unreadNotifCount}</Text></View>
+              ) : null}
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.iconCircle} onPress={() => router.push('/profile')} activeOpacity={0.8}>
+              <Ionicons name="person-outline" size={20} color={Colors.textPrimary} />
+            </TouchableOpacity>
             <TouchableOpacity style={styles.datePill} onPress={() => setShowMonthModal(true)} activeOpacity={0.8}>
               <Ionicons name="calendar-outline" size={14} color={Colors.primary} />
               <Text style={styles.datePillText}>{formatDateShort(today)}</Text>
@@ -1070,7 +1092,22 @@ const styles = StyleSheet.create({
 
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 },
   headerLeft: { flexDirection: 'row', alignItems: 'center', flex: 1 },
-  avatarCircle: { width: 56, height: 56, borderRadius: 28, backgroundColor: Colors.primaryLight, marginRight: 12, overflow: 'hidden' },
+  appLogoWrap: {
+    width: 52,
+    height: 52,
+    borderRadius: 14,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    overflow: 'hidden',
+    marginRight: 12,
+    shadowColor: Colors.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  headerAppLogo: { width: '100%', height: '100%' },
   headerTextWrap: { flex: 1 },
   greeting: { fontFamily: FontFamily.sansMedium, fontSize: 13, color: '#6B7280' },
   userName: { fontFamily: FontFamily.displayBlack, fontSize: 24, fontWeight: '900', color: '#172033', letterSpacing: -0.5, marginTop: -2 },
@@ -1078,8 +1115,8 @@ const styles = StyleSheet.create({
   
   datePill: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFFFF', paddingHorizontal: 8, paddingVertical: 6, borderRadius: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2, gap: 4 },
   datePillText: { fontFamily: FontFamily.sansBold, fontSize: 11, color: '#172033' },
-  headerRight: { flexDirection: 'column', alignItems: 'flex-end', justifyContent: 'space-between', height: 56 },
-  iconCircle: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#EFF2F7' },
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  iconCircle: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#EFF2F7' },
   badge: { position: 'absolute', top: -2, right: -2, backgroundColor: Colors.primary, width: 14, height: 14, borderRadius: 7, alignItems: 'center', justifyContent: 'center' },
   badgeText: { fontSize: 8, color: Colors.white, fontFamily: FontFamily.sansBold },
   

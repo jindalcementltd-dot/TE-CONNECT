@@ -15,10 +15,13 @@ import { normalizeDate } from '../../src/utils/helpers';
 import { Slab, SlabStatus } from '../../src/types';
 import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
 import { format } from 'date-fns';
+import { useUndo } from '../../src/context/UndoContext';
+import { addNotification } from '../../src/services/notifications';
 
 export default function SlabDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const queryClient = useQueryClient();
+  const { showUndo } = useUndo();
   const [localStatus, setLocalStatus] = useState<SlabStatus | null>(null);
 
   const { data: slabs, isLoading } = useQuery({ queryKey: ['slabs'], queryFn: () => apiGetSlabs() });
@@ -33,6 +36,11 @@ export default function SlabDetailScreen() {
       Toast.show({ type: 'success', text1: 'Status Updated ✅', text2: `Slab is now marked as ${newStatus}.` });
       queryClient.invalidateQueries({ queryKey: ['slabs'] });
       queryClient.invalidateQueries({ queryKey: ['todaySummary'] });
+      addNotification(
+        `🏗️ Slab ${newStatus} (${slab?.dealer_name || 'Dealer'})`,
+        `Contractor: ${slab?.contractor_name || 'N/A'} · Cement: ${slab?.expected_cement || 'N/A'}`,
+        'SLAB'
+      );
     },
     onError: (err: any) => {
       setLocalStatus(null);
@@ -42,7 +50,12 @@ export default function SlabDetailScreen() {
 
   const handleSetStatus = async (status: SlabStatus) => {
     if (status === currentStatus) return;
+    const previousStatus = currentStatus;
     updateMutation.mutate(status);
+    showUndo(`Slab marked as ${status}`, () => {
+      updateMutation.mutate(previousStatus);
+      Toast.show({ type: 'info', text1: 'Undone ↩️', text2: `Slab restored to ${previousStatus}.` });
+    }, 5);
   };
 
   if (isLoading) {

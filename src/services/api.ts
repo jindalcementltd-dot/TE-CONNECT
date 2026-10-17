@@ -63,6 +63,14 @@ export async function apiLogin(login_id: string, password: string): Promise<ApiR
   return post('login', { login_id, password });
 }
 
+export async function apiChangePassword(data: {
+  user_id: string;
+  old_password_hash: string;
+  new_password_hash: string;
+}): Promise<ApiResponse<null>> {
+  return post('changePassword', data);
+}
+
 // ── USERS ─────────────────────────────────────────────────
 export async function apiGetUsers(): Promise<User[]> {
   return get<User[]>('getUsers');

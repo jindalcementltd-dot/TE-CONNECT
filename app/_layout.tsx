@@ -19,6 +19,8 @@ import {
   Poppins_700Bold,
 } from '@expo-google-fonts/poppins';
 
+import { UndoProvider } from '../src/context/UndoContext';
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -53,25 +55,29 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <QueryClientProvider client={queryClient}>
-        <StatusBar style="light" />
-        <Stack screenOptions={{ headerShown: false }}>
-          <Stack.Screen name="(auth)" />
-          <Stack.Screen name="(tabs)" />
-          <Stack.Screen name="slab/add" options={{ presentation: 'modal' }} />
-          <Stack.Screen name="slab/[id]" options={{ presentation: 'modal' }} />
-          <Stack.Screen name="sale/add" options={{ presentation: 'modal' }} />
-          <Stack.Screen name="sale/scan" options={{ presentation: 'modal' }} />
-          <Stack.Screen name="punch/add" options={{ presentation: 'modal' }} />
-          <Stack.Screen name="meeting/add" options={{ presentation: 'modal' }} />
-          <Stack.Screen name="meeting/[id]" options={{ presentation: 'modal' }} />
-          <Stack.Screen name="dealer/[id]" />
-          <Stack.Screen name="dealer/add" options={{ presentation: 'modal' }} />
-          <Stack.Screen name="admin/index" />
-          <Stack.Screen name="public/quick" options={{ headerShown: false }} />
-          <Stack.Screen name="public/slab" options={{ headerShown: false }} />
-          <Stack.Screen name="public/meeting" options={{ headerShown: false }} />
-        </Stack>
-        <Toast />
+        <UndoProvider>
+          <StatusBar style="light" />
+          <Stack screenOptions={{ headerShown: false }}>
+            <Stack.Screen name="(auth)" />
+            <Stack.Screen name="(tabs)" />
+            <Stack.Screen name="profile" options={{ headerShown: false }} />
+            <Stack.Screen name="notifications" options={{ headerShown: false }} />
+            <Stack.Screen name="slab/add" options={{ presentation: 'modal' }} />
+            <Stack.Screen name="slab/[id]" options={{ presentation: 'modal' }} />
+            <Stack.Screen name="sale/add" options={{ presentation: 'modal' }} />
+            <Stack.Screen name="sale/scan" options={{ presentation: 'modal' }} />
+            <Stack.Screen name="punch/add" options={{ presentation: 'modal' }} />
+            <Stack.Screen name="meeting/add" options={{ presentation: 'modal' }} />
+            <Stack.Screen name="meeting/[id]" options={{ presentation: 'modal' }} />
+            <Stack.Screen name="dealer/[id]" />
+            <Stack.Screen name="dealer/add" options={{ presentation: 'modal' }} />
+            <Stack.Screen name="admin/index" />
+            <Stack.Screen name="public/quick" options={{ headerShown: false }} />
+            <Stack.Screen name="public/slab" options={{ headerShown: false }} />
+            <Stack.Screen name="public/meeting" options={{ headerShown: false }} />
+          </Stack>
+          <Toast />
+        </UndoProvider>
       </QueryClientProvider>
     </GestureHandlerRootView>
   );
