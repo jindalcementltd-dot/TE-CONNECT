@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity,
   RefreshControl, ActivityIndicator, Platform, Modal, FlatList,
@@ -7,9 +7,13 @@ import { Calendar } from 'react-native-calendars';
 import { router } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { Colors } from '../../src/theme/colors';
-import { apiGetSlabs, apiGetUsers } from '../../src/services/api';
+import { apiGetSlabs, apiGetUsers, apiGetDealers } from '../../src/services/api';
+import { getUser } from '../../src/services/auth';
 import { currentMonthISO, normalizeDate } from '../../src/utils/helpers';
-import { Slab } from '../../src/types';
+import {
+  getUserDistrict, getSlabDistrict, getAvailableDistricts
+} from '../../src/utils/district';
+import { Slab, User } from '../../src/types';
 import { FontFamily } from '../../src/theme/typography';
 import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
 import { format, parseISO } from 'date-fns';
@@ -147,9 +151,26 @@ export default function SlabScreen() {
   const [selectedDate, setSelectedDate] = useState(today);
   const [refreshing, setRefreshing] = useState(false);
 
+  const [user, setUser] = useState<User | null>(null);
+  const [activeDistrict, setActiveDistrict] = useState<string>('Jajpur');
+
+  useEffect(() => {
+    getUser().then(u => {
+      setUser(u);
+      if (u) {
+        setActiveDistrict(getUserDistrict(u));
+      }
+    });
+  }, []);
+
   const { data: usersList } = useQuery({
     queryKey: ['users'],
     queryFn: () => apiGetUsers(),
+  });
+
+  const { data: dealers } = useQuery({
+    queryKey: ['dealers'],
+    queryFn: () => apiGetDealers(),
   });
 
   const { data: slabs, isLoading, refetch } = useQuery({
@@ -164,17 +185,37 @@ export default function SlabScreen() {
   }, [refetch]);
 
   const rawSlabs = useMemo(() => slabs || [], [slabs]);
+  const userDistrict = getUserDistrict(user);
 
-  // Compute available months from all slab dates
+  const availableDistricts = useMemo(() => {
+    return getAvailableDistricts(usersList, dealers);
+  }, [usersList, dealers]);
+
+  // Filter slabs strictly by District and TE role
+  const scopedRawSlabs = useMemo(() => {
+    const list = rawSlabs;
+    if (user?.role === 'TE') {
+      const cleanName = (user.name || '').trim().toLowerCase();
+      return list.filter(s => {
+        const sDist = getSlabDistrict(s, dealers, usersList);
+        const isTeMatch = s.assigned_te && s.assigned_te.trim().toLowerCase() === cleanName;
+        return isTeMatch || sDist.toLowerCase() === userDistrict.toLowerCase();
+      });
+    }
+    if (!activeDistrict || activeDistrict === 'ALL') return list;
+    return list.filter(s => getSlabDistrict(s, dealers, usersList).toLowerCase() === activeDistrict.toLowerCase());
+  }, [rawSlabs, user, userDistrict, activeDistrict, dealers, usersList]);
+
+  // Compute available months from scoped slab dates
   const availableMonths = useMemo(() => {
     const set = new Set<string>();
     set.add(currentMonthISO());
-    rawSlabs.forEach(s => {
+    scopedRawSlabs.forEach(s => {
       const m = normalizeDate(s.slab_date).substring(0, 7);
       if (m && m.length === 7) set.add(m);
     });
     return Array.from(set).sort().reverse();
-  }, [rawSlabs]);
+  }, [scopedRawSlabs]);
 
   const switchMonth = (direction: 'prev' | 'next') => {
     const currentIndex = availableMonths.indexOf(selectedMonth);
@@ -199,13 +240,13 @@ export default function SlabScreen() {
 
   // Slabs filtered strictly by selectedMonth & sorted recent date first
   const monthSlabs = useMemo(() => {
-    const list = rawSlabs.filter(s => normalizeDate(s.slab_date).startsWith(selectedMonth));
+    const list = scopedRawSlabs.filter(s => normalizeDate(s.slab_date).startsWith(selectedMonth));
     return [...list].sort((a, b) => {
       const dateA = normalizeDate(a.slab_date);
       const dateB = normalizeDate(b.slab_date);
       return dateB.localeCompare(dateA);
     });
-  }, [rawSlabs, selectedMonth]);
+  }, [scopedRawSlabs, selectedMonth]);
 
   // Summary counts for selectedMonth
   const completedCount = useMemo(() => monthSlabs.filter(s => s.status === 'COMPLETED').length, [monthSlabs]);
@@ -269,7 +310,7 @@ export default function SlabScreen() {
         <View>
           <Text style={styles.headerTitle}>Slab Castings</Text>
           <Text style={styles.headerSub}>
-            District Jajpur • Consolidated Team
+            District {user?.role === 'TE' ? userDistrict : activeDistrict} • {user?.role === 'TE' ? (user.name || 'My Slabs') : 'Consolidated Team'}
           </Text>
         </View>
         <TouchableOpacity
@@ -288,6 +329,36 @@ export default function SlabScreen() {
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#800E20" />}
       >
+        {/* DISTRICT SELECTOR BAR (For Admins / Managers) */}
+        {user?.role !== 'TE' && availableDistricts.length > 0 && (
+          <View style={styles.districtBarContainer}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.districtBarScroll}>
+              <Text style={styles.districtBarLabel}>📍 DISTRICT:</Text>
+              <TouchableOpacity
+                style={[styles.districtChip, activeDistrict === 'ALL' && styles.districtChipActive]}
+                onPress={() => setActiveDistrict('ALL')}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.districtChipText, activeDistrict === 'ALL' && styles.districtChipTextActive]}>
+                  All Districts
+                </Text>
+              </TouchableOpacity>
+              {availableDistricts.map(dist => (
+                <TouchableOpacity
+                  key={dist}
+                  style={[styles.districtChip, activeDistrict.toLowerCase() === dist.toLowerCase() && styles.districtChipActive]}
+                  onPress={() => setActiveDistrict(dist)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[styles.districtChipText, activeDistrict.toLowerCase() === dist.toLowerCase() && styles.districtChipTextActive]}>
+                    {dist}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        )}
+
         {/* ── MONTH SELECTOR CAPSULE ── */}
         <View style={styles.monthSelectorBar}>
           <View>
@@ -620,6 +691,52 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: 16,
+  },
+
+  // District Selector Bar
+  districtBarContainer: {
+    marginBottom: 12,
+    width: '100%',
+  },
+  districtBarScroll: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 2,
+  },
+  districtBarLabel: {
+    fontFamily: FontFamily.sansBold,
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#8A7277',
+    letterSpacing: 0.5,
+    marginRight: 4,
+  },
+  districtChip: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
+    borderColor: '#EEDCE1',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    shadowColor: 'rgba(78, 5, 17, 0.04)',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 1,
+    shadowRadius: 3,
+    elevation: 1,
+  },
+  districtChipActive: {
+    backgroundColor: '#800E20',
+    borderColor: '#800E20',
+  },
+  districtChipText: {
+    fontFamily: FontFamily.sansBold,
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#4B5563',
+  },
+  districtChipTextActive: {
+    color: '#FFFFFF',
   },
 
   // Month Selector Bar

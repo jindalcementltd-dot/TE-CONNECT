@@ -18,6 +18,10 @@ import { getUser } from '../../src/services/auth';
 import {
   getGreeting, normalizeDate, currentMonthISO, formatDateShort, formatMonthYear
 } from '../../src/utils/helpers';
+import {
+  getUserDistrict, getDealerDistrict, getSlabDistrict, getSaleDistrict,
+  getMeetingDistrict, getTrackerDistrict, getAvailableDistricts, normalizeDistrictName
+} from '../../src/utils/district';
 import { User, DealerSalesSummary, Slab, Meeting } from '../../src/types';
 import { FontFamily } from '../../src/theme/typography';
 import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
@@ -35,6 +39,10 @@ export default function HomeScreen() {
   // Interactive month selection (defaults to current month)
   const [selectedMonth, setSelectedMonth] = useState<string>(() => currentMonthISO());
   const [showMonthModal, setShowMonthModal] = useState(false);
+
+  // District Filter State (defaults to user's district; if Admin, can toggle)
+  const [activeDistrict, setActiveDistrict] = useState<string>('Jajpur');
+  const [showDistrictModal, setShowDistrictModal] = useState<boolean>(false);
 
   // Target TE Selection State (defaults to logged-in user)
   const [targetTE, setTargetTE] = useState<string>('');
@@ -56,8 +64,12 @@ export default function HomeScreen() {
   useEffect(() => {
     getUser().then(u => {
       setUser(u);
-      if (u && !targetTE) {
-        setTargetTE(u.name);
+      if (u) {
+        if (!targetTE) {
+          setTargetTE(u.name);
+        }
+        const userDist = getUserDistrict(u);
+        setActiveDistrict(userDist);
       }
     });
     getUnreadNotificationsCount().then(setUnreadNotifCount);
@@ -120,32 +132,86 @@ export default function HomeScreen() {
     return Array.from(set).sort().reverse();
   }, [allSales, allSlabs, allMeetings, activeTrackers]);
 
-  // MONTHLY DATA FILTERED BY selectedMonth
-  const allSlabsList = useMemo(() => 
-    (allSlabs || []).filter(s => normalizeDate(s.slab_date).startsWith(selectedMonth)),
-    [allSlabs, selectedMonth]
-  );
+  const availableDistricts = useMemo(() => {
+    return getAvailableDistricts(usersList, dealers);
+  }, [usersList, dealers]);
 
-  const allMeetingsList = useMemo(() => 
-    (allMeetings || []).filter(m => normalizeDate(m.meeting_date).startsWith(selectedMonth)),
-    [allMeetings, selectedMonth]
-  );
+  // SCOPED DEALERS FILTERED BY DISTRICT AND USER ROLE:
+  const scopedDealers = useMemo(() => {
+    const list = dealers || [];
+    if (user?.role === 'TE') {
+      const userDist = getUserDistrict(user);
+      const cleanName = (user.name || '').trim().toLowerCase();
+      return list.filter(d => {
+        const dDist = getDealerDistrict(d, usersList);
+        const isTeMatch = d.assigned_te && d.assigned_te.trim().toLowerCase() === cleanName;
+        return isTeMatch || dDist.toLowerCase() === userDist.toLowerCase();
+      });
+    }
+    if (!activeDistrict || activeDistrict === 'ALL') return list;
+    return list.filter(d => getDealerDistrict(d, usersList).toLowerCase() === activeDistrict.toLowerCase());
+  }, [dealers, usersList, user, activeDistrict]);
 
-  const allSalesList = useMemo(() => 
-    (allSales || []).filter(s => normalizeDate(s.sale_date).startsWith(selectedMonth)),
-    [allSales, selectedMonth]
-  );
+  // MONTHLY DATA FILTERED BY selectedMonth AND DISTRICT
+  const allSlabsList = useMemo(() => {
+    const list = (allSlabs || []).filter(s => normalizeDate(s.slab_date).startsWith(selectedMonth));
+    if (user?.role === 'TE') {
+      const userDist = getUserDistrict(user);
+      const cleanName = (user.name || '').trim().toLowerCase();
+      return list.filter(s => {
+        const sDist = getSlabDistrict(s, dealers, usersList);
+        const isTeMatch = s.assigned_te && s.assigned_te.trim().toLowerCase() === cleanName;
+        return isTeMatch || sDist.toLowerCase() === userDist.toLowerCase();
+      });
+    }
+    if (!activeDistrict || activeDistrict === 'ALL') return list;
+    return list.filter(s => getSlabDistrict(s, dealers, usersList).toLowerCase() === activeDistrict.toLowerCase());
+  }, [allSlabs, selectedMonth, dealers, usersList, user, activeDistrict]);
+
+  const allMeetingsList = useMemo(() => {
+    const list = (allMeetings || []).filter(m => normalizeDate(m.meeting_date).startsWith(selectedMonth));
+    if (user?.role === 'TE') {
+      const userDist = getUserDistrict(user);
+      const cleanName = (user.name || '').trim().toLowerCase();
+      return list.filter(m => {
+        const mDist = getMeetingDistrict(m, usersList);
+        const isTeMatch = m.te && m.te.trim().toLowerCase() === cleanName;
+        return isTeMatch || mDist.toLowerCase() === userDist.toLowerCase();
+      });
+    }
+    if (!activeDistrict || activeDistrict === 'ALL') return list;
+    return list.filter(m => getMeetingDistrict(m, usersList).toLowerCase() === activeDistrict.toLowerCase());
+  }, [allMeetings, selectedMonth, usersList, user, activeDistrict]);
+
+  const allSalesList = useMemo(() => {
+    const list = (allSales || []).filter(s => normalizeDate(s.sale_date).startsWith(selectedMonth));
+    if (user?.role === 'TE') {
+      const userDist = getUserDistrict(user);
+      const cleanName = (user.name || '').trim().toLowerCase();
+      return list.filter(s => {
+        const sDist = getSaleDistrict(s, dealers, usersList);
+        const isTeMatch = s.assigned_te && s.assigned_te.trim().toLowerCase() === cleanName;
+        return isTeMatch || sDist.toLowerCase() === userDist.toLowerCase();
+      });
+    }
+    if (!activeDistrict || activeDistrict === 'ALL') return list;
+    return list.filter(s => getSaleDistrict(s, dealers, usersList).toLowerCase() === activeDistrict.toLowerCase());
+  }, [allSales, selectedMonth, dealers, usersList, user, activeDistrict]);
 
   const filteredActiveTrackers = useMemo(() => {
     const list = activeTrackers || [];
     const thisMonthTrackers = list.filter(t => normalizeDate(t.month || t.date).startsWith(selectedMonth));
-    const targetName = (targetTE || user?.name || '').trim().toLowerCase();
-    if (targetName && targetName !== 'all') {
-      const teFiltered = thisMonthTrackers.filter(t => String(t.te || '').toLowerCase() === targetName);
+    if (user?.role === 'TE') {
+      const cleanName = (user.name || '').trim().toLowerCase();
+      return thisMonthTrackers.filter(t => (t.te || '').trim().toLowerCase() === cleanName);
+    }
+    if (targetTE && targetTE !== 'ALL') {
+      const teFiltered = thisMonthTrackers.filter(t => String(t.te || '').toLowerCase() === targetTE.trim().toLowerCase());
       if (teFiltered.length > 0) return teFiltered;
     }
-    return thisMonthTrackers;
-  }, [activeTrackers, user, targetTE, selectedMonth]);
+    if (!activeDistrict || activeDistrict === 'ALL') return thisMonthTrackers;
+    return thisMonthTrackers.filter(t => getTrackerDistrict(t, usersList).toLowerCase() === activeDistrict.toLowerCase());
+  }, [activeTrackers, user, targetTE, selectedMonth, activeDistrict, usersList]);
 
   // Totals for Monthly Performance
   const totalSalesBags = allSalesList.reduce((sum, s) => sum + (Number(s.quantity_bags) || 0), 0);
@@ -167,13 +233,22 @@ export default function HomeScreen() {
     const set = new Set<string>();
     if (user?.name && user.name.trim()) set.add(user.name.trim());
     (usersList || []).forEach(u => {
-      if (u.name && u.name.trim()) set.add(u.name.trim());
-    });
-    (allMeetings || []).forEach(m => {
-      if (m.te && m.te.trim()) set.add(m.te.trim());
+      if (u.name && u.name.trim()) {
+        if (user?.role === 'TE') {
+          if (getUserDistrict(u).toLowerCase() === getUserDistrict(user).toLowerCase()) {
+            set.add(u.name.trim());
+          }
+        } else if (activeDistrict && activeDistrict !== 'ALL') {
+          if (getUserDistrict(u).toLowerCase() === activeDistrict.toLowerCase()) {
+            set.add(u.name.trim());
+          }
+        } else {
+          set.add(u.name.trim());
+        }
+      }
     });
     return Array.from(set).filter(Boolean);
-  }, [usersList, allMeetings, user]);
+  }, [usersList, user, activeDistrict]);
 
   const effectiveTargetTE = targetTE || user?.name || (teList[0] || '');
 
@@ -193,31 +268,77 @@ export default function HomeScreen() {
     .filter(m => m.meeting_type === 'CUSTOMER' && m.status === 'COMPLETED')
     .reduce((sum, m) => sum + (Number(m.people_count) || 0), 0);
 
-  // UPCOMING vs RECENT SLABS
+  // UPCOMING vs RECENT SLABS (SCOPED BY DISTRICT / TE)
   const upcomingSlabsList = useMemo(() => {
     const list = allSlabs || [];
-    const upcoming = list.filter(s => s.status === 'UPCOMING' || normalizeDate(s.slab_date) >= today);
+    const scoped = list.filter(s => {
+      if (user?.role === 'TE') {
+        const userDist = getUserDistrict(user);
+        const cleanName = (user.name || '').trim().toLowerCase();
+        const sDist = getSlabDistrict(s, dealers, usersList);
+        const isTeMatch = s.assigned_te && s.assigned_te.trim().toLowerCase() === cleanName;
+        return isTeMatch || sDist.toLowerCase() === userDist.toLowerCase();
+      }
+      if (!activeDistrict || activeDistrict === 'ALL') return true;
+      return getSlabDistrict(s, dealers, usersList).toLowerCase() === activeDistrict.toLowerCase();
+    });
+    const upcoming = scoped.filter(s => s.status === 'UPCOMING' || normalizeDate(s.slab_date) >= today);
     return upcoming.sort((a, b) => normalizeDate(a.slab_date).localeCompare(normalizeDate(b.slab_date)));
-  }, [allSlabs, today]);
+  }, [allSlabs, today, user, activeDistrict, dealers, usersList]);
 
   // Display upcoming slabs if available; otherwise show recent slabs from the sheet
   const displaySlabs = useMemo(() => {
     if (upcomingSlabsList.length > 0) return upcomingSlabsList.slice(0, 3);
-    return (allSlabs || []).slice(-3).reverse();
-  }, [upcomingSlabsList, allSlabs]);
+    const list = allSlabs || [];
+    const scoped = list.filter(s => {
+      if (user?.role === 'TE') {
+        const userDist = getUserDistrict(user);
+        const cleanName = (user.name || '').trim().toLowerCase();
+        const sDist = getSlabDistrict(s, dealers, usersList);
+        const isTeMatch = s.assigned_te && s.assigned_te.trim().toLowerCase() === cleanName;
+        return isTeMatch || sDist.toLowerCase() === userDist.toLowerCase();
+      }
+      if (!activeDistrict || activeDistrict === 'ALL') return true;
+      return getSlabDistrict(s, dealers, usersList).toLowerCase() === activeDistrict.toLowerCase();
+    });
+    return scoped.slice(-3).reverse();
+  }, [upcomingSlabsList, allSlabs, user, activeDistrict, dealers, usersList]);
 
-  // UPCOMING vs RECENT EVENTS
+  // UPCOMING vs RECENT EVENTS (SCOPED BY DISTRICT / TE)
   const upcomingMeetingsList = useMemo(() => {
     const list = allMeetings || [];
-    const upcoming = list.filter(m => m.status === 'PLANNED' || normalizeDate(m.meeting_date) >= today);
+    const scoped = list.filter(m => {
+      if (user?.role === 'TE') {
+        const userDist = getUserDistrict(user);
+        const cleanName = (user.name || '').trim().toLowerCase();
+        const mDist = getMeetingDistrict(m, usersList);
+        const isTeMatch = m.te && m.te.trim().toLowerCase() === cleanName;
+        return isTeMatch || mDist.toLowerCase() === userDist.toLowerCase();
+      }
+      if (!activeDistrict || activeDistrict === 'ALL') return true;
+      return getMeetingDistrict(m, usersList).toLowerCase() === activeDistrict.toLowerCase();
+    });
+    const upcoming = scoped.filter(m => m.status === 'PLANNED' || normalizeDate(m.meeting_date) >= today);
     return upcoming.sort((a, b) => normalizeDate(a.meeting_date).localeCompare(normalizeDate(b.meeting_date)));
-  }, [allMeetings, today]);
+  }, [allMeetings, today, user, activeDistrict, usersList]);
 
   // Display upcoming meetings if available; otherwise show recent meetings from sheet
   const displayMeetings = useMemo(() => {
     if (upcomingMeetingsList.length > 0) return upcomingMeetingsList.slice(0, 3);
-    return (allMeetings || []).slice(-3).reverse();
-  }, [upcomingMeetingsList, allMeetings]);
+    const list = allMeetings || [];
+    const scoped = list.filter(m => {
+      if (user?.role === 'TE') {
+        const userDist = getUserDistrict(user);
+        const cleanName = (user.name || '').trim().toLowerCase();
+        const mDist = getMeetingDistrict(m, usersList);
+        const isTeMatch = m.te && m.te.trim().toLowerCase() === cleanName;
+        return isTeMatch || mDist.toLowerCase() === userDist.toLowerCase();
+      }
+      if (!activeDistrict || activeDistrict === 'ALL') return true;
+      return getMeetingDistrict(m, usersList).toLowerCase() === activeDistrict.toLowerCase();
+    });
+    return scoped.slice(-3).reverse();
+  }, [upcomingMeetingsList, allMeetings, user, activeDistrict, usersList]);
 
   // ── TODAY'S PENDING TASKS (FOR ACTION REQUIRED REMINDER) ──
   const [updatingTaskId, setUpdatingTaskId] = useState<string | null>(null);
@@ -225,18 +346,36 @@ export default function HomeScreen() {
   // Slabs scheduled for today or past due that are still UPCOMING
   const pendingSlabs = useMemo(() => {
     return (allSlabs || []).filter(s => {
+      if (user?.role === 'TE') {
+        const userDist = getUserDistrict(user);
+        const cleanName = (user.name || '').trim().toLowerCase();
+        const sDist = getSlabDistrict(s, dealers, usersList);
+        const isTeMatch = s.assigned_te && s.assigned_te.trim().toLowerCase() === cleanName;
+        if (!isTeMatch && sDist.toLowerCase() !== userDist.toLowerCase()) return false;
+      } else if (activeDistrict && activeDistrict !== 'ALL') {
+        if (getSlabDistrict(s, dealers, usersList).toLowerCase() !== activeDistrict.toLowerCase()) return false;
+      }
       const slabDate = normalizeDate(s.slab_date);
       return s.status === 'UPCOMING' && slabDate <= today;
     });
-  }, [allSlabs, today]);
+  }, [allSlabs, today, user, activeDistrict, dealers, usersList]);
 
   // Meetings scheduled for today or past due that are still PLANNED
   const pendingMeetings = useMemo(() => {
     return (allMeetings || []).filter(m => {
+      if (user?.role === 'TE') {
+        const userDist = getUserDistrict(user);
+        const cleanName = (user.name || '').trim().toLowerCase();
+        const mDist = getMeetingDistrict(m, usersList);
+        const isTeMatch = m.te && m.te.trim().toLowerCase() === cleanName;
+        if (!isTeMatch && mDist.toLowerCase() !== userDist.toLowerCase()) return false;
+      } else if (activeDistrict && activeDistrict !== 'ALL') {
+        if (getMeetingDistrict(m, usersList).toLowerCase() !== activeDistrict.toLowerCase()) return false;
+      }
       const mDate = normalizeDate(m.meeting_date);
       return m.status === 'PLANNED' && mDate <= today;
     });
-  }, [allMeetings, today]);
+  }, [allMeetings, today, user, activeDistrict, usersList]);
 
   const pendingTasksTotal = pendingSlabs.length + pendingMeetings.length;
 
@@ -303,11 +442,11 @@ export default function HomeScreen() {
   // Top Dealers computed from allSalesList for selectedMonth
   const computedTopDealers = useMemo(() => {
     const dealerMap: Record<string, { dealer_id: string; dealer_name: string; area: string; total_bags: number }> = {};
-    (dealers || []).forEach(d => {
+    scopedDealers.forEach(d => {
       dealerMap[d.dealer_id] = {
         dealer_id: d.dealer_id,
         dealer_name: d.dealer_name,
-        area: d.area || 'Jajpur',
+        area: d.area || activeDistrict,
         total_bags: 0,
       };
     });
@@ -318,7 +457,7 @@ export default function HomeScreen() {
         dealerMap[did] = {
           dealer_id: did,
           dealer_name: s.dealer_name,
-          area: 'Jajpur',
+          area: activeDistrict,
           total_bags: 0,
         };
       }
@@ -326,7 +465,7 @@ export default function HomeScreen() {
     });
 
     return Object.values(dealerMap).sort((a, b) => b.total_bags - a.total_bags);
-  }, [dealers, allSalesList]);
+  }, [scopedDealers, allSalesList, activeDistrict]);
 
   const formatUpcomingDate = (dateStr: string) => {
     try {
@@ -384,10 +523,22 @@ export default function HomeScreen() {
             <View style={styles.headerTextWrap}>
               <Text style={styles.greeting}>{getGreeting()},</Text>
               <Text style={styles.userName} numberOfLines={1}>{firstName}</Text>
-              <View style={styles.territoryRow}>
+              <TouchableOpacity
+                style={styles.territoryRow}
+                onPress={() => {
+                  if (user?.role !== 'TE') setShowDistrictModal(true);
+                }}
+                disabled={user?.role === 'TE'}
+                activeOpacity={0.7}
+              >
                 <Ionicons name="location-sharp" size={11} color={Colors.primary} style={{ marginRight: 2 }} />
-                <Text style={styles.territoryText} numberOfLines={1}>{territorySetting} Territory</Text>
-              </View>
+                <Text style={styles.territoryText} numberOfLines={1}>
+                  District {user?.role === 'TE' ? getUserDistrict(user) : activeDistrict}
+                </Text>
+                {user?.role !== 'TE' && (
+                  <Ionicons name="chevron-down" size={10} color={Colors.primary} style={{ marginLeft: 3 }} />
+                )}
+              </TouchableOpacity>
             </View>
           </View>
           <View style={styles.headerRight}>
@@ -415,6 +566,36 @@ export default function HomeScreen() {
             style={styles.heroImage}
           />
         </View>
+
+        {/* DISTRICT SELECTOR BAR (For Admins / Managers) */}
+        {user?.role !== 'TE' && availableDistricts.length > 0 && (
+          <View style={styles.districtBarContainer}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.districtBarScroll}>
+              <Text style={styles.districtBarLabel}>📍 DISTRICT:</Text>
+              <TouchableOpacity
+                style={[styles.districtChip, activeDistrict === 'ALL' && styles.districtChipActive]}
+                onPress={() => setActiveDistrict('ALL')}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.districtChipText, activeDistrict === 'ALL' && styles.districtChipTextActive]}>
+                  All Districts
+                </Text>
+              </TouchableOpacity>
+              {availableDistricts.map(dist => (
+                <TouchableOpacity
+                  key={dist}
+                  style={[styles.districtChip, activeDistrict.toLowerCase() === dist.toLowerCase() && styles.districtChipActive]}
+                  onPress={() => setActiveDistrict(dist)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[styles.districtChipText, activeDistrict.toLowerCase() === dist.toLowerCase() && styles.districtChipTextActive]}>
+                    {dist}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        )}
 
         {/* ── TODAY'S SCHEDULE & ACTION REMINDER BANNER ── */}
         {pendingTasksTotal > 0 ? (
@@ -1134,8 +1315,54 @@ const styles = StyleSheet.create({
   badge: { position: 'absolute', top: -2, right: -2, backgroundColor: Colors.primary, width: 14, height: 14, borderRadius: 7, alignItems: 'center', justifyContent: 'center' },
   badgeText: { fontSize: 8, color: Colors.white, fontFamily: FontFamily.sansBold },
   
-  heroBannerContainer: { width: '100%', aspectRatio: 2.3, marginBottom: 24, borderRadius: 20, overflow: 'hidden' },
+  heroBannerContainer: { width: '100%', aspectRatio: 2.3, marginBottom: 14, borderRadius: 20, overflow: 'hidden' },
   heroImage: { width: '100%', height: '100%' },
+
+  // District Selector Bar
+  districtBarContainer: {
+    marginBottom: 16,
+    width: '100%',
+  },
+  districtBarScroll: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 4,
+  },
+  districtBarLabel: {
+    fontFamily: FontFamily.sansBold,
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#8A7277',
+    letterSpacing: 0.5,
+    marginRight: 4,
+  },
+  districtChip: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    shadowColor: 'rgba(0,0,0,0.03)',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 1,
+    shadowRadius: 3,
+    elevation: 1,
+  },
+  districtChipActive: {
+    backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
+  },
+  districtChipText: {
+    fontFamily: FontFamily.sansBold,
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#4B5563',
+  },
+  districtChipTextActive: {
+    color: '#FFFFFF',
+  },
   
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 14, marginTop: 12 },
   sectionTitle: { fontFamily: FontFamily.displayBold, fontSize: 20, color: Colors.textPrimary },

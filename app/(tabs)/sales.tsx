@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity,
   RefreshControl, ActivityIndicator, Dimensions, Platform, TextInput,
@@ -11,17 +11,23 @@ import { Colors } from '../../src/theme/colors';
 import {
   apiGetSales, apiGetDealers, apiGetActiveTracker, apiGetSettings, apiGetContractors, apiGetUsers,
 } from '../../src/services/api';
+import { getUser } from '../../src/services/auth';
 import {
   bagsToMT, currentMonthISO, formatPercent,
   normalizeDate, formatDateShort,
 } from '../../src/utils/helpers';
-import { Sale, Dealer } from '../../src/types';
+import {
+  getUserDistrict, getDealerDistrict, getSaleDistrict, getAvailableDistricts,
+} from '../../src/utils/district';
+import { Sale, Dealer, User } from '../../src/types';
 import { FontFamily } from '../../src/theme/typography';
 import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
 
 const { width } = Dimensions.get('window');
 
 export default function SalesScreen() {
+  const [user, setUser] = useState<User | null>(null);
+  const [activeDistrict, setActiveDistrict] = useState<string>('Jajpur');
   const [refreshing, setRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState<'SALES' | 'DEALERS'>('SALES');
   const [filter, setFilter] = useState<'ALL' | 'TODAY'>('ALL');
@@ -29,6 +35,16 @@ export default function SalesScreen() {
   const [showMonthModal, setShowMonthModal] = useState<boolean>(false);
   const [dealerSearchQuery, setDealerSearchQuery] = useState<string>('');
   const [selectedDealerForModal, setSelectedDealerForModal] = useState<Dealer | null>(null);
+
+  useEffect(() => {
+    getUser().then(u => {
+      setUser(u);
+      if (u) {
+        const userDist = getUserDistrict(u);
+        setActiveDistrict(userDist);
+      }
+    });
+  }, []);
 
   const today = normalizeDate(new Date());
 
@@ -74,11 +90,47 @@ export default function SalesScreen() {
     setRefreshing(false);
   }, [refetchUsers, refetchSales, refetchDealers, refetchContractors, refetchTrackers]);
 
+  const availableDistricts = useMemo(() => {
+    return getAvailableDistricts(usersList, dealers);
+  }, [usersList, dealers]);
+
+  // SCOPED DEALERS FILTERED BY DISTRICT AND USER ROLE:
+  const scopedDealers = useMemo(() => {
+    const list = dealers || [];
+    if (user?.role === 'TE') {
+      const userDist = getUserDistrict(user);
+      const cleanName = (user.name || '').trim().toLowerCase();
+      return list.filter(d => {
+        const dDist = getDealerDistrict(d, usersList);
+        const isTeMatch = d.assigned_te && d.assigned_te.trim().toLowerCase() === cleanName;
+        return isTeMatch || dDist.toLowerCase() === userDist.toLowerCase();
+      });
+    }
+    if (!activeDistrict || activeDistrict === 'ALL') return list;
+    return list.filter(d => getDealerDistrict(d, usersList).toLowerCase() === activeDistrict.toLowerCase());
+  }, [dealers, usersList, user, activeDistrict]);
+
+  // SCOPED SALES FILTERED BY DISTRICT AND USER ROLE:
+  const scopedAllSales = useMemo(() => {
+    const list = allSales || [];
+    if (user?.role === 'TE') {
+      const userDist = getUserDistrict(user);
+      const cleanName = (user.name || '').trim().toLowerCase();
+      return list.filter(s => {
+        const sDist = getSaleDistrict(s, dealers, usersList);
+        const isTeMatch = s.assigned_te && s.assigned_te.trim().toLowerCase() === cleanName;
+        return isTeMatch || sDist.toLowerCase() === userDist.toLowerCase();
+      });
+    }
+    if (!activeDistrict || activeDistrict === 'ALL') return list;
+    return list.filter(s => getSaleDistrict(s, dealers, usersList).toLowerCase() === activeDistrict.toLowerCase());
+  }, [allSales, dealers, usersList, user, activeDistrict]);
+
   // Compute available months from sales data
   const availableMonths = useMemo(() => {
     const set = new Set<string>();
     set.add(currentMonthISO());
-    (allSales || []).forEach(s => {
+    scopedAllSales.forEach(s => {
       const m = normalizeDate(s.sale_date).substring(0, 7);
       if (m && m.length === 7) set.add(m);
     });
@@ -87,7 +139,7 @@ export default function SalesScreen() {
       if (m && m.length === 7) set.add(m);
     });
     return Array.from(set).sort().reverse();
-  }, [allSales, activeTrackers]);
+  }, [scopedAllSales, activeTrackers]);
 
   const switchMonth = (direction: 'prev' | 'next') => {
     const currentIndex = availableMonths.indexOf(selectedMonth);
@@ -106,10 +158,10 @@ export default function SalesScreen() {
     }
   }, [selectedMonth]);
 
-  // Unified sales filtered by selectedMonth (team visibility filter removed)
+  // Unified sales filtered by selectedMonth and scoped by district
   const monthSales = useMemo(() => {
-    return (allSales || []).filter(s => normalizeDate(s.sale_date).startsWith(selectedMonth));
-  }, [allSales, selectedMonth]);
+    return scopedAllSales.filter(s => normalizeDate(s.sale_date).startsWith(selectedMonth));
+  }, [scopedAllSales, selectedMonth]);
 
   // Filter sales (All vs Today) within selected month, sorted newest date first!
   const filteredSales = useMemo(() => {
@@ -135,11 +187,11 @@ export default function SalesScreen() {
   const rankedDealers = useMemo(() => {
     const dealerMap: Record<string, { dealer_id: string; dealer_name: string; area: string; address?: string; phone?: string; total_bags: number; f2r: number; gold: number }> = {};
 
-    (dealers || []).forEach(d => {
+    scopedDealers.forEach(d => {
       dealerMap[d.dealer_id] = {
         dealer_id: d.dealer_id,
         dealer_name: d.dealer_name,
-        area: d.area || 'Jajpur',
+        area: d.area || (user?.role === 'TE' ? getUserDistrict(user) : activeDistrict),
         address: d.address || '',
         phone: d.phone || '',
         total_bags: 0,
@@ -154,7 +206,7 @@ export default function SalesScreen() {
         dealerMap[did] = {
           dealer_id: did,
           dealer_name: s.dealer_name,
-          area: 'Jajpur',
+          area: user?.role === 'TE' ? getUserDistrict(user) : activeDistrict,
           address: '',
           phone: '',
           total_bags: 0,
@@ -171,7 +223,7 @@ export default function SalesScreen() {
     return Object.values(dealerMap)
       .filter(d => d.total_bags > 0)
       .sort((a, b) => b.total_bags - a.total_bags);
-  }, [dealers, monthSales]);
+  }, [scopedDealers, monthSales, user, activeDistrict]);
 
   // Monthly sales lookup by dealer
   const dealerMonthSalesMap = useMemo(() => {
@@ -185,7 +237,7 @@ export default function SalesScreen() {
 
   // Filtered dealers for Dealers Directory search
   const filteredDealers = useMemo(() => {
-    const list = dealers || [];
+    const list = scopedDealers;
     if (!dealerSearchQuery.trim()) return list;
     const q = dealerSearchQuery.trim().toLowerCase();
     return list.filter(d =>
@@ -195,7 +247,7 @@ export default function SalesScreen() {
       (d.address && d.address.toLowerCase().includes(q)) ||
       (d.phone && d.phone.toLowerCase().includes(q))
     );
-  }, [dealers, dealerSearchQuery]);
+  }, [scopedDealers, dealerSearchQuery]);
 
   // Open Google Maps Directions
   const openDirections = (dealer: Dealer) => {
@@ -210,7 +262,7 @@ export default function SalesScreen() {
       Linking.openURL(dealer.address);
       return;
     }
-    const query = encodeURIComponent([dealer.dealer_name, dealer.address, dealer.area, 'Jajpur'].filter(Boolean).join(', '));
+    const query = encodeURIComponent([dealer.dealer_name, dealer.address, dealer.area, user?.role === 'TE' ? getUserDistrict(user) : activeDistrict].filter(Boolean).join(', '));
     const url = `https://www.google.com/maps/dir/?api=1&destination=${query}`;
     Linking.openURL(url);
   };
@@ -233,7 +285,7 @@ export default function SalesScreen() {
             {activeTab === 'SALES' ? 'Sales Command' : 'Dealer Directory'}
           </Text>
           <Text style={styles.headerSub}>
-            District Jajpur • Consolidated Team
+            District {user?.role === 'TE' ? getUserDistrict(user) : activeDistrict} • {user?.role === 'TE' ? (user.name || 'My Territory') : 'Consolidated Team'}
           </Text>
         </View>
         <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
@@ -287,10 +339,40 @@ export default function SalesScreen() {
             color={activeTab === 'DEALERS' ? '#FFFFFF' : '#800E20'}
           />
           <Text style={[styles.viewModeTabText, activeTab === 'DEALERS' && styles.viewModeTabTextActive]}>
-            Dealers Directory ({dealers?.length || 0})
+            Dealers Directory ({scopedDealers.length})
           </Text>
         </TouchableOpacity>
       </View>
+
+      {/* DISTRICT SELECTOR BAR (For Admins / Managers) */}
+      {user?.role !== 'TE' && availableDistricts.length > 0 && (
+        <View style={styles.districtBarContainer}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.districtBarScroll}>
+            <Text style={styles.districtBarLabel}>📍 DISTRICT:</Text>
+            <TouchableOpacity
+              style={[styles.districtChip, activeDistrict === 'ALL' && styles.districtChipActive]}
+              onPress={() => setActiveDistrict('ALL')}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.districtChipText, activeDistrict === 'ALL' && styles.districtChipTextActive]}>
+                All Districts ({availableDistricts.length})
+              </Text>
+            </TouchableOpacity>
+            {availableDistricts.map(dist => (
+              <TouchableOpacity
+                key={dist}
+                style={[styles.districtChip, activeDistrict.toLowerCase() === dist.toLowerCase() && styles.districtChipActive]}
+                onPress={() => setActiveDistrict(dist)}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.districtChipText, activeDistrict.toLowerCase() === dist.toLowerCase() && styles.districtChipTextActive]}>
+                  {dist}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+      )}
 
       <ScrollView
         style={styles.scroll}
@@ -1610,5 +1692,54 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
     color: '#800E20',
+  },
+
+  // District Selector Bar
+  districtBarContainer: {
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    backgroundColor: '#FAF5F6',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F5E6E8',
+  },
+  districtBarScroll: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 2,
+  },
+  districtBarLabel: {
+    fontFamily: FontFamily.sansBold,
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#8A7277',
+    letterSpacing: 0.5,
+    marginRight: 4,
+  },
+  districtChip: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    shadowColor: 'rgba(0,0,0,0.03)',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 1,
+    shadowRadius: 3,
+    elevation: 1,
+  },
+  districtChipActive: {
+    backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
+  },
+  districtChipText: {
+    fontFamily: FontFamily.sansBold,
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#4B5563',
+  },
+  districtChipTextActive: {
+    color: '#FFFFFF',
   },
 });

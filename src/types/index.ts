@@ -29,6 +29,7 @@ export interface Dealer {
   phone: string;
   address: string;
   area: string;
+  district?: string;
   sap_code?: string;
   latitude?: number;
   longitude?: number;
@@ -45,6 +46,7 @@ export interface Contractor {
   contractor_name: string;
   mobile: string;
   area: string;
+  district?: string;
   assigned_te: string;
   active: boolean;
   created_at: string;
@@ -64,6 +66,7 @@ export interface Slab {
   latitude?: number;
   longitude?: number;
   assigned_te: string;
+  district?: string;
   status: SlabStatus;
   remark?: string;
   source: SlabSource;
@@ -82,6 +85,7 @@ export interface Sale {
   product: Product;
   quantity_bags: number;
   assigned_te: string;
+  district?: string;
   source: string;
   created_by: string;
   created_at: string;
@@ -114,6 +118,7 @@ export interface Meeting {
   meeting_type: MeetingType;
   meeting_name: string;
   location?: string;
+  district?: string;
   purpose?: string;
   people_count?: number;
   status: MeetingStatus;

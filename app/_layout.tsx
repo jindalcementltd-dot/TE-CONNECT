@@ -19,7 +19,10 @@ import {
   Poppins_700Bold,
 } from '@expo-google-fonts/poppins';
 
+import { useEffect } from 'react';
 import { UndoProvider } from '../src/context/UndoContext';
+import { getUser } from '../src/services/auth';
+import { registerPushNotifications } from '../src/services/fcmPush';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -51,6 +54,12 @@ export default function RootLayout() {
       </View>
     );
   }
+
+  useEffect(() => {
+    getUser().then(u => {
+      registerPushNotifications(u).catch(() => {});
+    });
+  }, []);
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>

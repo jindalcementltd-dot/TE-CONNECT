@@ -16,6 +16,9 @@ import {
   currentMonthISO, normalizeDate, formatMonthYear,
   simulateContractorPunchDistribution,
 } from '../../src/utils/helpers';
+import {
+  getUserDistrict, getDealerDistrict, getSaleDistrict, getTrackerDistrict, getAvailableDistricts,
+} from '../../src/utils/district';
 import { User, Dealer } from '../../src/types';
 import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
 import { format, parseISO } from 'date-fns';
@@ -26,6 +29,7 @@ const PRESET_BAG_RATES = [50, 80, 90, 100, 120];
 
 export default function PunchScreen() {
   const [user, setUser] = useState<User | null>(null);
+  const [activeDistrict, setActiveDistrict] = useState<string>('Jajpur');
   const [refreshing, setRefreshing] = useState(false);
 
   // Month selection (defaults to current month)
@@ -47,8 +51,12 @@ export default function PunchScreen() {
   useEffect(() => {
     getUser().then(u => {
       setUser(u);
-      if (u && !selectedTE) {
-        setSelectedTE(u.name);
+      if (u) {
+        if (!selectedTE) {
+          setSelectedTE(u.name);
+        }
+        const userDist = getUserDistrict(u);
+        setActiveDistrict(userDist);
       }
     });
   }, []);
@@ -72,20 +80,67 @@ export default function PunchScreen() {
     setRefreshing(false);
   }, [refetchUsers, refetchSales, refetchDealers, refetchContractors, refetchTrackers]);
 
+  const availableDistricts = useMemo(() => {
+    return getAvailableDistricts(usersList, dealers);
+  }, [usersList, dealers]);
+
+  // SCOPED DEALERS:
+  const scopedDealers = useMemo(() => {
+    const list = dealers || [];
+    if (user?.role === 'TE') {
+      const userDist = getUserDistrict(user);
+      const cleanName = (user.name || '').trim().toLowerCase();
+      return list.filter(d => {
+        const dDist = getDealerDistrict(d, usersList);
+        const isTeMatch = d.assigned_te && d.assigned_te.trim().toLowerCase() === cleanName;
+        return isTeMatch || dDist.toLowerCase() === userDist.toLowerCase();
+      });
+    }
+    if (!activeDistrict || activeDistrict === 'ALL') return list;
+    return list.filter(d => getDealerDistrict(d, usersList).toLowerCase() === activeDistrict.toLowerCase());
+  }, [dealers, usersList, user, activeDistrict]);
+
+  // SCOPED SALES:
+  const scopedAllSales = useMemo(() => {
+    const list = allSales || [];
+    if (user?.role === 'TE') {
+      const userDist = getUserDistrict(user);
+      const cleanName = (user.name || '').trim().toLowerCase();
+      return list.filter(s => {
+        const sDist = getSaleDistrict(s, dealers, usersList);
+        const isTeMatch = s.assigned_te && s.assigned_te.trim().toLowerCase() === cleanName;
+        return isTeMatch || sDist.toLowerCase() === userDist.toLowerCase();
+      });
+    }
+    if (!activeDistrict || activeDistrict === 'ALL') return list;
+    return list.filter(s => getSaleDistrict(s, dealers, usersList).toLowerCase() === activeDistrict.toLowerCase());
+  }, [allSales, dealers, usersList, user, activeDistrict]);
+
+  // SCOPED ACTIVE TRACKERS:
+  const scopedActiveTrackers = useMemo(() => {
+    const list = activeTrackers || [];
+    if (user?.role === 'TE') {
+      const cleanName = (user.name || '').trim().toLowerCase();
+      return list.filter(t => (t.te || '').trim().toLowerCase() === cleanName);
+    }
+    if (!activeDistrict || activeDistrict === 'ALL') return list;
+    return list.filter(t => getTrackerDistrict(t, usersList).toLowerCase() === activeDistrict.toLowerCase());
+  }, [activeTrackers, user, activeDistrict, usersList]);
+
   // Compute available months from sales and trackers
   const availableMonths = useMemo(() => {
     const set = new Set<string>();
     set.add(currentMonthISO());
-    (allSales || []).forEach(s => {
+    scopedAllSales.forEach(s => {
       const m = normalizeDate(s.sale_date).substring(0, 7);
       if (m && m.length === 7) set.add(m);
     });
-    (activeTrackers || []).forEach(t => {
+    scopedActiveTrackers.forEach(t => {
       const mStr = normalizeDate(t.month || t.date).substring(0, 7);
       if (mStr && mStr.length === 7) set.add(mStr);
     });
     return Array.from(set).sort().reverse();
-  }, [allSales, activeTrackers]);
+  }, [scopedAllSales, scopedActiveTrackers]);
 
   // Formatted Month Header string (e.g., "October 2026")
   const formattedSelectedMonth = useMemo(() => {
@@ -112,26 +167,25 @@ export default function PunchScreen() {
     const set = new Set<string>();
     if (user?.name && user.name.trim()) set.add(user.name.trim());
     (usersList || []).forEach(u => {
-      if (u.name && u.name.trim()) set.add(u.name.trim());
-    });
-    (contractors || []).forEach(c => {
-      if (c.assigned_te && c.assigned_te.trim()) set.add(c.assigned_te.trim());
-    });
-    (allSales || []).forEach(s => {
-      if (s.assigned_te && s.assigned_te.trim()) set.add(s.assigned_te.trim());
-    });
-    (activeTrackers || []).forEach(t => {
-      if (t.te && t.te.trim()) set.add(t.te.trim());
+      if (u.name && u.name.trim()) {
+        if (user?.role === 'TE') {
+          if (getUserDistrict(u).toLowerCase() === getUserDistrict(user).toLowerCase()) {
+            set.add(u.name.trim());
+          }
+        } else if (!activeDistrict || activeDistrict === 'ALL' || getUserDistrict(u).toLowerCase() === activeDistrict.toLowerCase()) {
+          set.add(u.name.trim());
+        }
+      }
     });
     return Array.from(set).filter(Boolean);
-  }, [user, usersList, contractors, allSales, activeTrackers]);
+  }, [user, usersList, activeDistrict]);
 
   const effectiveTE = selectedTE || user?.name || (teList[0] || 'My Target');
 
-  // ── 1. MONTHLY SALES (Shared across team) ──
+  // ── 1. MONTHLY SALES (Shared across team in this district) ──
   const monthSales = useMemo(() => {
-    return (allSales || []).filter(s => normalizeDate(s.sale_date).startsWith(selectedMonth));
-  }, [allSales, selectedMonth]);
+    return scopedAllSales.filter(s => normalizeDate(s.sale_date).startsWith(selectedMonth));
+  }, [scopedAllSales, selectedMonth]);
 
   const totalSalesBags = monthSales.reduce((sum, s) => sum + (Number(s.quantity_bags) || 0), 0);
   const totalSalesMT = (totalSalesBags / 20).toFixed(2);
@@ -140,11 +194,11 @@ export default function PunchScreen() {
   const f2rMT = (f2rBags / 20).toFixed(2);
   const goldMT = (goldBags / 20).toFixed(2);
 
-  // ── 2. TEAM 80% PUNCH TARGET (SHARED FOR ALL TEs / "ye sab ka same hoga") ──
+  // ── 2. TEAM 80% PUNCH TARGET (SHARED FOR ALL TEs in this district) ──
   // Month trackers for all TEs combined
   const allMonthTrackers = useMemo(() => {
-    return (activeTrackers || []).filter(t => normalizeDate(t.month || t.date).startsWith(selectedMonth));
-  }, [activeTrackers, selectedMonth]);
+    return scopedActiveTrackers.filter(t => normalizeDate(t.month || t.date).startsWith(selectedMonth));
+  }, [scopedActiveTrackers, selectedMonth]);
 
   const totalTeamPunchedBags = allMonthTrackers.reduce((sum, t) => sum + (Number(t.punched_quantity_bags) || 0), 0);
   const target80Bags = Math.ceil(totalSalesBags * 0.8);
@@ -225,12 +279,12 @@ export default function PunchScreen() {
   // ── 5. DEALER SALES BREAKDOWN LIST WITH SAP CODE ──
   const dealerLookup = useMemo(() => {
     const map = new Map<string, Dealer>();
-    (dealers || []).forEach(d => {
+    scopedDealers.forEach(d => {
       if (d.dealer_id) map.set(d.dealer_id.toLowerCase().trim(), d);
       if (d.dealer_name) map.set(d.dealer_name.toLowerCase().trim(), d);
     });
     return map;
-  }, [dealers]);
+  }, [scopedDealers]);
 
   const dealerSalesList = useMemo(() => {
     const map: Record<string, {
@@ -257,7 +311,7 @@ export default function PunchScreen() {
           dealer_id: s.dealer_id || dInfo?.dealer_id || key,
           dealer_name: s.dealer_name || dInfo?.dealer_name || 'Dealer Counter',
           sap_code: dInfo?.sap_code || '',
-          area: dInfo?.area || 'Jajpur',
+          area: dInfo?.area || (user?.role === 'TE' ? getUserDistrict(user) : activeDistrict),
           assigned_te: s.assigned_te || dInfo?.assigned_te || '',
           total_bags: 0,
           total_mt: 0,
@@ -274,7 +328,7 @@ export default function PunchScreen() {
     });
 
     return Object.values(map).sort((a, b) => b.total_bags - a.total_bags);
-  }, [monthSales, dealerLookup]);
+  }, [monthSales, dealerLookup, user, activeDistrict]);
 
   // Filtered dealers by search term (name, area, SAP code)
   const filteredDealers = useMemo(() => {
@@ -294,7 +348,9 @@ export default function PunchScreen() {
       <View style={styles.header}>
         <View style={{ flex: 1 }}>
           <Text style={styles.headerTitle}>Contractor Punch</Text>
-          <Text style={styles.headerSub}>Team Performance & Target Allocation</Text>
+          <Text style={styles.headerSub}>
+            District {user?.role === 'TE' ? getUserDistrict(user) : activeDistrict} • Team Performance & Allocation
+          </Text>
         </View>
 
         {/* Month Selector Capsule */}
@@ -316,6 +372,36 @@ export default function PunchScreen() {
           </TouchableOpacity>
         </View>
       </View>
+
+      {/* DISTRICT SELECTOR BAR (For Admins / Managers) */}
+      {user?.role !== 'TE' && availableDistricts.length > 0 && (
+        <View style={styles.districtBarContainer}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.districtBarScroll}>
+            <Text style={styles.districtBarLabel}>📍 DISTRICT:</Text>
+            <TouchableOpacity
+              style={[styles.districtChip, activeDistrict === 'ALL' && styles.districtChipActive]}
+              onPress={() => setActiveDistrict('ALL')}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.districtChipText, activeDistrict === 'ALL' && styles.districtChipTextActive]}>
+                All Districts ({availableDistricts.length})
+              </Text>
+            </TouchableOpacity>
+            {availableDistricts.map(dist => (
+              <TouchableOpacity
+                key={dist}
+                style={[styles.districtChip, activeDistrict.toLowerCase() === dist.toLowerCase() && styles.districtChipActive]}
+                onPress={() => setActiveDistrict(dist)}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.districtChipText, activeDistrict.toLowerCase() === dist.toLowerCase() && styles.districtChipTextActive]}>
+                  {dist}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+      )}
 
       <ScrollView
         style={styles.scroll}
@@ -2182,5 +2268,54 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.sansBold,
     color: '#800E20',
     fontWeight: '700',
+  },
+
+  // District Selector Bar
+  districtBarContainer: {
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    backgroundColor: '#FAF5F6',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F5E6E8',
+  },
+  districtBarScroll: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 2,
+  },
+  districtBarLabel: {
+    fontFamily: FontFamily.sansBold,
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#8A7277',
+    letterSpacing: 0.5,
+    marginRight: 4,
+  },
+  districtChip: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    shadowColor: 'rgba(0,0,0,0.03)',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 1,
+    shadowRadius: 3,
+    elevation: 1,
+  },
+  districtChipActive: {
+    backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
+  },
+  districtChipText: {
+    fontFamily: FontFamily.sansBold,
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#4B5563',
+  },
+  districtChipTextActive: {
+    color: '#FFFFFF',
   },
 });

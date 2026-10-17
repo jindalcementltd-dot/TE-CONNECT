@@ -332,8 +332,35 @@ function handleGetUsers() {
   return success(users);
 }
 
-function handleGetDealers() {
-  return success(sheetToObjects(getSheet(SHEETS.DEALERS)));
+function normalizeDistrict_(name) {
+  if (!name) return '';
+  const s = String(name).trim().toLowerCase();
+  if (s.includes('bales') || s.includes('balas')) return 'Baleswar';
+  if (s.includes('jajp') || s.includes('vyasnagar')) return 'Jajpur';
+  if (s.includes('bhadrak')) return 'Bhadrak';
+  if (s.includes('cuttack')) return 'Cuttack';
+  return String(name).trim();
+}
+
+function handleGetDealers(params) {
+  const dealers = sheetToObjects(getSheet(SHEETS.DEALERS));
+  if (params && params.district && params.district !== 'ALL') {
+    const targetDist = normalizeDistrict_(params.district).toLowerCase();
+    const users = sheetToObjects(getSheet(SHEETS.USERS));
+    const teDistMap = {};
+    users.forEach(u => {
+      if (u.name) teDistMap[String(u.name).trim().toLowerCase()] = normalizeDistrict_(u.district || u.territory || '');
+    });
+    const filtered = dealers.filter(d => {
+      const explicitDist = normalizeDistrict_(d.district || d.area || d.address || '');
+      if (explicitDist && explicitDist.toLowerCase() === targetDist) return true;
+      const teName = String(d.assigned_te || '').trim().toLowerCase();
+      if (teName && teDistMap[teName] && teDistMap[teName].toLowerCase() === targetDist) return true;
+      return false;
+    });
+    return success(filtered);
+  }
+  return success(dealers);
 }
 
 function handleGetDealer(params) {
@@ -381,6 +408,31 @@ function handleGetSlabs(params) {
   if (params.dealer_id) {
     filtered = filtered.filter(s => String(s.dealer_id) === String(params.dealer_id));
   }
+  if (params.district && params.district !== 'ALL') {
+    const targetDist = normalizeDistrict_(params.district).toLowerCase();
+    const users = sheetToObjects(getSheet(SHEETS.USERS));
+    const teDistMap = {};
+    users.forEach(u => {
+      if (u.name) teDistMap[String(u.name).trim().toLowerCase()] = normalizeDistrict_(u.district || u.territory || '');
+    });
+    const dealers = sheetToObjects(getSheet(SHEETS.DEALERS));
+    const dealerDistMap = {};
+    dealers.forEach(d => {
+      const dDist = normalizeDistrict_(d.district || d.area || d.address || '');
+      const dTe = String(d.assigned_te || '').trim().toLowerCase();
+      dealerDistMap[String(d.dealer_id).trim().toLowerCase()] = dDist || teDistMap[dTe] || '';
+      dealerDistMap[String(d.dealer_name).trim().toLowerCase()] = dDist || teDistMap[dTe] || '';
+    });
+    filtered = filtered.filter(s => {
+      const teName = String(s.assigned_te || '').trim().toLowerCase();
+      if (teName && teDistMap[teName] && teDistMap[teName].toLowerCase() === targetDist) return true;
+      const dId = String(s.dealer_id || '').trim().toLowerCase();
+      const dName = String(s.dealer_name || '').trim().toLowerCase();
+      if ((dId && dealerDistMap[dId] && dealerDistMap[dId].toLowerCase() === targetDist) ||
+          (dName && dealerDistMap[dName] && dealerDistMap[dName].toLowerCase() === targetDist)) return true;
+      return false;
+    });
+  }
   return success(filtered);
 }
 
@@ -395,6 +447,31 @@ function handleGetSales(params) {
   }
   if (params.dealer_id) {
     filtered = filtered.filter(s => String(s.dealer_id) === String(params.dealer_id));
+  }
+  if (params.district && params.district !== 'ALL') {
+    const targetDist = normalizeDistrict_(params.district).toLowerCase();
+    const users = sheetToObjects(getSheet(SHEETS.USERS));
+    const teDistMap = {};
+    users.forEach(u => {
+      if (u.name) teDistMap[String(u.name).trim().toLowerCase()] = normalizeDistrict_(u.district || u.territory || '');
+    });
+    const dealers = sheetToObjects(getSheet(SHEETS.DEALERS));
+    const dealerDistMap = {};
+    dealers.forEach(d => {
+      const dDist = normalizeDistrict_(d.district || d.area || d.address || '');
+      const dTe = String(d.assigned_te || '').trim().toLowerCase();
+      dealerDistMap[String(d.dealer_id).trim().toLowerCase()] = dDist || teDistMap[dTe] || '';
+      dealerDistMap[String(d.dealer_name).trim().toLowerCase()] = dDist || teDistMap[dTe] || '';
+    });
+    filtered = filtered.filter(s => {
+      const teName = String(s.assigned_te || '').trim().toLowerCase();
+      if (teName && teDistMap[teName] && teDistMap[teName].toLowerCase() === targetDist) return true;
+      const dId = String(s.dealer_id || '').trim().toLowerCase();
+      const dName = String(s.dealer_name || '').trim().toLowerCase();
+      if ((dId && dealerDistMap[dId] && dealerDistMap[dId].toLowerCase() === targetDist) ||
+          (dName && dealerDistMap[dName] && dealerDistMap[dName].toLowerCase() === targetDist)) return true;
+      return false;
+    });
   }
   return success(filtered);
 }
@@ -457,6 +534,19 @@ function handleGetActiveTracker(params) {
   if (params.te) {
     filtered = filtered.filter(t => String(t.te).toLowerCase() === String(params.te).toLowerCase());
   }
+  if (params.district && params.district !== 'ALL') {
+    const targetDist = normalizeDistrict_(params.district).toLowerCase();
+    const users = sheetToObjects(getSheet(SHEETS.USERS));
+    const teDistMap = {};
+    users.forEach(u => {
+      if (u.name) teDistMap[String(u.name).trim().toLowerCase()] = normalizeDistrict_(u.district || u.territory || '');
+    });
+    filtered = filtered.filter(t => {
+      const teName = String(t.te || '').trim().toLowerCase();
+      if (teName && teDistMap[teName] && teDistMap[teName].toLowerCase() === targetDist) return true;
+      return false;
+    });
+  }
   return success(filtered);
 }
 
@@ -517,6 +607,21 @@ function handleGetMeetings(params) {
   }
   if (params.date) {
     filtered = filtered.filter(m => String(m.meeting_date).startsWith(params.date));
+  }
+  if (params.district && params.district !== 'ALL') {
+    const targetDist = normalizeDistrict_(params.district).toLowerCase();
+    const users = sheetToObjects(getSheet(SHEETS.USERS));
+    const teDistMap = {};
+    users.forEach(u => {
+      if (u.name) teDistMap[String(u.name).trim().toLowerCase()] = normalizeDistrict_(u.district || u.territory || '');
+    });
+    filtered = filtered.filter(m => {
+      const explicitDist = normalizeDistrict_(m.district || m.location || '');
+      if (explicitDist && explicitDist.toLowerCase() === targetDist) return true;
+      const teName = String(m.te || '').trim().toLowerCase();
+      if (teName && teDistMap[teName] && teDistMap[teName].toLowerCase() === targetDist) return true;
+      return false;
+    });
   }
   return success(filtered);
 }
@@ -583,33 +688,100 @@ function handleGetTodaySummary(params) {
   const meetings = sheetToObjects(getSheet(SHEETS.MEETINGS));
   const trackers = sheetToObjects(getSheet(SHEETS.ACTIVE_TRACKER));
   const settings = sheetToObjects(getSheet(SHEETS.SETTINGS));
+  const users = sheetToObjects(getSheet(SHEETS.USERS));
+  const dealers = sheetToObjects(getSheet(SHEETS.DEALERS));
+
+  const teDistMap = {};
+  users.forEach(u => {
+    if (u.name) teDistMap[String(u.name).trim().toLowerCase()] = normalizeDistrict_(u.district || u.territory || '');
+  });
+  const dealerDistMap = {};
+  dealers.forEach(d => {
+    const dDist = normalizeDistrict_(d.district || d.area || d.address || '');
+    const dTe = String(d.assigned_te || '').trim().toLowerCase();
+    dealerDistMap[String(d.dealer_id).trim().toLowerCase()] = dDist || teDistMap[dTe] || '';
+    dealerDistMap[String(d.dealer_name).trim().toLowerCase()] = dDist || teDistMap[dTe] || '';
+  });
 
   const teFilter = params.te ? String(params.te).toLowerCase() : null;
+  const distFilter = (params.district && params.district !== 'ALL') ? normalizeDistrict_(params.district).toLowerCase() : null;
 
   const todaySlabs = slabs.filter(s => {
     const dateMatch = String(s.slab_date).startsWith(today);
-    if (teFilter) return dateMatch && String(s.assigned_te).toLowerCase() === teFilter;
-    return dateMatch;
+    if (!dateMatch) return false;
+    if (teFilter && String(s.assigned_te).toLowerCase() !== teFilter) return false;
+    if (distFilter) {
+      const teName = String(s.assigned_te || '').trim().toLowerCase();
+      const dId = String(s.dealer_id || '').trim().toLowerCase();
+      const dName = String(s.dealer_name || '').trim().toLowerCase();
+      const matchTe = teName && teDistMap[teName] && teDistMap[teName].toLowerCase() === distFilter;
+      const matchDealer = (dId && dealerDistMap[dId] && dealerDistMap[dId].toLowerCase() === distFilter) ||
+                          (dName && dealerDistMap[dName] && dealerDistMap[dName].toLowerCase() === distFilter);
+      if (!matchTe && !matchDealer) return false;
+    }
+    return true;
   });
 
   const todaySales = sales.filter(s => {
     const dateMatch = String(s.sale_date).startsWith(today);
-    if (teFilter) return dateMatch && String(s.assigned_te).toLowerCase() === teFilter;
-    return dateMatch;
+    if (!dateMatch) return false;
+    if (teFilter && String(s.assigned_te).toLowerCase() !== teFilter) return false;
+    if (distFilter) {
+      const teName = String(s.assigned_te || '').trim().toLowerCase();
+      const dId = String(s.dealer_id || '').trim().toLowerCase();
+      const dName = String(s.dealer_name || '').trim().toLowerCase();
+      const matchTe = teName && teDistMap[teName] && teDistMap[teName].toLowerCase() === distFilter;
+      const matchDealer = (dId && dealerDistMap[dId] && dealerDistMap[dId].toLowerCase() === distFilter) ||
+                          (dName && dealerDistMap[dName] && dealerDistMap[dName].toLowerCase() === distFilter);
+      if (!matchTe && !matchDealer) return false;
+    }
+    return true;
   });
 
   const todayMeetings = meetings.filter(m => {
     const dateMatch = String(m.meeting_date).startsWith(today);
-    if (teFilter) return dateMatch && String(m.te).toLowerCase() === teFilter;
-    return dateMatch;
+    if (!dateMatch) return false;
+    if (teFilter && String(m.te).toLowerCase() !== teFilter) return false;
+    if (distFilter) {
+      const teName = String(m.te || '').trim().toLowerCase();
+      const explicitDist = normalizeDistrict_(m.district || m.location || '');
+      const matchTe = teName && teDistMap[teName] && teDistMap[teName].toLowerCase() === distFilter;
+      const matchExplicit = explicitDist && explicitDist.toLowerCase() === distFilter;
+      if (!matchTe && !matchExplicit) return false;
+    }
+    return true;
   });
 
   const salesBagsToday = todaySales.reduce((sum, s) => sum + (Number(s.quantity_bags) || 0), 0);
 
   // Active % from current month tracker
-  const monthTrackers = trackers.filter(t => String(t.month).startsWith(month) && (!teFilter || String(t.te).toLowerCase() === teFilter));
+  const monthTrackers = trackers.filter(t => {
+    const monthMatch = String(t.month).startsWith(month);
+    if (!monthMatch) return false;
+    if (teFilter && String(t.te).toLowerCase() !== teFilter) return false;
+    if (distFilter) {
+      const teName = String(t.te || '').trim().toLowerCase();
+      if (!teName || !teDistMap[teName] || teDistMap[teName].toLowerCase() !== distFilter) return false;
+    }
+    return true;
+  });
   const totalPunch = monthTrackers.reduce((sum, t) => sum + (Number(t.punched_quantity_bags) || 0), 0);
-  const monthSales = sales.filter(s => String(s.sale_date).startsWith(month) && (!teFilter || String(s.assigned_te).toLowerCase() === teFilter));
+
+  const monthSales = sales.filter(s => {
+    const monthMatch = String(s.sale_date).startsWith(month);
+    if (!monthMatch) return false;
+    if (teFilter && String(s.assigned_te).toLowerCase() !== teFilter) return false;
+    if (distFilter) {
+      const teName = String(s.assigned_te || '').trim().toLowerCase();
+      const dId = String(s.dealer_id || '').trim().toLowerCase();
+      const dName = String(s.dealer_name || '').trim().toLowerCase();
+      const matchTe = teName && teDistMap[teName] && teDistMap[teName].toLowerCase() === distFilter;
+      const matchDealer = (dId && dealerDistMap[dId] && dealerDistMap[dId].toLowerCase() === distFilter) ||
+                          (dName && dealerDistMap[dName] && dealerDistMap[dName].toLowerCase() === distFilter);
+      if (!matchTe && !matchDealer) return false;
+    }
+    return true;
+  });
   const totalSalesBags = monthSales.reduce((sum, s) => sum + (Number(s.quantity_bags) || 0), 0);
   const activePercent = totalSalesBags > 0 ? Math.round((totalPunch / totalSalesBags) * 10000) / 100 : 0;
 
@@ -1188,7 +1360,7 @@ function doGet(e) {
 
     switch (action) {
       case 'getUsers': return handleGetUsers();
-      case 'getDealers': return handleGetDealers();
+      case 'getDealers': return handleGetDealers(params);
       case 'getDealer': return handleGetDealer(params);
       case 'getDealerByToken': return handleGetDealerByToken(params);
       case 'getContractors': return handleGetContractors();

@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity, RefreshControl, Platform,
   Modal, FlatList,
@@ -8,8 +8,10 @@ import { router } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { Colors } from '../../src/theme/colors';
 import { apiGetMeetings, apiGetUsers } from '../../src/services/api';
+import { getUser } from '../../src/services/auth';
 import { currentMonthISO, formatPercent, normalizeDate } from '../../src/utils/helpers';
-import { Meeting } from '../../src/types';
+import { getUserDistrict, getMeetingDistrict, getAvailableDistricts } from '../../src/utils/district';
+import { Meeting, User } from '../../src/types';
 import { FontFamily } from '../../src/theme/typography';
 import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
 import { format, parseISO } from 'date-fns';
@@ -98,11 +100,23 @@ function MeetingCard({ meeting, onPress }: { meeting: Meeting; onPress: () => vo
 }
 
 export default function MeetingScreen() {
+  const [user, setUser] = useState<User | null>(null);
+  const [activeDistrict, setActiveDistrict] = useState<string>('Jajpur');
   const today = normalizeDate(new Date());
   const [selectedMonth, setSelectedMonth] = useState<string>(currentMonthISO());
   const [showMonthModal, setShowMonthModal] = useState<boolean>(false);
   const [selectedDate, setSelectedDate] = useState(today);
   const [refreshing, setRefreshing] = useState(false);
+
+  useEffect(() => {
+    getUser().then(u => {
+      setUser(u);
+      if (u) {
+        const userDist = getUserDistrict(u);
+        setActiveDistrict(userDist);
+      }
+    });
+  }, []);
 
   const { data: usersList } = useQuery({
     queryKey: ['users'],
@@ -120,7 +134,27 @@ export default function MeetingScreen() {
     setRefreshing(false);
   }, [refetchMeetings]);
 
-  const rawMeetings = useMemo(() => allMeetings || [], [allMeetings]);
+  const availableDistricts = useMemo(() => {
+    return getAvailableDistricts(usersList, []);
+  }, [usersList]);
+
+  // SCOPED MEETINGS BY DISTRICT AND USER ROLE:
+  const scopedRawMeetings = useMemo(() => {
+    const list = allMeetings || [];
+    if (user?.role === 'TE') {
+      const userDist = getUserDistrict(user);
+      const cleanName = (user.name || '').trim().toLowerCase();
+      return list.filter(m => {
+        const mDist = getMeetingDistrict(m, usersList);
+        const isTeMatch = m.te && m.te.trim().toLowerCase() === cleanName;
+        return isTeMatch || mDist.toLowerCase() === userDist.toLowerCase();
+      });
+    }
+    if (!activeDistrict || activeDistrict === 'ALL') return list;
+    return list.filter(m => getMeetingDistrict(m, usersList).toLowerCase() === activeDistrict.toLowerCase());
+  }, [allMeetings, usersList, user, activeDistrict]);
+
+  const rawMeetings = scopedRawMeetings;
 
   // Compute available months from meetings
   const availableMonths = useMemo(() => {
@@ -215,7 +249,7 @@ export default function MeetingScreen() {
         <View>
           <Text style={styles.headerTitle}>Meetings Command</Text>
           <Text style={styles.headerSub}>
-            District Jajpur • Consolidated Team
+            District {user?.role === 'TE' ? getUserDistrict(user) : activeDistrict} • {user?.role === 'TE' ? (user.name || 'My Territory') : 'Consolidated Team'}
           </Text>
         </View>
         <TouchableOpacity
@@ -227,6 +261,36 @@ export default function MeetingScreen() {
           <Text style={styles.addBtnText}>Add Meeting</Text>
         </TouchableOpacity>
       </View>
+
+      {/* DISTRICT SELECTOR BAR (For Admins / Managers) */}
+      {user?.role !== 'TE' && availableDistricts.length > 0 && (
+        <View style={styles.districtBarContainer}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.districtBarScroll}>
+            <Text style={styles.districtBarLabel}>📍 DISTRICT:</Text>
+            <TouchableOpacity
+              style={[styles.districtChip, activeDistrict === 'ALL' && styles.districtChipActive]}
+              onPress={() => setActiveDistrict('ALL')}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.districtChipText, activeDistrict === 'ALL' && styles.districtChipTextActive]}>
+                All Districts ({availableDistricts.length})
+              </Text>
+            </TouchableOpacity>
+            {availableDistricts.map(dist => (
+              <TouchableOpacity
+                key={dist}
+                style={[styles.districtChip, activeDistrict.toLowerCase() === dist.toLowerCase() && styles.districtChipActive]}
+                onPress={() => setActiveDistrict(dist)}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.districtChipText, activeDistrict.toLowerCase() === dist.toLowerCase() && styles.districtChipTextActive]}>
+                  {dist}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+      )}
 
       <ScrollView
         style={styles.scroll}
@@ -719,6 +783,55 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.sansBold,
     color: '#800E20',
     fontWeight: '700',
+  },
+
+  // District Selector Bar
+  districtBarContainer: {
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    backgroundColor: '#FAF5F6',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F5E6E8',
+  },
+  districtBarScroll: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 2,
+  },
+  districtBarLabel: {
+    fontFamily: FontFamily.sansBold,
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#8A7277',
+    letterSpacing: 0.5,
+    marginRight: 4,
+  },
+  districtChip: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    shadowColor: 'rgba(0,0,0,0.03)',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 1,
+    shadowRadius: 3,
+    elevation: 1,
+  },
+  districtChipActive: {
+    backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
+  },
+  districtChipText: {
+    fontFamily: FontFamily.sansBold,
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#4B5563',
+  },
+  districtChipTextActive: {
+    color: '#FFFFFF',
   },
 });
 
