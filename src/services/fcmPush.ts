@@ -30,8 +30,8 @@ export async function registerPushNotifications(user?: User | null): Promise<boo
     return false;
   }
 
-  if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
-    console.log('[Push] Service Worker or PushManager not supported in this browser.');
+  if (!('serviceWorker' in navigator) || !('Notification' in window) || !('PushManager' in window)) {
+    console.log('[Push] Service Worker, Notification or PushManager not supported in this browser.');
     return false;
   }
 
@@ -40,7 +40,10 @@ export async function registerPushNotifications(user?: User | null): Promise<boo
     const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js', {
       scope: '/',
     });
-    await navigator.serviceWorker.ready;
+    await Promise.race([
+      navigator.serviceWorker.ready,
+      new Promise(resolve => setTimeout(resolve, 3000)),
+    ]);
 
     // 2. Request permission if not already granted
     let permission = Notification.permission;
@@ -97,12 +100,17 @@ export async function sendTestPushNotification(title?: string, body?: string): P
   }
 
   try {
-    const reg = await navigator.serviceWorker.ready;
+    const reg = await Promise.race([
+      navigator.serviceWorker.ready,
+      new Promise<ServiceWorkerRegistration | null>(resolve => setTimeout(() => resolve(null), 3000)),
+    ]);
+    if (!reg) return false;
+
     if (Notification.permission === 'granted') {
       await reg.showNotification(title || '🏗️ TE CONNECT — Push Test', {
         body: body || 'Real push notifications are configured! Notifications will wake up your phone when new slabs or updates arrive.',
-        icon: '/assets/adaptive-icon.png',
-        badge: '/assets/favicon.png',
+        icon: '/icon.png',
+        badge: '/favicon.png',
         vibrate: [200, 100, 200, 100, 300],
         data: { url: '/notifications' },
       });
@@ -112,7 +120,9 @@ export async function sendTestPushNotification(title?: string, body?: string): P
       if (perm === 'granted') {
         await reg.showNotification(title || '🏗️ TE CONNECT — Push Test', {
           body: body || 'Notifications enabled! You will now receive background alerts.',
-          icon: '/assets/adaptive-icon.png',
+          icon: '/icon.png',
+          badge: '/favicon.png',
+          vibrate: [200, 100, 200],
           data: { url: '/notifications' },
         });
         return true;

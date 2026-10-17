@@ -1,15 +1,39 @@
-// TE CONNECT — Firebase Cloud Messaging & Web Push Service Worker
+// TE CONNECT — Service Worker with Firebase Cloud Messaging & Web Push
 /* eslint-disable no-restricted-globals */
 
+const CACHE_NAME = 'te-connect-v3';
+const ASSETS_TO_CACHE = [
+  '/',
+  '/manifest.json',
+  '/favicon.png',
+  '/icon.png',
+  '/apple-touch-icon.png',
+];
+
 self.addEventListener('install', (event) => {
+  event.waitUntil(
+    caches.open(CACHE_NAME).then((cache) => {
+      return cache.addAll(ASSETS_TO_CACHE).catch(() => {});
+    })
+  );
   self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
-  event.waitUntil(self.clients.claim());
+  event.waitUntil(
+    caches.keys().then((keys) => {
+      return Promise.all(
+        keys.map((key) => {
+          if (key !== CACHE_NAME) {
+            return caches.delete(key);
+          }
+        })
+      );
+    }).then(() => self.clients.claim())
+  );
 });
 
-// Listen for incoming Web Push notifications (even when app is closed / phone screen locked)
+// Push notification listener (even when app is closed / phone locked)
 self.addEventListener('push', (event) => {
   let data = {};
   try {
@@ -27,8 +51,8 @@ self.addEventListener('push', (event) => {
   const title = data.title || (data.notification && data.notification.title) || '🏗️ TE CONNECT Notification';
   const body = data.body || (data.notification && data.notification.body) || 'New activity recorded in your territory.';
   const url = data.url || (data.data && data.data.url) || '/';
-  const icon = data.icon || '/assets/adaptive-icon.png';
-  const badge = data.badge || '/assets/favicon.png';
+  const icon = data.icon || '/icon.png';
+  const badge = data.badge || '/favicon.png';
 
   const options = {
     body: body,
@@ -65,7 +89,6 @@ self.addEventListener('notificationclick', (event) => {
 
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
-      // If a window is already open, focus it and navigate
       for (let i = 0; i < clientList.length; i++) {
         const client = clientList[i];
         if (client.url && 'focus' in client) {
@@ -75,7 +98,6 @@ self.addEventListener('notificationclick', (event) => {
           return client.focus();
         }
       }
-      // Otherwise open a new window
       if (self.clients.openWindow) {
         return self.clients.openWindow(targetUrl);
       }

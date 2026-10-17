@@ -19,7 +19,7 @@ import {
   Poppins_700Bold,
 } from '@expo-google-fonts/poppins';
 
-import { useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { UndoProvider } from '../src/context/UndoContext';
 import { getUser } from '../src/services/auth';
 import { registerPushNotifications } from '../src/services/fcmPush';
@@ -36,7 +36,7 @@ const queryClient = new QueryClient({
 });
 
 export default function RootLayout() {
-  const [fontsLoaded] = useFonts({
+  const [fontsLoaded, fontError] = useFonts({
     Sen_400Regular,
     Sen_500Medium,
     Sen_600SemiBold,
@@ -47,19 +47,30 @@ export default function RootLayout() {
     Poppins_700Bold,
   });
 
-  if (!fontsLoaded) {
+  const [forceReady, setForceReady] = useState(false);
+
+  useEffect(() => {
+    // Failsafe timeout: After 1.5s, always let the app render even if fonts are delayed or offline
+    const timer = setTimeout(() => {
+      setForceReady(true);
+    }, 1500);
+
+    try {
+      getUser().then(u => {
+        registerPushNotifications(u).catch(() => {});
+      }).catch(() => {});
+    } catch {}
+
+    return () => clearTimeout(timer);
+  }, []);
+
+  if (!fontsLoaded && !fontError && !forceReady) {
     return (
       <View style={{ flex: 1, backgroundColor: '#4A0611', justifyContent: 'center', alignItems: 'center' }}>
         <ActivityIndicator size="large" color="#E53935" />
       </View>
     );
   }
-
-  useEffect(() => {
-    getUser().then(u => {
-      registerPushNotifications(u).catch(() => {});
-    });
-  }, []);
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>

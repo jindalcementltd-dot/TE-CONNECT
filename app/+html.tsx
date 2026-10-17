@@ -26,7 +26,7 @@ export default function Root({ children }: PropsWithChildren) {
             __html: `
               if ('serviceWorker' in navigator) {
                 window.addEventListener('load', function() {
-                  navigator.serviceWorker.register('/sw.js').catch(function() {});
+                  navigator.serviceWorker.register('/firebase-messaging-sw.js', { scope: '/' }).catch(function() {});
                 });
               }
             `,
