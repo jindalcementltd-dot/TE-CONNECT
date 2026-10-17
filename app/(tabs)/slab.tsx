@@ -20,13 +20,13 @@ function SlabStatusBadge({ status }: { status: Slab['status'] }) {
   return (
     <View style={[
       badgeStyles.container,
-      { backgroundColor: isComp ? '#DCFCE7' : isCanc ? '#F3F4F6' : '#FBE8EC' }
+      isComp ? badgeStyles.containerCompleted : (isCanc ? badgeStyles.containerCancelled : badgeStyles.containerUpcoming),
     ]}>
       <Text style={[
         badgeStyles.text,
-        { color: isComp ? '#15803D' : isCanc ? '#6B7280' : '#800E20' }
+        isComp ? badgeStyles.textCompleted : (isCanc ? badgeStyles.textCancelled : badgeStyles.textUpcoming),
       ]}>
-        {status || 'UPCOMING'}
+        {isComp ? '✅ COMPLETED' : isCanc ? '✕ CANCELLED' : '⏳ UPCOMING'}
       </Text>
     </View>
   );
@@ -41,14 +41,31 @@ function SlabCard({ slab, onPress }: { slab: Slab; onPress: () => void }) {
     }
   } catch {}
 
+  const isComp = slab.status === 'COMPLETED';
+  const isCanc = slab.status === 'CANCELLED';
+
   return (
-    <TouchableOpacity style={cardStyles.card} onPress={onPress} activeOpacity={0.88}>
+    <TouchableOpacity
+      style={[
+        cardStyles.card,
+        isComp ? cardStyles.cardCompleted : (isCanc ? cardStyles.cardCancelled : cardStyles.cardUpcoming),
+      ]}
+      onPress={onPress}
+      activeOpacity={0.88}
+    >
       <View style={cardStyles.header}>
-        <View style={cardStyles.iconCircle}>
-          <MaterialCommunityIcons name="office-building" size={24} color="#800E20" />
+        <View style={[
+          cardStyles.iconCircle,
+          isComp ? cardStyles.iconCircleCompleted : (isCanc ? cardStyles.iconCircleCancelled : cardStyles.iconCircleUpcoming),
+        ]}>
+          <MaterialCommunityIcons
+            name={isComp ? 'check-decagram' : (isCanc ? 'close-circle-outline' : 'clock-alert-outline')}
+            size={24}
+            color={isComp ? '#16A34A' : (isCanc ? '#6B7280' : '#C91F2B')}
+          />
         </View>
         <View style={{ flex: 1 }}>
-          <Text style={cardStyles.dealer}>{slab.dealer_name}</Text>
+          <Text style={[cardStyles.dealer, isComp && cardStyles.dealerCompleted]}>{slab.dealer_name}</Text>
           <Text style={cardStyles.contractor}>
             👷 {slab.contractor_name || 'No contractor assigned'}
           </Text>
@@ -56,13 +73,27 @@ function SlabCard({ slab, onPress }: { slab: Slab; onPress: () => void }) {
         <SlabStatusBadge status={slab.status} />
       </View>
 
-      <View style={cardStyles.divider} />
-
-      {/* Date Row */}
-      <View style={cardStyles.infoRow}>
-        <Ionicons name="calendar-outline" size={14} color="#800E20" style={{ marginRight: 6 }} />
-        <Text style={cardStyles.infoText}>Casting Date: <Text style={cardStyles.boldVal}>{formattedDate}</Text></Text>
+      {/* Prominent Themed Date Banner */}
+      <View style={[
+        cardStyles.dateBanner,
+        isComp ? cardStyles.dateBannerCompleted : (isCanc ? cardStyles.dateBannerCancelled : cardStyles.dateBannerUpcoming),
+      ]}>
+        <Ionicons
+          name={isComp ? 'checkmark-circle' : 'calendar'}
+          size={16}
+          color={isComp ? '#15803D' : (isCanc ? '#6B7280' : '#C91F2B')}
+          style={{ marginRight: 6 }}
+        />
+        <Text style={[
+          cardStyles.dateBannerLabel,
+          isComp ? cardStyles.dateBannerLabelCompleted : (isCanc ? cardStyles.dateBannerLabelCancelled : cardStyles.dateBannerLabelUpcoming),
+        ]}>
+          {isComp ? 'Casting Completed:' : (isCanc ? 'Cancelled Date:' : 'Scheduled Casting:')}{' '}
+          <Text style={[cardStyles.boldVal, isComp && { color: '#166534' }]}>{formattedDate}</Text>
+        </Text>
       </View>
+
+      <View style={cardStyles.divider} />
 
       {slab.customer_name ? (
         <View style={cardStyles.infoRow}>
@@ -77,23 +108,33 @@ function SlabCard({ slab, onPress }: { slab: Slab; onPress: () => void }) {
       </View>
 
       {slab.remark ? (
-        <View style={cardStyles.remarkBox}>
-          <Text style={cardStyles.remarkText}>{slab.remark}</Text>
+        <View style={[cardStyles.remarkBox, isComp && cardStyles.remarkBoxCompleted]}>
+          <Text style={[cardStyles.remarkText, isComp && cardStyles.remarkTextCompleted]}>{slab.remark}</Text>
         </View>
       ) : null}
 
       <View style={cardStyles.footerRow}>
-        <View style={cardStyles.teTag}>
-          <Feather name="user" size={12} color="#800E20" style={{ marginRight: 4 }} />
-          <Text style={cardStyles.teTagText}>{slab.assigned_te || 'Team Jajpur'}</Text>
+        <View style={[cardStyles.teTag, isComp && cardStyles.teTagCompleted]}>
+          <Feather name="user" size={12} color={isComp ? '#15803D' : '#800E20'} style={{ marginRight: 4 }} />
+          <Text style={[cardStyles.teTagText, isComp && { color: '#15803D' }]}>
+            {slab.assigned_te || 'Team Jajpur'}
+          </Text>
         </View>
 
-        {(slab.latitude && slab.longitude) ? (
-          <View style={cardStyles.gpsTag}>
-            <Ionicons name="location" size={12} color="#15803D" style={{ marginRight: 4 }} />
-            <Text style={cardStyles.gpsTagText}>GPS Logged</Text>
-          </View>
-        ) : null}
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          {(slab.latitude && slab.longitude) ? (
+            <View style={cardStyles.gpsTag}>
+              <Ionicons name="location" size={12} color="#15803D" style={{ marginRight: 4 }} />
+              <Text style={cardStyles.gpsTagText}>GPS Logged</Text>
+            </View>
+          ) : null}
+
+          {!isComp && (
+            <View style={cardStyles.actionHintBadge}>
+              <Text style={cardStyles.actionHintText}>Open →</Text>
+            </View>
+          )}
+        </View>
       </View>
     </TouchableOpacity>
   );
@@ -168,7 +209,16 @@ export default function SlabScreen() {
 
   // Summary counts for selectedMonth
   const completedCount = useMemo(() => monthSlabs.filter(s => s.status === 'COMPLETED').length, [monthSlabs]);
-  const upcomingCount = useMemo(() => monthSlabs.filter(s => s.status === 'UPCOMING').length, [monthSlabs]);
+  const upcomingCount = useMemo(() => monthSlabs.filter(s => s.status !== 'COMPLETED' && s.status !== 'CANCELLED').length, [monthSlabs]);
+
+  // Filter selection (ALL, UPCOMING, COMPLETED)
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'UPCOMING' | 'COMPLETED'>('ALL');
+
+  const displayedMonthSlabs = useMemo(() => {
+    if (statusFilter === 'UPCOMING') return monthSlabs.filter(s => s.status !== 'COMPLETED' && s.status !== 'CANCELLED');
+    if (statusFilter === 'COMPLETED') return monthSlabs.filter(s => s.status === 'COMPLETED');
+    return monthSlabs;
+  }, [monthSlabs, statusFilter]);
 
   // Build marked dates for calendar & count map for selectedMonth
   const markedDates: Record<string, any> = {};
@@ -405,14 +455,53 @@ export default function SlabScreen() {
           </TouchableOpacity>
         </View>
 
-        {monthSlabs.length === 0 ? (
+        {/* Status Filter Tabs (ALL / UPCOMING / COMPLETED) */}
+        <View style={styles.statusFilterBar}>
+          <TouchableOpacity
+            style={[styles.filterTab, statusFilter === 'ALL' && styles.filterTabActive]}
+            onPress={() => setStatusFilter('ALL')}
+            activeOpacity={0.8}
+          >
+            <Text style={[styles.filterTabText, statusFilter === 'ALL' && styles.filterTabTextActive]}>
+              All ({monthSlabs.length})
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.filterTab, styles.filterTabUpcoming, statusFilter === 'UPCOMING' && styles.filterTabUpcomingActive]}
+            onPress={() => setStatusFilter('UPCOMING')}
+            activeOpacity={0.8}
+          >
+            <Text style={[styles.filterTabText, styles.filterTabUpcomingText, statusFilter === 'UPCOMING' && styles.filterTabUpcomingTextActive]}>
+              ⏳ Upcoming ({upcomingCount})
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.filterTab, styles.filterTabCompleted, statusFilter === 'COMPLETED' && styles.filterTabCompletedActive]}
+            onPress={() => setStatusFilter('COMPLETED')}
+            activeOpacity={0.8}
+          >
+            <Text style={[styles.filterTabText, styles.filterTabCompletedText, statusFilter === 'COMPLETED' && styles.filterTabCompletedTextActive]}>
+              ✅ Completed ({completedCount})
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {displayedMonthSlabs.length === 0 ? (
           <View style={styles.emptyCard}>
-            <Text style={styles.emptyTitle}>No Slabs in {formattedSelectedMonth}</Text>
-            <Text style={styles.emptySub}>No slab castings recorded in Google Sheet for this month.</Text>
+            <Text style={styles.emptyTitle}>
+              {statusFilter === 'UPCOMING' ? 'No Upcoming Slabs' : (statusFilter === 'COMPLETED' ? 'No Completed Slabs' : `No Slabs in ${formattedSelectedMonth}`)}
+            </Text>
+            <Text style={styles.emptySub}>
+              {statusFilter === 'UPCOMING'
+                ? 'All scheduled slabs for this period have been attended or completed.'
+                : (statusFilter === 'COMPLETED' ? 'No completed slab castings recorded for this selection.' : 'No slab castings recorded in Google Sheet for this month.')}
+            </Text>
           </View>
         ) : (
           <View style={styles.slabsList}>
-            {monthSlabs.map(slab => (
+            {displayedMonthSlabs.map(slab => (
               <SlabCard
                 key={slab.slab_id}
                 slab={slab}
@@ -874,6 +963,64 @@ const styles = StyleSheet.create({
     color: '#800E20',
     fontWeight: '700',
   },
+
+  // Status Filter Bar
+  statusFilterBar: {
+    flexDirection: 'row',
+    gap: 8,
+    marginVertical: 12,
+  },
+  filterTab: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
+    borderColor: '#E5E7EB',
+    borderRadius: 12,
+    paddingVertical: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  filterTabActive: {
+    backgroundColor: '#800E20',
+    borderColor: '#800E20',
+  },
+  filterTabText: {
+    fontFamily: FontFamily.sansBold,
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#4B5563',
+  },
+  filterTabTextActive: {
+    color: '#FFFFFF',
+  },
+  filterTabUpcoming: {
+    borderColor: '#FECACA',
+    backgroundColor: '#FFF7F7',
+  },
+  filterTabUpcomingActive: {
+    backgroundColor: '#C91F2B',
+    borderColor: '#C91F2B',
+  },
+  filterTabUpcomingText: {
+    color: '#991B1B',
+  },
+  filterTabUpcomingTextActive: {
+    color: '#FFFFFF',
+  },
+  filterTabCompleted: {
+    borderColor: '#BBF7D0',
+    backgroundColor: '#F7FEFA',
+  },
+  filterTabCompletedActive: {
+    backgroundColor: '#16A34A',
+    borderColor: '#16A34A',
+  },
+  filterTabCompletedText: {
+    color: '#166534',
+  },
+  filterTabCompletedTextActive: {
+    color: '#FFFFFF',
+  },
 });
 
 const cardStyles = StyleSheet.create({
@@ -888,6 +1035,30 @@ const cardStyles = StyleSheet.create({
     shadowOpacity: 1,
     shadowRadius: 8,
     elevation: 2,
+    marginBottom: 12,
+  },
+  cardUpcoming: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
+    borderColor: '#FCA5A5',
+    borderLeftWidth: 5,
+    borderLeftColor: '#C91F2B',
+    shadowColor: 'rgba(201, 31, 43, 0.08)',
+  },
+  cardCompleted: {
+    backgroundColor: '#F0FDF4',
+    borderWidth: 1.5,
+    borderColor: '#86EFAC',
+    borderLeftWidth: 5,
+    borderLeftColor: '#16A34A',
+    shadowColor: 'rgba(22, 163, 74, 0.08)',
+  },
+  cardCancelled: {
+    backgroundColor: '#F9FAFB',
+    borderWidth: 1.5,
+    borderColor: '#E5E7EB',
+    borderLeftWidth: 5,
+    borderLeftColor: '#9CA3AF',
   },
   header: {
     flexDirection: 'row',
@@ -902,17 +1073,65 @@ const cardStyles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  iconCircleUpcoming: {
+    backgroundColor: '#FEE2E2',
+  },
+  iconCircleCompleted: {
+    backgroundColor: '#DCFCE7',
+  },
+  iconCircleCancelled: {
+    backgroundColor: '#F3F4F6',
+  },
   dealer: {
     fontFamily: FontFamily.displayBold,
     fontSize: 15,
     fontWeight: '800',
     color: '#1F0B10',
   },
+  dealerCompleted: {
+    color: '#14532D',
+  },
   contractor: {
     fontFamily: FontFamily.sansMedium,
     fontSize: 12,
     color: '#6B4E55',
     marginTop: 2,
+  },
+  dateBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 10,
+    marginTop: 10,
+  },
+  dateBannerUpcoming: {
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+  },
+  dateBannerCompleted: {
+    backgroundColor: '#DCFCE7',
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
+  },
+  dateBannerCancelled: {
+    backgroundColor: '#F3F4F6',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  dateBannerLabel: {
+    fontFamily: FontFamily.sansSemiBold,
+    fontSize: 12,
+  },
+  dateBannerLabelUpcoming: {
+    color: '#991B1B',
+  },
+  dateBannerLabelCompleted: {
+    color: '#166534',
+  },
+  dateBannerLabelCancelled: {
+    color: '#4B5563',
   },
   divider: {
     height: 1,
@@ -940,11 +1159,17 @@ const cardStyles = StyleSheet.create({
     padding: 10,
     marginVertical: 8,
   },
+  remarkBoxCompleted: {
+    backgroundColor: '#DCFCE7',
+  },
   remarkText: {
     fontFamily: FontFamily.sansMedium,
     fontSize: 11,
     color: '#6B4E55',
     fontStyle: 'italic',
+  },
+  remarkTextCompleted: {
+    color: '#166534',
   },
   footerRow: {
     flexDirection: 'row',
@@ -962,6 +1187,9 @@ const cardStyles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 8,
+  },
+  teTagCompleted: {
+    backgroundColor: '#DCFCE7',
   },
   teTagText: {
     fontFamily: FontFamily.sansMedium,
@@ -982,6 +1210,20 @@ const cardStyles = StyleSheet.create({
     color: '#15803D',
     fontWeight: '700',
   },
+  actionHintBadge: {
+    backgroundColor: '#FDE8EA',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#FECDD3',
+  },
+  actionHintText: {
+    fontFamily: FontFamily.sansBold,
+    fontSize: 11,
+    color: '#C91F2B',
+    fontWeight: '800',
+  },
 });
 
 const badgeStyles = StyleSheet.create({
@@ -990,9 +1232,33 @@ const badgeStyles = StyleSheet.create({
     paddingVertical: 3,
     borderRadius: 8,
   },
+  containerUpcoming: {
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FCA5A5',
+  },
+  containerCompleted: {
+    backgroundColor: '#DCFCE7',
+    borderWidth: 1,
+    borderColor: '#86EFAC',
+  },
+  containerCancelled: {
+    backgroundColor: '#F3F4F6',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
   text: {
     fontFamily: FontFamily.sansBold,
     fontSize: 10,
     fontWeight: '800',
+  },
+  textUpcoming: {
+    color: '#C91F2B',
+  },
+  textCompleted: {
+    color: '#15803D',
+  },
+  textCancelled: {
+    color: '#6B7280',
   },
 });

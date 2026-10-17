@@ -441,16 +441,72 @@ export default function PublicSlabPage() {
             </TouchableOpacity>
           </View>
 
-          {/* Custom Date Input */}
-          <View style={styles.customDateContainer}>
-            <Text style={styles.customDateLabel}>ଅନ୍ୟ ତାରିଖ (YYYY-MM-DD):</Text>
-            <TextInput
-              style={styles.customDateInput}
-              value={slabDate}
-              onChangeText={setSlabDate}
-              placeholder="YYYY-MM-DD"
-              placeholderTextColor="#9CA3AF"
-            />
+          {/* Custom Date Selector */}
+          <View style={styles.customDateSection}>
+            <View style={styles.customDateHeaderRow}>
+              <Ionicons name="calendar-outline" size={16} color="#C91F2B" />
+              <Text style={styles.customDateLabel}>
+                କିମ୍ବା କ୍ୟାଲେଣ୍ଡରରୁ ଅନ୍ୟ ତାରିଖ ବାଛନ୍ତୁ (Custom Date):
+              </Text>
+            </View>
+
+            {Platform.OS === 'web' ? (
+              React.createElement('div', {
+                style: {
+                  position: 'relative',
+                  width: '100%',
+                  marginTop: 6,
+                }
+              },
+                React.createElement('input', {
+                  type: 'date',
+                  value: slabDate,
+                  min: todayStr,
+                  onChange: (e: any) => {
+                    if (e.target.value) setSlabDate(e.target.value);
+                  },
+                  style: {
+                    width: '100%',
+                    boxSizing: 'border-box',
+                    padding: '12px 14px',
+                    fontSize: '15px',
+                    fontWeight: '700',
+                    fontFamily: 'inherit',
+                    color: '#111827',
+                    backgroundColor: '#FFFFFF',
+                    border: '2px solid #CBD5E1',
+                    borderRadius: '12px',
+                    outline: 'none',
+                    cursor: 'pointer',
+                    WebkitAppearance: 'none',
+                  }
+                })
+              )
+            ) : (
+              <TextInput
+                style={styles.customDateInput}
+                value={slabDate}
+                onChangeText={setSlabDate}
+                placeholder="YYYY-MM-DD"
+                placeholderTextColor="#9CA3AF"
+              />
+            )}
+
+            {/* Display Selected Date Confirmation */}
+            <View style={[
+              styles.selectedDateBanner,
+              ![todayStr, tomorrowStr, dayAfterStr].includes(slabDate) && styles.selectedDateBannerCustom
+            ]}>
+              <Ionicons
+                name="checkmark-circle"
+                size={16}
+                color={![todayStr, tomorrowStr, dayAfterStr].includes(slabDate) ? '#C91F2B' : '#16A34A'}
+              />
+              <Text style={styles.selectedDateBannerText}>
+                ବଛାଯାଇଥିବା ତାରିଖ: <Text style={styles.selectedDateBold}>{formatDate(slabDate)}</Text>
+                {![todayStr, tomorrowStr, dayAfterStr].includes(slabDate) ? ' (Custom Date)' : ''}
+              </Text>
+            </View>
           </View>
         </View>
 
@@ -911,27 +967,59 @@ const styles = StyleSheet.create({
   dateChipSubActive: {
     color: '#C91F2B',
   },
-  customDateContainer: {
+  customDateSection: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#F3F4F6',
+  },
+  customDateHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 6,
+    gap: 6,
+    marginBottom: 4,
   },
   customDateLabel: {
     fontSize: 12,
-    color: '#6B7280',
-    marginRight: 8,
-    fontWeight: '600',
+    fontWeight: '700',
+    color: '#374151',
   },
   customDateInput: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: '#D1D5DB',
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    fontSize: 13,
-    color: '#374151',
+    borderWidth: 1.5,
+    borderColor: '#CBD5E1',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#111827',
     backgroundColor: '#FFFFFF',
+    marginTop: 4,
+  },
+  selectedDateBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#F0FDF4',
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginTop: 8,
+  },
+  selectedDateBannerCustom: {
+    backgroundColor: '#FEF2F2',
+    borderColor: '#FECACA',
+  },
+  selectedDateBannerText: {
+    fontSize: 12,
+    color: '#374151',
+    flex: 1,
+  },
+  selectedDateBold: {
+    fontWeight: '800',
+    color: '#111827',
   },
   inputGroup: {
     marginBottom: 14,

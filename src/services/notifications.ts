@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Vibration, Platform } from 'react-native';
 import Toast from 'react-native-toast-message';
 import { Slab } from '../types';
+import { CHIME_BASE64 } from './chimeBase64';
 
 const NOTIFICATIONS_STORAGE_KEY = 'teconnect_notifications_v1';
 const SEEN_SLABS_KEY = 'teconnect_seen_slab_ids_v1';
@@ -30,54 +31,129 @@ const DEFAULT_NOTIFICATIONS: AppNotification[] = [
   },
 ];
 
+// ──────────────────────────────────────────────────────────
+// PERSISTENT AUDIO CONTEXT & MOBILE AUTOPLAY UNLOCKER
+// ──────────────────────────────────────────────────────────
+let sharedAudioCtx: any = null;
+let sharedAudioEl: any = null;
+let isAudioUnlocked = false;
+
+export function initAndUnlockAudio() {
+  if (typeof window === 'undefined') return;
+  try {
+    const AudioCtx = (window as any).AudioContext || (window as any).webkitAudioContext;
+    if (AudioCtx && !sharedAudioCtx) {
+      sharedAudioCtx = new AudioCtx();
+    }
+    if (sharedAudioCtx && sharedAudioCtx.state === 'suspended') {
+      sharedAudioCtx.resume().catch(() => {});
+    }
+
+    if (!sharedAudioEl && typeof Audio !== 'undefined') {
+      sharedAudioEl = new Audio(CHIME_BASE64);
+      sharedAudioEl.volume = 1.0;
+      sharedAudioEl.load();
+    }
+    isAudioUnlocked = true;
+  } catch (e) {}
+}
+
+// Auto-register touch/click listeners on mobile browser to unlock audio pipeline on first tap
+if (typeof window !== 'undefined') {
+  const unlockHandler = () => {
+    initAndUnlockAudio();
+    window.removeEventListener('click', unlockHandler);
+    window.removeEventListener('touchstart', unlockHandler);
+    window.removeEventListener('touchend', unlockHandler);
+  };
+  window.addEventListener('click', unlockHandler, { passive: true });
+  window.addEventListener('touchstart', unlockHandler, { passive: true });
+  window.addEventListener('touchend', unlockHandler, { passive: true });
+}
+
 /**
  * Signature Distinct Audio Chime
- * Synthesizes a crisp, melodious 3-tone chime (E6 -> G#6 -> B6) using Web Audio API
- * Runs natively in all browsers/webviews with 0ms latency and no external audio file dependencies.
+ * Dual-engine: plays high-fidelity base64 WAV chime via HTML5 Audio
+ * with Web Audio API synthesis fallback. Works on mobile Safari, Android Chrome & PWA.
  */
 export function playNotificationSound() {
+  initAndUnlockAudio();
+
+  let played = false;
+
+  // Engine 1: HTML5 Audio with Base64 Chime WAV
   try {
-    if (typeof window !== 'undefined') {
-      const AudioCtx = (window as any).AudioContext || (window as any).webkitAudioContext;
-      if (AudioCtx) {
-        const ctx = new AudioCtx();
-        if (ctx.state === 'suspended') {
-          ctx.resume();
-        }
-        const now = ctx.currentTime;
-
-        const playTone = (freq: number, start: number, duration: number, peakVol: number) => {
-          const osc = ctx.createOscillator();
-          const gain = ctx.createGain();
-          osc.type = 'sine';
-          osc.frequency.setValueAtTime(freq, start);
-
-          gain.gain.setValueAtTime(0, start);
-          gain.gain.linearRampToValueAtTime(peakVol, start + 0.02);
-          gain.gain.exponentialRampToValueAtTime(0.0005, start + duration);
-
-          osc.connect(gain);
-          gain.connect(ctx.destination);
-
-          osc.start(start);
-          osc.stop(start + duration);
-        };
-
-        // Signature distinct harmonic chime: 1318.5Hz (E6) -> 1661.2Hz (G#6) -> 1975.5Hz (B6)
-        playTone(1318.51, now, 0.28, 0.22);
-        playTone(1661.22, now + 0.08, 0.32, 0.25);
-        playTone(1975.53, now + 0.16, 0.45, 0.28);
+    if (typeof Audio !== 'undefined') {
+      const audio = new Audio(CHIME_BASE64);
+      audio.volume = 1.0;
+      const promise = audio.play();
+      if (promise !== undefined) {
+        promise
+          .then(() => {
+            played = true;
+          })
+          .catch(() => {
+            // If autoplay was blocked, fallback to Web Audio synthesizer
+            synthesizeWebAudioChime();
+          });
+      } else {
+        played = true;
       }
     }
   } catch (e) {
-    // Audio synthesis not available or blocked by autoplay policy
+    // Fall back to Web Audio
   }
+
+  if (!played) {
+    synthesizeWebAudioChime();
+  }
+}
+
+function synthesizeWebAudioChime() {
+  try {
+    if (typeof window === 'undefined') return;
+    const AudioCtx = (window as any).AudioContext || (window as any).webkitAudioContext;
+    if (!AudioCtx) return;
+
+    if (!sharedAudioCtx) {
+      sharedAudioCtx = new AudioCtx();
+    }
+    if (sharedAudioCtx.state === 'suspended') {
+      sharedAudioCtx.resume().catch(() => {});
+    }
+
+    const ctx = sharedAudioCtx;
+    const now = ctx.currentTime;
+
+    const playTone = (freq: number, start: number, duration: number, peakVol: number) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, start);
+
+      gain.gain.setValueAtTime(0, start);
+      gain.gain.linearRampToValueAtTime(peakVol, start + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0005, start + duration);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.start(start);
+      osc.stop(start + duration);
+    };
+
+    // Harmonic 3-tone chime: E6 -> G#6 -> B6
+    playTone(1318.51, now, 0.28, 0.35);
+    playTone(1661.22, now + 0.09, 0.32, 0.4);
+    playTone(1975.53, now + 0.18, 0.5, 0.45);
+  } catch (e) {}
 }
 
 /**
  * Request OS Browser Push Notification permission
  */
 export async function requestPushPermission(): Promise<boolean> {
+  initAndUnlockAudio();
   if (typeof window !== 'undefined' && 'Notification' in window) {
     if (Notification.permission === 'granted') return true;
     if (Notification.permission !== 'denied') {
@@ -105,7 +181,7 @@ export async function sendBrowserPushNotification(title: string, body: string, i
             body,
             icon: iconUrl,
             badge: '/favicon.png',
-            vibrate: [200, 100, 200],
+            vibrate: [250, 100, 250],
             data: { url: '/' },
           } as any);
           return;
@@ -161,13 +237,15 @@ export async function addNotification(
   const updated = [newNotif, ...list].slice(0, 50); // Keep latest 50
   await AsyncStorage.setItem(NOTIFICATIONS_STORAGE_KEY, JSON.stringify(updated));
 
-  // 1. Play signature custom sound
+  // 1. Play signature sound chime immediately
   playNotificationSound();
 
-  // 2. Trigger vibration on native mobile
+  // 2. Trigger vibration
   try {
     if (Platform.OS !== 'web') {
-      Vibration.vibrate([0, 90, 50, 90]);
+      Vibration.vibrate([0, 120, 60, 120]);
+    } else if (typeof navigator !== 'undefined' && navigator.vibrate) {
+      navigator.vibrate([120, 60, 120]);
     }
   } catch (e) {}
 
