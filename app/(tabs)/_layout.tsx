@@ -50,7 +50,12 @@ export default function TabsLayout() {
   }, []);
 
   const checkAuth = async () => {
-    const session = await getSession();
+    let session = await getSession();
+    if (!session) {
+      // Retry after 200ms in case storage was still flushing
+      await new Promise(r => setTimeout(r, 200));
+      session = await getSession();
+    }
     if (!session) {
       router.replace('/(auth)/login');
     } else {

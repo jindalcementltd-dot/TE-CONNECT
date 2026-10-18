@@ -2,6 +2,7 @@
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { User } from '../types';
+import { APPS_SCRIPT_URL } from '../config/api';
 
 export const FIREBASE_VAPID_KEY = 'BI-1JI3ltghrA-omYfHX9VHeOaPV2qxFB6L7JkjYzpYiX-WYLwA5UBHBMhraq-ngDFp0LwergXn9a9UAI4L5r7I';
 const PUSH_SUB_KEY = 'te_fcm_push_subscription';
@@ -45,6 +46,15 @@ export async function registerPushNotifications(user?: User | null): Promise<boo
       new Promise(resolve => setTimeout(resolve, 3000)),
     ]);
 
+    // Register Periodic Background Sync if available
+    if ('periodicSync' in registration) {
+      try {
+        await (registration as any).periodicSync.register('check-new-slabs', {
+          minInterval: 60 * 1000,
+        });
+      } catch (e) {}
+    }
+
     // 2. Request permission if not already granted
     let permission = Notification.permission;
     if (permission === 'default') {
@@ -75,6 +85,21 @@ export async function registerPushNotifications(user?: User | null): Promise<boo
         district: user?.district || 'Jajpur',
         registeredAt: new Date().toISOString(),
       }));
+
+      // Send subscription to backend
+      fetch(APPS_SCRIPT_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'registerPushSubscription',
+          endpoint: subJson.endpoint,
+          keys: subJson.keys,
+          user_name: user?.name || '',
+          user_role: user?.role || '',
+          district: user?.district || '',
+        }),
+      }).catch(() => {});
+
       console.log('[Push] Web Push Subscription successful:', subJson.endpoint);
       return true;
     }

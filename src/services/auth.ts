@@ -8,38 +8,59 @@ import { AuthSession, User } from '../types';
 const SESSION_KEY = 'teconnect_session';
 
 async function setStorageItem(key: string, value: string): Promise<void> {
-  if (Platform.OS === 'web') {
+  try {
     await AsyncStorage.setItem(key, value);
-  } else {
+  } catch (e) {
+    console.warn('[Storage] AsyncStorage.setItem failed:', e);
+  }
+  if (Platform.OS !== 'web') {
     try {
       await SecureStore.setItemAsync(key, value);
-    } catch {
-      await AsyncStorage.setItem(key, value);
-    }
+    } catch {}
+  }
+  if (typeof window !== 'undefined' && window.localStorage) {
+    try {
+      window.localStorage.setItem(key, value);
+    } catch {}
   }
 }
 
 async function getStorageItem(key: string): Promise<string | null> {
-  if (Platform.OS === 'web') {
-    return AsyncStorage.getItem(key);
-  } else {
+  try {
+    const val = await AsyncStorage.getItem(key);
+    if (val) return val;
+  } catch {}
+
+  if (Platform.OS !== 'web') {
     try {
-      return await SecureStore.getItemAsync(key);
-    } catch {
-      return AsyncStorage.getItem(key);
-    }
+      const val = await SecureStore.getItemAsync(key);
+      if (val) return val;
+    } catch {}
   }
+
+  if (typeof window !== 'undefined' && window.localStorage) {
+    try {
+      const val = window.localStorage.getItem(key);
+      if (val) return val;
+    } catch {}
+  }
+
+  return null;
 }
 
 async function removeStorageItem(key: string): Promise<void> {
-  if (Platform.OS === 'web') {
+  try {
     await AsyncStorage.removeItem(key);
-  } else {
+  } catch {}
+  if (Platform.OS !== 'web') {
     try {
       await SecureStore.deleteItemAsync(key);
-    } catch {
-      await AsyncStorage.removeItem(key);
-    }
+    } catch {}
+  }
+  if (typeof window !== 'undefined' && window.localStorage) {
+    try {
+      window.localStorage.removeItem(key);
+    } catch {}
   }
 }
 

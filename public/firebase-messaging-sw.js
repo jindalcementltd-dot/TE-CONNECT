@@ -1,7 +1,9 @@
-// TE CONNECT — Service Worker with Firebase Cloud Messaging & Web Push
+// TE CONNECT — Service Worker with Firebase Cloud Messaging, Web Push & Background Poller
 /* eslint-disable no-restricted-globals */
 
-const CACHE_NAME = 'te-connect-v3';
+const CACHE_NAME = 'te-connect-v4';
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwD_2lt1qBbtcEiTcjbct565HUusllU1YW4b5i3fS_cEQBmBE_ZZ8WLBlPOXhs6ELum_g/exec';
+
 const ASSETS_TO_CACHE = [
   '/',
   '/manifest.json',
@@ -31,6 +33,71 @@ self.addEventListener('activate', (event) => {
       );
     }).then(() => self.clients.claim())
   );
+  // Kick off background check immediately on activate
+  checkForNewSlabsInBackground();
+});
+
+// ── BACKGROUND SLAB MONITOR (WORKS WHEN APP IS CLOSED) ──
+async function checkForNewSlabsInBackground() {
+  try {
+    const res = await fetch(`${APPS_SCRIPT_URL}?action=getSlabs`);
+    if (!res.ok) return;
+    const json = await res.json();
+    if (!json || !json.success || !Array.isArray(json.data)) return;
+
+    const slabs = json.data;
+    if (slabs.length === 0) return;
+
+    const cache = await caches.open('te-connect-meta');
+    const lastSeenResp = await cache.match('/last-known-slab-id');
+    let lastKnownId = '';
+    if (lastSeenResp) {
+      lastKnownId = await lastSeenResp.text();
+    }
+
+    // Newest slab is the last one in the list
+    const latestSlab = slabs[slabs.length - 1];
+    if (!latestSlab || !latestSlab.slab_id) return;
+
+    if (lastKnownId && latestSlab.slab_id !== lastKnownId) {
+      // Check if this latest slab was from QR or created recently
+      const title = `🏗️ New Slab Alert! (${latestSlab.dealer_name || 'Dealer'})`;
+      const body = `Expected: ${latestSlab.expected_cement || '50 Bags'} | Date: ${latestSlab.slab_date || 'Upcoming'} | By: ${latestSlab.contractor_name || latestSlab.remark || 'Booking'}`;
+
+      await self.registration.showNotification(title, {
+        body,
+        icon: '/icon.png',
+        badge: '/favicon.png',
+        vibrate: [300, 100, 300, 100, 400],
+        tag: `slab-${latestSlab.slab_id}`,
+        renotify: true,
+        requireInteraction: true,
+        data: {
+          url: `/(tabs)/slab`,
+          timestamp: Date.now(),
+        },
+        actions: [
+          { action: 'open', title: 'Open Slab 🏗️' },
+          { action: 'dismiss', title: 'Dismiss' }
+        ]
+      });
+    }
+
+    // Update last known ID
+    await cache.put('/last-known-slab-id', new Response(latestSlab.slab_id));
+  } catch (err) {
+    // Offline or network error
+  }
+}
+
+// Background poller interval: checks every 60s
+setInterval(checkForNewSlabsInBackground, 60 * 1000);
+
+// Periodic Sync event listener for Chromium-based Android browsers
+self.addEventListener('periodicsync', (event) => {
+  if (event.tag === 'check-new-slabs') {
+    event.waitUntil(checkForNewSlabsInBackground());
+  }
 });
 
 // Push notification listener (even when app is closed / phone locked)

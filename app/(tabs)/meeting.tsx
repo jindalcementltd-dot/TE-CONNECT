@@ -140,7 +140,7 @@ export default function MeetingScreen() {
 
   // SCOPED MEETINGS BY DISTRICT AND USER ROLE:
   const scopedRawMeetings = useMemo(() => {
-    const list = allMeetings || [];
+    const list = (allMeetings || []).filter(m => m && m.meeting_date);
     if (user?.role === 'TE') {
       const userDist = getUserDistrict(user);
       const cleanName = (user.name || '').trim().toLowerCase();
@@ -161,6 +161,7 @@ export default function MeetingScreen() {
     const set = new Set<string>();
     set.add(currentMonthISO());
     rawMeetings.forEach(m => {
+      if (!m || !m.meeting_date) return;
       const mStr = normalizeDate(m.meeting_date).substring(0, 7);
       if (mStr && mStr.length === 7) set.add(mStr);
     });

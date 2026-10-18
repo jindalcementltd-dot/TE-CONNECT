@@ -112,7 +112,7 @@ export default function SalesScreen() {
 
   // SCOPED SALES FILTERED BY DISTRICT AND USER ROLE:
   const scopedAllSales = useMemo(() => {
-    const list = allSales || [];
+    const list = (allSales || []).filter(s => s && s.sale_date);
     if (user?.role === 'TE') {
       const userDist = getUserDistrict(user);
       const cleanName = (user.name || '').trim().toLowerCase();
@@ -131,10 +131,12 @@ export default function SalesScreen() {
     const set = new Set<string>();
     set.add(currentMonthISO());
     scopedAllSales.forEach(s => {
+      if (!s || !s.sale_date) return;
       const m = normalizeDate(s.sale_date).substring(0, 7);
       if (m && m.length === 7) set.add(m);
     });
     (activeTrackers || []).forEach(t => {
+      if (!t) return;
       const m = normalizeDate(t.month || t.date).substring(0, 7);
       if (m && m.length === 7) set.add(m);
     });

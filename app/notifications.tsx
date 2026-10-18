@@ -12,6 +12,8 @@ import {
   markNotificationAsRead, markAllNotificationsAsRead, clearAllNotifications,
   requestPushPermission, playNotificationSound,
 } from '../src/services/notifications';
+import { getUser } from '../src/services/auth';
+import { registerPushNotifications, sendTestPushNotification } from '../src/services/fcmPush';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { formatDistanceToNow, parseISO } from 'date-fns';
 
@@ -148,8 +150,14 @@ export default function NotificationsScreen() {
           onPress={async () => {
             const granted = await requestPushPermission();
             playNotificationSound();
+            const u = await getUser();
+            await registerPushNotifications(u);
             if (granted) {
-              Alert.alert('Notifications Enabled! 🔔', 'You will now receive instant push alerts and sound notifications.');
+              await sendTestPushNotification(
+                '🔔 TE CONNECT Alerts Active',
+                'Live notifications enabled! You will now receive background alerts even when the app is closed.'
+              );
+              Alert.alert('Notifications Enabled! 🔔', 'Background push alerts and sound are now active even when the app is closed.');
             } else {
               Alert.alert('Sound Played 🎵', 'Notification sound tested successfully.');
             }

@@ -193,7 +193,7 @@ export default function SlabScreen() {
 
   // Filter slabs strictly by District and TE role
   const scopedRawSlabs = useMemo(() => {
-    const list = rawSlabs;
+    const list = (rawSlabs || []).filter(s => s && s.slab_date);
     if (user?.role === 'TE') {
       const cleanName = (user.name || '').trim().toLowerCase();
       return list.filter(s => {
@@ -211,6 +211,7 @@ export default function SlabScreen() {
     const set = new Set<string>();
     set.add(currentMonthISO());
     scopedRawSlabs.forEach(s => {
+      if (!s || !s.slab_date) return;
       const m = normalizeDate(s.slab_date).substring(0, 7);
       if (m && m.length === 7) set.add(m);
     });

@@ -118,7 +118,7 @@ export default function PunchScreen() {
 
   // SCOPED ACTIVE TRACKERS:
   const scopedActiveTrackers = useMemo(() => {
-    const list = activeTrackers || [];
+    const list = (activeTrackers || []).filter(Boolean);
     if (user?.role === 'TE') {
       const cleanName = (user.name || '').trim().toLowerCase();
       return list.filter(t => (t.te || '').trim().toLowerCase() === cleanName);
@@ -132,10 +132,12 @@ export default function PunchScreen() {
     const set = new Set<string>();
     set.add(currentMonthISO());
     scopedAllSales.forEach(s => {
+      if (!s || !s.sale_date) return;
       const m = normalizeDate(s.sale_date).substring(0, 7);
       if (m && m.length === 7) set.add(m);
     });
     scopedActiveTrackers.forEach(t => {
+      if (!t) return;
       const mStr = normalizeDate(t.month || t.date).substring(0, 7);
       if (mStr && mStr.length === 7) set.add(mStr);
     });

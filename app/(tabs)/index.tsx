@@ -114,18 +114,22 @@ export default function HomeScreen() {
     const set = new Set<string>();
     set.add(currentMonthISO());
     (allSales || []).forEach(s => {
+      if (!s || !s.sale_date) return;
       const m = normalizeDate(s.sale_date).substring(0, 7);
       if (m && m.length === 7) set.add(m);
     });
     (allSlabs || []).forEach(s => {
+      if (!s || !s.slab_date) return;
       const m = normalizeDate(s.slab_date).substring(0, 7);
       if (m && m.length === 7) set.add(m);
     });
     (allMeetings || []).forEach(m => {
+      if (!m || !m.meeting_date) return;
       const mStr = normalizeDate(m.meeting_date).substring(0, 7);
       if (mStr && mStr.length === 7) set.add(mStr);
     });
     (activeTrackers || []).forEach(t => {
+      if (!t) return;
       const mStr = normalizeDate(t.month || t.date).substring(0, 7);
       if (mStr && mStr.length === 7) set.add(mStr);
     });
@@ -138,7 +142,7 @@ export default function HomeScreen() {
 
   // SCOPED DEALERS FILTERED BY DISTRICT AND USER ROLE:
   const scopedDealers = useMemo(() => {
-    const list = dealers || [];
+    const list = (dealers || []).filter(d => d && d.dealer_id);
     if (user?.role === 'TE') {
       const userDist = getUserDistrict(user);
       const cleanName = (user.name || '').trim().toLowerCase();
@@ -154,7 +158,7 @@ export default function HomeScreen() {
 
   // MONTHLY DATA FILTERED BY selectedMonth AND DISTRICT
   const allSlabsList = useMemo(() => {
-    const list = (allSlabs || []).filter(s => normalizeDate(s.slab_date).startsWith(selectedMonth));
+    const list = (allSlabs || []).filter(s => s && s.slab_date && normalizeDate(s.slab_date).startsWith(selectedMonth));
     if (user?.role === 'TE') {
       const userDist = getUserDistrict(user);
       const cleanName = (user.name || '').trim().toLowerCase();
@@ -169,7 +173,7 @@ export default function HomeScreen() {
   }, [allSlabs, selectedMonth, dealers, usersList, user, activeDistrict]);
 
   const allMeetingsList = useMemo(() => {
-    const list = (allMeetings || []).filter(m => normalizeDate(m.meeting_date).startsWith(selectedMonth));
+    const list = (allMeetings || []).filter(m => m && m.meeting_date && normalizeDate(m.meeting_date).startsWith(selectedMonth));
     if (user?.role === 'TE') {
       const userDist = getUserDistrict(user);
       const cleanName = (user.name || '').trim().toLowerCase();
@@ -184,7 +188,7 @@ export default function HomeScreen() {
   }, [allMeetings, selectedMonth, usersList, user, activeDistrict]);
 
   const allSalesList = useMemo(() => {
-    const list = (allSales || []).filter(s => normalizeDate(s.sale_date).startsWith(selectedMonth));
+    const list = (allSales || []).filter(s => s && s.sale_date && normalizeDate(s.sale_date).startsWith(selectedMonth));
     if (user?.role === 'TE') {
       const userDist = getUserDistrict(user);
       const cleanName = (user.name || '').trim().toLowerCase();
@@ -199,8 +203,8 @@ export default function HomeScreen() {
   }, [allSales, selectedMonth, dealers, usersList, user, activeDistrict]);
 
   const filteredActiveTrackers = useMemo(() => {
-    const list = activeTrackers || [];
-    const thisMonthTrackers = list.filter(t => normalizeDate(t.month || t.date).startsWith(selectedMonth));
+    const list = (activeTrackers || []).filter(Boolean);
+    const thisMonthTrackers = list.filter(t => t && normalizeDate(t.month || t.date).startsWith(selectedMonth));
     if (user?.role === 'TE') {
       const cleanName = (user.name || '').trim().toLowerCase();
       return thisMonthTrackers.filter(t => (t.te || '').trim().toLowerCase() === cleanName);
@@ -270,7 +274,7 @@ export default function HomeScreen() {
 
   // UPCOMING vs RECENT SLABS (SCOPED BY DISTRICT / TE)
   const upcomingSlabsList = useMemo(() => {
-    const list = allSlabs || [];
+    const list = (allSlabs || []).filter(s => s && s.slab_date);
     const scoped = list.filter(s => {
       if (user?.role === 'TE') {
         const userDist = getUserDistrict(user);
@@ -289,7 +293,7 @@ export default function HomeScreen() {
   // Display upcoming slabs if available; otherwise show recent slabs from the sheet
   const displaySlabs = useMemo(() => {
     if (upcomingSlabsList.length > 0) return upcomingSlabsList.slice(0, 3);
-    const list = allSlabs || [];
+    const list = (allSlabs || []).filter(s => s && s.slab_date);
     const scoped = list.filter(s => {
       if (user?.role === 'TE') {
         const userDist = getUserDistrict(user);
@@ -306,7 +310,7 @@ export default function HomeScreen() {
 
   // UPCOMING vs RECENT EVENTS (SCOPED BY DISTRICT / TE)
   const upcomingMeetingsList = useMemo(() => {
-    const list = allMeetings || [];
+    const list = (allMeetings || []).filter(m => m && m.meeting_date);
     const scoped = list.filter(m => {
       if (user?.role === 'TE') {
         const userDist = getUserDistrict(user);
@@ -325,7 +329,7 @@ export default function HomeScreen() {
   // Display upcoming meetings if available; otherwise show recent meetings from sheet
   const displayMeetings = useMemo(() => {
     if (upcomingMeetingsList.length > 0) return upcomingMeetingsList.slice(0, 3);
-    const list = allMeetings || [];
+    const list = (allMeetings || []).filter(m => m && m.meeting_date);
     const scoped = list.filter(m => {
       if (user?.role === 'TE') {
         const userDist = getUserDistrict(user);
@@ -346,6 +350,7 @@ export default function HomeScreen() {
   // Slabs scheduled for today or past due that are still UPCOMING
   const pendingSlabs = useMemo(() => {
     return (allSlabs || []).filter(s => {
+      if (!s || !s.slab_date) return false;
       if (user?.role === 'TE') {
         const userDist = getUserDistrict(user);
         const cleanName = (user.name || '').trim().toLowerCase();
@@ -363,6 +368,7 @@ export default function HomeScreen() {
   // Meetings scheduled for today or past due that are still PLANNED
   const pendingMeetings = useMemo(() => {
     return (allMeetings || []).filter(m => {
+      if (!m || !m.meeting_date) return false;
       if (user?.role === 'TE') {
         const userDist = getUserDistrict(user);
         const cleanName = (user.name || '').trim().toLowerCase();
@@ -443,20 +449,22 @@ export default function HomeScreen() {
   const computedTopDealers = useMemo(() => {
     const dealerMap: Record<string, { dealer_id: string; dealer_name: string; area: string; total_bags: number }> = {};
     scopedDealers.forEach(d => {
+      if (!d || !d.dealer_id) return;
       dealerMap[d.dealer_id] = {
         dealer_id: d.dealer_id,
-        dealer_name: d.dealer_name,
+        dealer_name: d.dealer_name || 'Dealer',
         area: d.area || activeDistrict,
         total_bags: 0,
       };
     });
 
     allSalesList.forEach(s => {
-      const did = s.dealer_id || s.dealer_name;
+      if (!s) return;
+      const did = s.dealer_id || s.dealer_name || 'unknown';
       if (!dealerMap[did]) {
         dealerMap[did] = {
           dealer_id: did,
-          dealer_name: s.dealer_name,
+          dealer_name: s.dealer_name || 'Dealer',
           area: activeDistrict,
           total_bags: 0,
         };

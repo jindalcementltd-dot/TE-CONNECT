@@ -1415,11 +1415,55 @@ function doPost(e) {
       case 'generateDealerQR': return handleGenerateDealerQR(data);
       case 'generateAllDealerQRs': return handleGenerateAllDealerQRs();
       case 'changePassword': return handleChangePassword(data);
+      case 'registerPushSubscription': return handleRegisterPushSubscription(data);
       default:
         return error('Unknown action: ' + action);
     }
   } catch (err) {
     return error('Server error: ' + err.message);
+  }
+}
+
+function handleRegisterPushSubscription(data) {
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    let sheet = ss.getSheetByName('PUSH_SUBSCRIPTIONS');
+    if (!sheet) {
+      sheet = ss.insertSheet('PUSH_SUBSCRIPTIONS');
+      sheet.appendRow(['subscription_id', 'endpoint', 'p256dh', 'auth', 'user_name', 'user_role', 'district', 'updated_at']);
+    }
+    const endpoint = data.endpoint || '';
+    if (!endpoint) return success(null, 'No endpoint');
+
+    const keys = data.keys || {};
+    const p256dh = keys.p256dh || '';
+    const authKey = keys.auth || '';
+    const now = new Date().toISOString();
+
+    const subs = sheetToObjects(sheet);
+    const existing = subs.find(s => String(s.endpoint) === String(endpoint));
+    if (existing) {
+      updateRowById('PUSH_SUBSCRIPTIONS', 'endpoint', endpoint, {
+        user_name: data.user_name || existing.user_name || '',
+        user_role: data.user_role || existing.user_role || '',
+        district: data.district || existing.district || '',
+        updated_at: now,
+      }, ['subscription_id', 'endpoint', 'p256dh', 'auth', 'user_name', 'user_role', 'district', 'updated_at']);
+    } else {
+      sheet.appendRow([
+        generateId('SUB'),
+        endpoint,
+        p256dh,
+        authKey,
+        data.user_name || '',
+        data.user_role || '',
+        data.district || '',
+        now,
+      ]);
+    }
+    return success(null, 'Subscription registered.');
+  } catch (e) {
+    return success(null, 'Ignored: ' + e.message);
   }
 }
 
