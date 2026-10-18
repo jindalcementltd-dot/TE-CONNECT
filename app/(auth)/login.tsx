@@ -24,7 +24,7 @@ export default function LoginScreen() {
     getSession().then(s => {
       if (s && s.user) {
         try {
-          router.replace('/');
+          router.replace('/(tabs)');
         } catch {}
       }
     });
@@ -47,11 +47,7 @@ export default function LoginScreen() {
     setLoading(true);
     try {
       await login(loginId.trim(), password);
-      try {
-        router.replace('/');
-      } catch {
-        router.replace('/(tabs)/index' as any);
-      }
+      router.replace('/(tabs)');
     } catch (err: any) {
       Toast.show({ type: 'error', text1: 'Login Failed', text2: err.message || 'Invalid credentials. Please try again.' });
     } finally {

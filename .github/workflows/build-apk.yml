@@ -29,11 +29,11 @@ jobs:
       - name: Install dependencies
         run: npm install --legacy-peer-deps
 
+      - name: Prebuild Android project
+        run: npx expo prebuild --platform android --clean --no-install
+
       - name: Apply Expo Gradle patch
         run: node scripts/patch-expo.js
-
-      - name: Prebuild Android project
-        run: npx expo prebuild --platform android --clean
 
       - name: Grant execute permission for gradlew
         run: chmod +x android/gradlew

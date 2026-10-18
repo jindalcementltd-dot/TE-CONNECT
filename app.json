@@ -27,9 +27,7 @@
       "permissions": [
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
-        "CAMERA",
-        "READ_EXTERNAL_STORAGE",
-        "WRITE_EXTERNAL_STORAGE"
+        "CAMERA"
       ],
       "versionCode": 1
     },
@@ -45,6 +43,15 @@
     },
     "plugins": [
       "expo-router",
+      "expo-system-ui",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#C91F2B",
+          "image": "./assets/splash.png",
+          "imageWidth": 200
+        }
+      ],
       [
         "expo-location",
         {

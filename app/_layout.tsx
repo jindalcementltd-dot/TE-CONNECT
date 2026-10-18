@@ -1,4 +1,5 @@
-import React from 'react';
+import 'react-native-gesture-handler';
+import React, { useState, useEffect } from 'react';
 import { Stack } from 'expo-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import Toast from 'react-native-toast-message';
@@ -6,6 +7,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { StatusBar } from 'expo-status-bar';
 import { View, ActivityIndicator } from 'react-native';
 import { useFonts } from 'expo-font';
+import * as SplashScreen from 'expo-splash-screen';
 import {
   Sen_400Regular,
   Sen_500Medium,
@@ -19,11 +21,12 @@ import {
   Poppins_700Bold,
 } from '@expo-google-fonts/poppins';
 
-import { useState, useEffect } from 'react';
 import { UndoProvider } from '../src/context/UndoContext';
 import { getUser } from '../src/services/auth';
 import { registerPushNotifications } from '../src/services/fcmPush';
 import ErrorBoundary from '../components/ErrorBoundary';
+
+SplashScreen.preventAutoHideAsync().catch(() => {});
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -51,10 +54,10 @@ export default function RootLayout() {
   const [forceReady, setForceReady] = useState(false);
 
   useEffect(() => {
-    // Failsafe timeout: After 1.5s, always let the app render even if fonts are delayed or offline
+    // Failsafe timeout: After 1.2s, always let the app render even if fonts are delayed or offline
     const timer = setTimeout(() => {
       setForceReady(true);
-    }, 1500);
+    }, 1200);
 
     try {
       getUser().then(u => {
@@ -64,6 +67,12 @@ export default function RootLayout() {
 
     return () => clearTimeout(timer);
   }, []);
+
+  useEffect(() => {
+    if (fontsLoaded || fontError || forceReady) {
+      SplashScreen.hideAsync().catch(() => {});
+    }
+  }, [fontsLoaded, fontError, forceReady]);
 
   if (!fontsLoaded && !fontError && !forceReady) {
     return (
@@ -80,8 +89,9 @@ export default function RootLayout() {
           <UndoProvider>
             <StatusBar style="light" />
             <Stack screenOptions={{ headerShown: false }}>
-              <Stack.Screen name="(auth)" />
-              <Stack.Screen name="(tabs)" />
+              <Stack.Screen name="index" options={{ headerShown: false }} />
+              <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+              <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
               <Stack.Screen name="profile" options={{ headerShown: false }} />
               <Stack.Screen name="notifications" options={{ headerShown: false }} />
               <Stack.Screen name="slab/add" options={{ presentation: 'modal' }} />

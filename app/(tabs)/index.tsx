@@ -91,9 +91,11 @@ export default function HomeScreen() {
 
   useEffect(() => {
     if (allSlabs && allSlabs.length > 0) {
-      checkAndNotifyNewSlabs(allSlabs).then(() => {
-        getUnreadNotificationsCount().then(setUnreadNotifCount);
-      });
+      try {
+        checkAndNotifyNewSlabs(allSlabs).then(() => {
+          getUnreadNotificationsCount().then(setUnreadNotifCount).catch(() => {});
+        }).catch(() => {});
+      } catch {}
     }
   }, [allSlabs]);
 
@@ -510,12 +512,10 @@ export default function HomeScreen() {
       <View style={styles.blob1} />
       <View style={styles.blob2} />
 
-      <Animated.ScrollView 
+      <ScrollView 
         contentContainerStyle={styles.scrollContent}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary} />}
         showsVerticalScrollIndicator={false}
-        onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: false })}
-        scrollEventThrottle={16}
       >
         {/* HEADER */}
         <View style={styles.header}>
@@ -883,11 +883,11 @@ export default function HomeScreen() {
             <Text style={styles.emptyText}>No slabs found in sheet.</Text>
           </View>
         ) : (
-          displaySlabs.map((slab) => {
+          displaySlabs.map((slab, slabIdx) => {
             const { day, month } = formatUpcomingDate(slab.slab_date);
             const isCompleted = slab.status === 'COMPLETED';
             return (
-              <Link href={`/slab/${slab.slab_id}` as any} asChild key={slab.slab_id}>
+              <Link href={`/slab/${slab.slab_id}` as any} asChild key={slab.slab_id || `slab_${slabIdx}`}>
                 <TouchableOpacity activeOpacity={0.7}>
                   <View style={styles.glassListRow}>
                     <View style={styles.dateBox}>
@@ -933,11 +933,11 @@ export default function HomeScreen() {
             <Text style={styles.emptyText}>No events found in sheet.</Text>
           </View>
         ) : (
-          displayMeetings.map((meeting) => {
+          displayMeetings.map((meeting, meetIdx) => {
             const { day, month } = formatUpcomingDate(meeting.meeting_date);
             const isCompleted = meeting.status === 'COMPLETED';
             return (
-              <Link href={`/meeting/${meeting.meeting_id}` as any} asChild key={meeting.meeting_id}>
+              <Link href={`/meeting/${meeting.meeting_id}` as any} asChild key={meeting.meeting_id || `meeting_${meetIdx}`}>
                 <TouchableOpacity activeOpacity={0.7}>
                   <View style={styles.glassListRow}>
                     <View style={styles.dateBox}>
@@ -982,7 +982,7 @@ export default function HomeScreen() {
               const maxBags = computedTopDealers[0].total_bags || 1;
               const fillWidth = maxBags > 0 ? (dealer.total_bags / maxBags) * 100 : 0;
               return (
-                <View key={dealer.dealer_id} style={[styles.dealerRow, index < 2 && { borderBottomWidth: 1, borderBottomColor: 'rgba(0,0,0,0.05)' }]}>
+                <View key={dealer.dealer_id || `dealer_${index}`} style={[styles.dealerRow, index < 2 && { borderBottomWidth: 1, borderBottomColor: 'rgba(0,0,0,0.05)' }]}>
                   <View style={styles.rankCircle}>
                     <Text style={styles.rankText}>{index + 1}</Text>
                   </View>
@@ -1004,10 +1004,10 @@ export default function HomeScreen() {
         </View>
 
         <View style={{ height: 100 }} />
-      </Animated.ScrollView>
+      </ScrollView>
 
-      {/* Floating Action Menu with DiffClamp Hide on Scroll */}
-      <FloatingActionMenu scrollY={scrollY} />
+      {/* Floating Action Menu */}
+      <FloatingActionMenu />
 
       {/* MONTH PICKER MODAL */}
       <Modal visible={showMonthModal} transparent animationType="fade" onRequestClose={() => setShowMonthModal(false)}>
