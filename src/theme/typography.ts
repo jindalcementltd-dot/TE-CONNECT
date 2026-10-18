@@ -49,61 +49,50 @@ export const Typography = StyleSheet.create({
   hero: {
     fontFamily: FontFamily.displayBlack,
     fontSize: FontSize['4xl'],
-    fontWeight: '900',
     letterSpacing: -0.8,
   },
   h1: {
     fontFamily: FontFamily.displayBold,
     fontSize: FontSize['3xl'],
-    fontWeight: '800',
     letterSpacing: -0.5,
   },
   h2: {
     fontFamily: FontFamily.displayBold,
     fontSize: FontSize['2xl'],
-    fontWeight: '700',
     letterSpacing: -0.3,
   },
   h3: {
     fontFamily: FontFamily.displaySemiBold,
     fontSize: FontSize.xl,
-    fontWeight: '600',
     letterSpacing: -0.2,
   },
   h4: {
     fontFamily: FontFamily.displaySemiBold,
     fontSize: FontSize.lg,
-    fontWeight: '600',
   },
   body: {
     fontFamily: FontFamily.sansRegular,
     fontSize: FontSize.base,
-    fontWeight: '400',
   },
   bodyMedium: {
     fontFamily: FontFamily.sansMedium,
     fontSize: FontSize.base,
-    fontWeight: '500',
   },
   bodySemiBold: {
     fontFamily: FontFamily.sansSemiBold,
     fontSize: FontSize.base,
-    fontWeight: '600',
   },
   caption: {
     fontFamily: FontFamily.sansRegular,
     fontSize: FontSize.sm,
-    fontWeight: '400',
   },
   captionMedium: {
     fontFamily: FontFamily.sansMedium,
     fontSize: FontSize.sm,
-    fontWeight: '500',
   },
   label: {
     fontFamily: FontFamily.sansBold,
     fontSize: FontSize.xs,
-    fontWeight: '700',
     letterSpacing: 0.6,
   },
 });
