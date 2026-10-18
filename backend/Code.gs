@@ -819,6 +819,7 @@ function handleCreateSlab(data) {
   };
   appendRow(SHEETS.SLABS, slabObj, HEADERS.SLABS);
   logActivity(data.created_by, data.created_by, 'CREATE_SLAB', 'SLABS', slab_id, 'Created slab for ' + data.dealer_name);
+  sendPushNotificationToSubscribers('New Slab Added', 'Slab scheduled for ' + (data.dealer_name || 'Dealer'));
   return success(slabObj, 'Slab added successfully.');
 }
 
@@ -1236,6 +1237,7 @@ function handlePublicSlabSubmit(data) {
   };
   appendRow(SHEETS.SLABS, slabObj, HEADERS.SLABS);
   logActivity('', dealer.dealer_name, 'PUBLIC_SLAB_SUBMIT', 'SLABS', slab_id, 'Dealer QR submission - ' + (data.expected_cement || 'Slab') + ' for ' + (contractorName || mobileStr));
+  sendPushNotificationToSubscribers('New Slab from QR', (dealer.dealer_name || 'Dealer') + ' added a new slab request');
   return success(slabObj, 'Slab submitted successfully! Your team will be notified.');
 }
 
@@ -1464,6 +1466,32 @@ function handleRegisterPushSubscription(data) {
     return success(null, 'Subscription registered.');
   } catch (e) {
     return success(null, 'Ignored: ' + e.message);
+  }
+}
+
+function sendPushNotificationToSubscribers(title, body) {
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const sheet = ss.getSheetByName('PUSH_SUBSCRIPTIONS');
+    if (!sheet) return;
+    const subs = sheetToObjects(sheet);
+    if (!subs || subs.length === 0) return;
+
+    subs.forEach(function(sub) {
+      if (!sub || !sub.endpoint) return;
+      try {
+        UrlFetchApp.fetch(sub.endpoint, {
+          method: 'post',
+          headers: {
+            'TTL': '86400',
+            'Urgency': 'high'
+          },
+          muteHttpExceptions: true
+        });
+      } catch (err) {}
+    });
+  } catch (e) {
+    Logger.log('Push dispatch error: ' + e.message);
   }
 }
 

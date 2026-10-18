@@ -1,9 +1,9 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { View, StyleSheet, Text, Platform, Animated } from 'react-native';
+import { View, StyleSheet, Text, Platform, Animated, ActivityIndicator } from 'react-native';
 import { Tabs, router } from 'expo-router';
 import { Colors } from '../../src/theme/colors';
 import { Ionicons } from '@expo/vector-icons';
-import { getSession } from '../../src/services/auth';
+import { useAuthSession } from '../../src/services/auth';
 
 function TabIcon({ name, focused, label }: { name: any; focused: boolean; label: string }) {
   const scaleAnim = useRef(new Animated.Value(focused ? 1.05 : 1)).current;
@@ -43,27 +43,25 @@ function TabIcon({ name, focused, label }: { name: any; focused: boolean; label:
 }
 
 export default function TabsLayout() {
-  const [authChecked, setAuthChecked] = useState(false);
+  const { session, loading } = useAuthSession();
 
   useEffect(() => {
-    checkAuth();
-  }, []);
-
-  const checkAuth = async () => {
-    let session = await getSession();
-    if (!session) {
-      // Retry after 200ms in case storage was still flushing
-      await new Promise(r => setTimeout(r, 200));
-      session = await getSession();
-    }
-    if (!session) {
+    if (!loading && !session) {
       router.replace('/(auth)/login');
-    } else {
-      setAuthChecked(true);
     }
-  };
+  }, [loading, session]);
 
-  if (!authChecked) return null;
+  if (loading) {
+    return (
+      <View style={{ flex: 1, backgroundColor: '#4A0611', justifyContent: 'center', alignItems: 'center' }}>
+        <ActivityIndicator size="large" color="#E53935" />
+      </View>
+    );
+  }
+
+  if (!session) {
+    return null;
+  }
 
   return (
     <Tabs

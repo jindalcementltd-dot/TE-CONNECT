@@ -7,7 +7,7 @@ import { router } from 'expo-router';
 import { Colors } from '../../src/theme/colors';
 import { Spacing, BorderRadius } from '../../src/theme/spacing';
 import { Typography, FontFamily, FontSize } from '../../src/theme/typography';
-import { login } from '../../src/services/auth';
+import { login, getSession } from '../../src/services/auth';
 import { apiGetSettings } from '../../src/services/api';
 import Toast from 'react-native-toast-message';
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
@@ -19,7 +19,16 @@ export default function LoginScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [serverStatus, setServerStatus] = useState<'checking' | 'connected' | 'error'>('checking');
 
-  useEffect(() => { checkServer(); }, []);
+  useEffect(() => {
+    checkServer();
+    getSession().then(s => {
+      if (s && s.user) {
+        try {
+          router.replace('/');
+        } catch {}
+      }
+    });
+  }, []);
 
   const checkServer = async () => {
     setServerStatus('checking');
@@ -38,7 +47,11 @@ export default function LoginScreen() {
     setLoading(true);
     try {
       await login(loginId.trim(), password);
-      router.replace('/(tabs)');
+      try {
+        router.replace('/');
+      } catch {
+        router.replace('/(tabs)/index' as any);
+      }
     } catch (err: any) {
       Toast.show({ type: 'error', text1: 'Login Failed', text2: err.message || 'Invalid credentials. Please try again.' });
     } finally {

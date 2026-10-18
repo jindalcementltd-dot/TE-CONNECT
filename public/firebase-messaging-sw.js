@@ -102,45 +102,53 @@ self.addEventListener('periodicsync', (event) => {
 
 // Push notification listener (even when app is closed / phone locked)
 self.addEventListener('push', (event) => {
-  let data = {};
-  try {
-    if (event.data) {
-      data = event.data.json();
-    }
-  } catch (err) {
-    try {
-      data = { title: 'TE CONNECT Alert', body: event.data ? event.data.text() : '' };
-    } catch (e) {
-      data = {};
-    }
-  }
-
-  const title = data.title || (data.notification && data.notification.title) || '🏗️ TE CONNECT Notification';
-  const body = data.body || (data.notification && data.notification.body) || 'New activity recorded in your territory.';
-  const url = data.url || (data.data && data.data.url) || '/';
-  const icon = data.icon || '/icon.png';
-  const badge = data.badge || '/favicon.png';
-
-  const options = {
-    body: body,
-    icon: icon,
-    badge: badge,
-    vibrate: [200, 100, 200, 100, 300],
-    tag: data.tag || 'te-connect-' + Date.now(),
-    renotify: true,
-    requireInteraction: true,
-    data: {
-      url: url,
-      timestamp: Date.now(),
-    },
-    actions: [
-      { action: 'open', title: 'Open App 📱' },
-      { action: 'dismiss', title: 'Dismiss' }
-    ]
-  };
-
   event.waitUntil(
-    self.registration.showNotification(title, options)
+    (async () => {
+      let data = {};
+      try {
+        if (event.data) {
+          data = event.data.json();
+        }
+      } catch (err) {
+        try {
+          data = { title: '🏗️ TE CONNECT Alert', body: event.data ? event.data.text() : '' };
+        } catch (e) {
+          data = {};
+        }
+      }
+
+      // If push payload is empty (e.g. server ping / wakeup), poll backend immediately
+      if (!data.title && (!data.notification || !data.notification.title)) {
+        await checkForNewSlabsInBackground();
+        return;
+      }
+
+      const title = data.title || (data.notification && data.notification.title) || '🏗️ TE CONNECT Notification';
+      const body = data.body || (data.notification && data.notification.body) || 'New activity recorded in your territory.';
+      const url = data.url || (data.data && data.data.url) || '/';
+      const icon = data.icon || '/icon.png';
+      const badge = data.badge || '/favicon.png';
+
+      const options = {
+        body: body,
+        icon: icon,
+        badge: badge,
+        vibrate: [300, 100, 300, 100, 400],
+        tag: data.tag || 'te-connect-' + Date.now(),
+        renotify: true,
+        requireInteraction: true,
+        data: {
+          url: url,
+          timestamp: Date.now(),
+        },
+        actions: [
+          { action: 'open', title: 'Open App 📱' },
+          { action: 'dismiss', title: 'Dismiss' }
+        ]
+      };
+
+      await self.registration.showNotification(title, options);
+    })()
   );
 });
 

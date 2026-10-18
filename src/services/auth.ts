@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
@@ -6,6 +7,58 @@ import { apiLogin } from './api';
 import { AuthSession, User } from '../types';
 
 const SESSION_KEY = 'teconnect_session';
+
+// In-memory cache for instant synchronous access across the app
+let memorySession: AuthSession | null = null;
+let memoryLoaded = false;
+const authListeners = new Set<(session: AuthSession | null) => void>();
+
+function notifyListeners(s: AuthSession | null) {
+  authListeners.forEach(listener => {
+    try {
+      listener(s);
+    } catch (e) {
+      console.warn('[Auth] Listener error:', e);
+    }
+  });
+}
+
+export function getCachedSession(): AuthSession | null {
+  return memorySession;
+}
+
+export function useAuthSession() {
+  const [session, setSession] = useState<AuthSession | null>(memorySession);
+  const [loading, setLoading] = useState(!memoryLoaded);
+
+  useEffect(() => {
+    const listener = (s: AuthSession | null) => {
+      setSession(s);
+      setLoading(false);
+    };
+    authListeners.add(listener);
+
+    if (!memoryLoaded) {
+      getSession().then(s => {
+        setSession(s);
+        setLoading(false);
+      });
+    } else {
+      setSession(memorySession);
+      setLoading(false);
+    }
+
+    return () => {
+      authListeners.delete(listener);
+    };
+  }, []);
+
+  return {
+    session,
+    loading,
+    user: session?.user ?? null,
+  };
+}
 
 async function setStorageItem(key: string, value: string): Promise<void> {
   try {
@@ -72,7 +125,6 @@ export async function hashPassword(password: string): Promise<string> {
     );
     return hash;
   } catch (e) {
-    // Basic fallback if crypto fails
     return password;
   }
 }
@@ -101,16 +153,35 @@ export async function login(login_id: string, password: string): Promise<{ user:
     token: result.data.token,
     loggedInAt: new Date().toISOString(),
   };
-  await setStorageItem(SESSION_KEY, JSON.stringify(session));
+
+  // Immediate in-memory update & broadcast
+  memorySession = session;
+  memoryLoaded = true;
+  notifyListeners(session);
+
+  // Persistent storage (non-blocking failsafe)
+  setStorageItem(SESSION_KEY, JSON.stringify(session)).catch(() => {});
+
   return result.data;
 }
 
 export async function getSession(): Promise<AuthSession | null> {
+  if (memorySession) {
+    return memorySession;
+  }
+
   try {
     const raw = await getStorageItem(SESSION_KEY);
-    if (!raw) return null;
-    return JSON.parse(raw) as AuthSession;
+    if (!raw) {
+      memoryLoaded = true;
+      return null;
+    }
+    const session = JSON.parse(raw) as AuthSession;
+    memorySession = session;
+    memoryLoaded = true;
+    return session;
   } catch {
+    memoryLoaded = true;
     return null;
   }
 }
@@ -121,6 +192,9 @@ export async function getUser(): Promise<User | null> {
 }
 
 export async function logout(): Promise<void> {
+  memorySession = null;
+  memoryLoaded = true;
+  notifyListeners(null);
   await removeStorageItem(SESSION_KEY);
 }
 
