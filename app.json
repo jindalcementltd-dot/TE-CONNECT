@@ -2,7 +2,7 @@
   "expo": {
     "name": "TE CONNECT",
     "slug": "te-connect",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -27,10 +27,12 @@
       "permissions": [
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
-        "CAMERA"
+        "CAMERA",
+        "VIBRATE"
       ],
-      "versionCode": 1
+      "versionCode": 2
     },
+
     "web": {
       "favicon": "./assets/favicon.png",
       "bundler": "metro",

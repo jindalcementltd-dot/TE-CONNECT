@@ -166,25 +166,35 @@ export async function login(login_id: string, password: string): Promise<{ user:
 }
 
 export async function getSession(): Promise<AuthSession | null> {
-  if (memorySession) {
+  if (memorySession && memorySession.user && memorySession.user.login_id) {
     return memorySession;
   }
 
   try {
     const raw = await getStorageItem(SESSION_KEY);
     if (!raw) {
+      memorySession = null;
       memoryLoaded = true;
       return null;
     }
     const session = JSON.parse(raw) as AuthSession;
+    if (!session || !session.user || !session.user.login_id) {
+      await removeStorageItem(SESSION_KEY).catch(() => {});
+      memorySession = null;
+      memoryLoaded = true;
+      return null;
+    }
     memorySession = session;
     memoryLoaded = true;
     return session;
   } catch {
+    await removeStorageItem(SESSION_KEY).catch(() => {});
+    memorySession = null;
     memoryLoaded = true;
     return null;
   }
 }
+
 
 export async function getUser(): Promise<User | null> {
   const session = await getSession();
