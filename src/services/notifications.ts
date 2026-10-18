@@ -39,7 +39,7 @@ let sharedAudioEl: any = null;
 let isAudioUnlocked = false;
 
 export function initAndUnlockAudio() {
-  if (typeof window === 'undefined') return;
+  if (Platform.OS !== 'web' || typeof window === 'undefined') return;
   try {
     const AudioCtx = (window as any).AudioContext || (window as any).webkitAudioContext;
     if (AudioCtx && !sharedAudioCtx) {
@@ -59,7 +59,7 @@ export function initAndUnlockAudio() {
 }
 
 // Auto-register touch/click listeners on mobile browser to unlock audio pipeline on first tap
-if (typeof window !== 'undefined') {
+if (Platform.OS === 'web' && typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
   const unlockHandler = () => {
     initAndUnlockAudio();
     window.removeEventListener('click', unlockHandler);
@@ -71,12 +71,14 @@ if (typeof window !== 'undefined') {
   window.addEventListener('touchend', unlockHandler, { passive: true });
 }
 
+
 /**
  * Signature Distinct Audio Chime
  * Dual-engine: plays high-fidelity base64 WAV chime via HTML5 Audio
  * with Web Audio API synthesis fallback. Works on mobile Safari, Android Chrome & PWA.
  */
 export function playNotificationSound() {
+  if (Platform.OS !== 'web') return;
   initAndUnlockAudio();
 
   let played = false;
@@ -111,7 +113,8 @@ export function playNotificationSound() {
 
 function synthesizeWebAudioChime() {
   try {
-    if (typeof window === 'undefined') return;
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+
     const AudioCtx = (window as any).AudioContext || (window as any).webkitAudioContext;
     if (!AudioCtx) return;
 
