@@ -7,7 +7,6 @@ import {
 import { router, Link } from 'expo-router';
 import FloatingActionMenu from '../../components/FloatingActionMenu';
 import { useQuery } from '@tanstack/react-query';
-import { BlurView } from 'expo-blur';
 import Toast from 'react-native-toast-message';
 import {
   apiGetSettings, apiGetSales, apiGetDealers, apiGetActiveTracker, 
@@ -738,7 +737,7 @@ export default function HomeScreen() {
         {/* 4 ULTRA-COMPACT KPI BOXES */}
         <View style={styles.kpiGrid}>
           {/* Box 1: Total Slabs in Month */}
-          <BlurView intensity={80} tint="light" style={styles.kpiCard}>
+          <View style={styles.kpiCard}>
             <View style={styles.kpiHeaderRow}>
               <View style={[styles.kpiIconWrap, { backgroundColor: Colors.primaryLight }]}>
                 <MaterialCommunityIcons name="office-building" size={20} color={Colors.primary} />
@@ -749,10 +748,10 @@ export default function HomeScreen() {
             </View>
             <Text style={styles.kpiValue}>{allSlabsList.length}</Text>
             <Text style={styles.kpiLabel}>Total Slabs</Text>
-          </BlurView>
+          </View>
 
           {/* Box 2: Total Sales in Month */}
-          <BlurView intensity={80} tint="light" style={styles.kpiCard}>
+          <View style={styles.kpiCard}>
             <View style={styles.kpiHeaderRow}>
               <View style={[styles.kpiIconWrap, { backgroundColor: Colors.infoLight }]}>
                 <MaterialCommunityIcons name="chart-bar" size={20} color={Colors.info} />
@@ -763,10 +762,10 @@ export default function HomeScreen() {
             </View>
             <Text style={styles.kpiValue}>{totalSalesBags.toLocaleString()}</Text>
             <Text style={styles.kpiLabel}>Sales (Bags)</Text>
-          </BlurView>
+          </View>
 
           {/* Box 3: Active % in Month */}
-          <BlurView intensity={80} tint="light" style={styles.kpiCard}>
+          <View style={styles.kpiCard}>
             <View style={styles.kpiHeaderRow}>
               <View style={[styles.kpiIconWrap, { backgroundColor: Colors.successLight }]}>
                 <Ionicons name="flash" size={20} color={Colors.success} />
@@ -777,10 +776,10 @@ export default function HomeScreen() {
             </View>
             <Text style={styles.kpiValue}>{Math.round(activePercent)}%</Text>
             <Text style={styles.kpiLabel}>Active %</Text>
-          </BlurView>
+          </View>
 
           {/* Box 4: Total Meetings in Month */}
-          <BlurView intensity={80} tint="light" style={styles.kpiCard}>
+          <View style={styles.kpiCard}>
             <View style={styles.kpiHeaderRow}>
               <View style={[styles.kpiIconWrap, { backgroundColor: Colors.warningLight }]}>
                 <Ionicons name="people" size={20} color={Colors.warning} />
@@ -791,7 +790,7 @@ export default function HomeScreen() {
             </View>
             <Text style={styles.kpiValue}>{allMeetingsList.length}</Text>
             <Text style={styles.kpiLabel}>Total Meetings</Text>
-          </BlurView>
+          </View>
         </View>
 
         {/* MONTHLY TARGETS (4 Boxes) */}
@@ -820,27 +819,27 @@ export default function HomeScreen() {
         
         <View style={styles.targetGrid}>
           {/* Box 1: Sales Target */}
-          <BlurView intensity={90} tint="light" style={styles.targetBox}>
+          <View style={styles.targetBox}>
             <Text style={styles.targetBoxLabel}>Sales (Bags)</Text>
             <Text style={styles.targetBoxValue}>{totalSalesBags.toLocaleString()}</Text>
             <View style={styles.targetLineBg}>
               <View style={[styles.targetLineFill, { width: `${Math.min(100, (totalSalesBags / 10000) * 100)}%`, backgroundColor: Colors.primary }]} />
             </View>
             <Text style={styles.targetSubText}>{totalSalesMT} MT achieved</Text>
-          </BlurView>
+          </View>
 
           {/* Box 2: Contractor Activation */}
-          <BlurView intensity={90} tint="light" style={styles.targetBox}>
+          <View style={styles.targetBox}>
             <Text style={styles.targetBoxLabel}>Active / Punch</Text>
             <Text style={styles.targetBoxValue}>{activeContractorsCount} <Text style={{ fontSize: 16, color: Colors.textMuted }}>/ {totalContractorsCount}</Text></Text>
             <View style={styles.targetLineBg}>
               <View style={[styles.targetLineFill, { width: `${Math.min(100, totalContractorsCount > 0 ? (activeContractorsCount / totalContractorsCount) * 100 : 0)}%`, backgroundColor: Colors.success }]} />
             </View>
             <Text style={styles.targetSubText}>Min 45% Target ({Math.round(activePercent)}%)</Text>
-          </BlurView>
+          </View>
 
           {/* Box 3: Contractor Meets */}
-          <BlurView intensity={90} tint="light" style={styles.targetBox}>
+          <View style={styles.targetBox}>
             <Text style={styles.targetBoxLabel}>
               Contractor Meet ({effectiveTargetTE === 'ALL' ? 'Team' : (effectiveTargetTE === user?.name ? 'My' : effectiveTargetTE)})
             </Text>
@@ -849,10 +848,10 @@ export default function HomeScreen() {
               <View style={[styles.targetLineFill, { width: `${Math.min(100, (contractorPeopleCount / 100) * 100)}%`, backgroundColor: '#EA580C' }]} />
             </View>
             <Text style={styles.targetSubText}>Target 100 Contractors ({Math.min(100, Math.round((contractorPeopleCount / 100) * 100))}%)</Text>
-          </BlurView>
+          </View>
 
           {/* Box 4: IHB Meets */}
-          <BlurView intensity={90} tint="light" style={styles.targetBox}>
+          <View style={styles.targetBox}>
             <Text style={styles.targetBoxLabel}>
               IHB Meet ({effectiveTargetTE === 'ALL' ? 'Team' : (effectiveTargetTE === user?.name ? 'My' : effectiveTargetTE)})
             </Text>
@@ -861,7 +860,7 @@ export default function HomeScreen() {
               <View style={[styles.targetLineFill, { width: `${Math.min(100, (ihbPeopleCount / 50) * 100)}%`, backgroundColor: '#7C3AED' }]} />
             </View>
             <Text style={styles.targetSubText}>Target 50 IHB ({Math.min(100, Math.round((ihbPeopleCount / 50) * 100))}%)</Text>
-          </BlurView>
+          </View>
         </View>
 
         {/* UPCOMING / RECENT SLABS */}
@@ -880,9 +879,9 @@ export default function HomeScreen() {
         </View>
 
         {displaySlabs.length === 0 ? (
-          <BlurView intensity={80} tint="light" style={styles.emptyCard}>
+          <View style={styles.emptyCard}>
             <Text style={styles.emptyText}>No slabs found in sheet.</Text>
-          </BlurView>
+          </View>
         ) : (
           displaySlabs.map((slab) => {
             const { day, month } = formatUpcomingDate(slab.slab_date);
@@ -890,7 +889,7 @@ export default function HomeScreen() {
             return (
               <Link href={`/slab/${slab.slab_id}` as any} asChild key={slab.slab_id}>
                 <TouchableOpacity activeOpacity={0.7}>
-                  <BlurView intensity={90} tint="light" style={styles.glassListRow}>
+                  <View style={styles.glassListRow}>
                     <View style={styles.dateBox}>
                       <Text style={styles.dateDay}>{day}</Text>
                       <Text style={styles.dateMonth}>{month}</Text>
@@ -907,7 +906,7 @@ export default function HomeScreen() {
                         {slab.status || '1 Slab'}
                       </Text>
                     </View>
-                  </BlurView>
+                  </View>
                 </TouchableOpacity>
               </Link>
             );
@@ -930,9 +929,9 @@ export default function HomeScreen() {
         </View>
 
         {displayMeetings.length === 0 ? (
-          <BlurView intensity={80} tint="light" style={styles.emptyCard}>
+          <View style={styles.emptyCard}>
             <Text style={styles.emptyText}>No events found in sheet.</Text>
-          </BlurView>
+          </View>
         ) : (
           displayMeetings.map((meeting) => {
             const { day, month } = formatUpcomingDate(meeting.meeting_date);
@@ -940,7 +939,7 @@ export default function HomeScreen() {
             return (
               <Link href={`/meeting/${meeting.meeting_id}` as any} asChild key={meeting.meeting_id}>
                 <TouchableOpacity activeOpacity={0.7}>
-                  <BlurView intensity={90} tint="light" style={styles.glassListRow}>
+                  <View style={styles.glassListRow}>
                     <View style={styles.dateBox}>
                       <Text style={styles.dateDay}>{day}</Text>
                       <Text style={styles.dateMonth}>{month}</Text>
@@ -957,7 +956,7 @@ export default function HomeScreen() {
                         {meeting.status || 'PLANNED'}
                       </Text>
                     </View>
-                  </BlurView>
+                  </View>
                 </TouchableOpacity>
               </Link>
             );
@@ -975,7 +974,7 @@ export default function HomeScreen() {
           </TouchableOpacity>
         </View>
         
-        <BlurView intensity={90} tint="light" style={styles.largeCard}>
+        <View style={styles.largeCard}>
           {computedTopDealers.length === 0 || computedTopDealers.every(d => d.total_bags === 0) ? (
             <Text style={styles.emptyText}>No dealer sales recorded for {formattedSelectedMonth}.</Text>
           ) : (
@@ -1002,7 +1001,7 @@ export default function HomeScreen() {
               );
             })
           )}
-        </BlurView>
+        </View>
 
         <View style={{ height: 100 }} />
       </Animated.ScrollView>

@@ -7,24 +7,17 @@ import { Colors } from '../src/theme/colors';
 export default function FloatingActionMenu({ scrollY }: { scrollY?: Animated.Value }) {
   const [visible, setVisible] = useState(false);
 
-  // If scrollY is provided, hide FAB on scroll down
-  const diffClamp = scrollY ? Animated.diffClamp(scrollY, 0, 100) : null;
-  const translateY = diffClamp ? diffClamp.interpolate({
-    inputRange: [0, 100],
-    outputRange: [0, 150], // moves down 150px
-  }) : 0;
-
   return (
     <>
-      <Animated.View style={[fabStyles.wrapper, { transform: [{ translateY }] }]}>
+      <View style={fabStyles.wrapper}>
         <TouchableOpacity
           style={fabStyles.fab}
           onPress={() => setVisible(true)}
-          activeOpacity={0.8}
+          activeOpacity={0.85}
         >
-          <Ionicons name="add" size={36} color="#FFFFFF" style={{ textShadowColor: '#FFF', textShadowOffset: {width:0, height:0}, textShadowRadius: 10 }} />
+          <Ionicons name="add" size={36} color="#FFFFFF" />
         </TouchableOpacity>
-      </Animated.View>
+      </View>
 
       <Modal transparent visible={visible} animationType="fade" onRequestClose={() => setVisible(false)}>
         <TouchableOpacity style={fabStyles.overlay} onPress={() => setVisible(false)} activeOpacity={1}>
