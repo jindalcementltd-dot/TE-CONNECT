@@ -15,8 +15,9 @@ import {
 } from '../../src/services/api';
 import { getUser } from '../../src/services/auth';
 import {
-  getGreeting, normalizeDate, currentMonthISO, formatDateShort, formatMonthYear
+  getGreeting, normalizeDate, currentMonthISO, formatDateShort, formatMonthYear, formatNumber
 } from '../../src/utils/helpers';
+
 import {
   getUserDistrict, getDealerDistrict, getSlabDistrict, getSaleDistrict,
   getMeetingDistrict, getTrackerDistrict, getAvailableDistricts, normalizeDistrictName
@@ -760,7 +761,7 @@ export default function HomeScreen() {
                 <Text style={[styles.kpiTrend, { color: Colors.info }]}>{totalSalesMT} MT</Text>
               </View>
             </View>
-            <Text style={styles.kpiValue}>{totalSalesBags.toLocaleString()}</Text>
+            <Text style={styles.kpiValue}>{formatNumber(totalSalesBags)}</Text>
             <Text style={styles.kpiLabel}>Sales (Bags)</Text>
           </View>
 
@@ -821,7 +822,8 @@ export default function HomeScreen() {
           {/* Box 1: Sales Target */}
           <View style={styles.targetBox}>
             <Text style={styles.targetBoxLabel}>Sales (Bags)</Text>
-            <Text style={styles.targetBoxValue}>{totalSalesBags.toLocaleString()}</Text>
+            <Text style={styles.targetBoxValue}>{formatNumber(totalSalesBags)}</Text>
+
             <View style={styles.targetLineBg}>
               <View style={[styles.targetLineFill, { width: `${Math.min(100, (totalSalesBags / 10000) * 100)}%`, backgroundColor: Colors.primary }]} />
             </View>
@@ -994,9 +996,10 @@ export default function HomeScreen() {
                     </View>
                   </View>
                   <View style={styles.dealerSalesWrap}>
-                    <Text style={styles.dealerSalesValue}>{dealer.total_bags.toLocaleString()}</Text>
-                    <Text style={styles.dealerSalesSub}>{(dealer.total_bags / 20).toFixed(1)} MT</Text>
+                    <Text style={styles.dealerSalesValue}>{formatNumber(dealer.total_bags || 0)}</Text>
+                    <Text style={styles.dealerSalesSub}>{((Number(dealer.total_bags) || 0) / 20).toFixed(1)} MT</Text>
                   </View>
+
                 </View>
               );
             })
@@ -1311,7 +1314,7 @@ const styles = StyleSheet.create({
   headerAppLogo: { width: '100%', height: '100%' },
   headerTextWrap: { flex: 1, minWidth: 0 },
   greeting: { fontFamily: FontFamily.sansMedium, fontSize: 12, color: '#6B7280' },
-  userName: { fontFamily: FontFamily.displayBlack, fontSize: 21, fontWeight: '900', color: '#172033', letterSpacing: -0.4, marginTop: -2 },
+  userName: { fontFamily: FontFamily.displayBlack, fontSize: 21, color: '#172033', letterSpacing: -0.4, marginTop: -2 },
   territoryRow: { flexDirection: 'row', alignItems: 'center', marginTop: 1 },
   territoryText: { fontFamily: FontFamily.sansMedium, fontSize: 11, color: '#6B7280' },
   
@@ -1339,7 +1342,6 @@ const styles = StyleSheet.create({
   districtBarLabel: {
     fontFamily: FontFamily.sansBold,
     fontSize: 10,
-    fontWeight: '800',
     color: '#8A7277',
     letterSpacing: 0.5,
     marginRight: 4,
@@ -1364,7 +1366,6 @@ const styles = StyleSheet.create({
   districtChipText: {
     fontFamily: FontFamily.sansBold,
     fontSize: 11,
-    fontWeight: '700',
     color: '#4B5563',
   },
   districtChipTextActive: {
@@ -1416,7 +1417,6 @@ const styles = StyleSheet.create({
   reminderTitle: {
     fontFamily: FontFamily.displayBold,
     fontSize: 15,
-    fontWeight: '800',
     color: '#991B1B',
     letterSpacing: -0.3,
   },
@@ -1429,7 +1429,6 @@ const styles = StyleSheet.create({
   reminderBadgeText: {
     fontFamily: FontFamily.sansBold,
     fontSize: 10,
-    fontWeight: '800',
     color: '#DC2626',
   },
   reminderSubText: {
@@ -1458,7 +1457,6 @@ const styles = StyleSheet.create({
   reminderItemType: {
     fontFamily: FontFamily.sansBold,
     fontSize: 10,
-    fontWeight: '800',
     color: Colors.primary,
     letterSpacing: 0.5,
   },
@@ -1470,7 +1468,6 @@ const styles = StyleSheet.create({
   reminderItemName: {
     fontFamily: FontFamily.displayBold,
     fontSize: 14,
-    fontWeight: '800',
     color: '#1F2937',
     marginTop: 1,
   },
@@ -1492,7 +1489,6 @@ const styles = StyleSheet.create({
   doneActionBtnText: {
     fontFamily: FontFamily.sansBold,
     fontSize: 12,
-    fontWeight: '700',
     color: '#FFFFFF',
   },
   allClearPill: {
@@ -1511,7 +1507,6 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.sansMedium,
     fontSize: 12,
     color: '#15803D',
-    fontWeight: '600',
   },
 
   quickActionsContainer: { flexDirection: 'row', justifyContent: 'space-around', marginBottom: 20, paddingHorizontal: 10 },
@@ -1593,7 +1588,6 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.sansBold,
     fontSize: 12,
     color: '#800E20',
-    fontWeight: '700',
   },
 
   // Attend Meeting Modal Styles
@@ -1635,7 +1629,6 @@ const styles = StyleSheet.create({
   attendTypeBadgeText: {
     fontFamily: FontFamily.sansBold,
     fontSize: 10,
-    fontWeight: '800',
     letterSpacing: 0.5,
   },
   attendDateTag: {
@@ -1647,7 +1640,6 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.displayBold,
     fontSize: 18,
     color: '#111827',
-    fontWeight: '800',
   },
   attendModalLocation: {
     fontFamily: FontFamily.sansMedium,
@@ -1667,7 +1659,6 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.sansBold,
     fontSize: 13,
     color: '#1F2937',
-    fontWeight: '700',
     marginBottom: 4,
   },
   attendFieldSubtext: {
@@ -1699,7 +1690,6 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.sansBold,
     fontSize: 12,
     color: '#374151',
-    fontWeight: '600',
   },
   teAttendChipTextActive: {
     color: '#FFFFFF',
@@ -1733,7 +1723,6 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.sansBold,
     fontSize: 12,
     color: '#800E20',
-    fontWeight: '700',
   },
   attendModalActions: {
     flexDirection: 'row',
@@ -1753,7 +1742,6 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.sansMedium,
     fontSize: 14,
     color: '#4B5563',
-    fontWeight: '600',
   },
   attendConfirmBtn: {
     flex: 2,
@@ -1772,6 +1760,5 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.sansBold,
     fontSize: 14,
     color: '#FFFFFF',
-    fontWeight: '700',
   },
 });

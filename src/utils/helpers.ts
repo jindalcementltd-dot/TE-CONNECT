@@ -216,6 +216,14 @@ export function formatPercent(value: number): string {
   return `${value.toFixed(1)}%`;
 }
 
+export function formatNumber(val: number | string | null | undefined): string {
+  if (val === null || val === undefined) return '0';
+  const num = typeof val === 'number' ? val : Number(val);
+  if (isNaN(num)) return '0';
+  return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+}
+
 export function isNetworkError(error: any): boolean {
   return error?.message?.includes('Network') || error?.message?.includes('network') || error?.message?.includes('timeout');
 }
+

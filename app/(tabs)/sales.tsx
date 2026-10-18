@@ -14,8 +14,9 @@ import {
 import { getUser } from '../../src/services/auth';
 import {
   bagsToMT, currentMonthISO, formatPercent,
-  normalizeDate, formatDateShort,
+  normalizeDate, formatDateShort, formatNumber
 } from '../../src/utils/helpers';
+
 import {
   getUserDistrict, getDealerDistrict, getSaleDistrict, getAvailableDistricts,
 } from '../../src/utils/district';
@@ -411,7 +412,7 @@ export default function SalesScreen() {
                 <View>
                   <Text style={styles.heroLabel}>TOTAL SALES VOLUME ({formattedSelectedMonth.toUpperCase()})</Text>
                   <Text style={styles.heroValueMT}>{totalMT} <Text style={styles.heroUnit}>MT</Text></Text>
-                  <Text style={styles.heroBagsSub}>{totalBags.toLocaleString()} Total Bags Logged in Sheet</Text>
+                  <Text style={styles.heroBagsSub}>{formatNumber(totalBags)} Total Bags Logged in Sheet</Text>
                 </View>
                 <View style={styles.heroBadgeIcon}>
                   <MaterialCommunityIcons name="chart-box" size={32} color="#FFFFFF" />
@@ -631,7 +632,7 @@ export default function SalesScreen() {
                           <View style={styles.dealerSalesPill}>
                             <Text style={styles.dealerSalesPillLabel}>{formattedSelectedMonth} Sales:</Text>
                             <Text style={styles.dealerSalesPillVal}>
-                              {bagsThisMonth.toLocaleString()} Bags ({mtThisMonth} MT)
+                              {formatNumber(bagsThisMonth)} Bags ({mtThisMonth} MT)
                             </Text>
                           </View>
                         </View>
@@ -867,7 +868,6 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontFamily: FontFamily.displayBlack,
     fontSize: 22,
-    fontWeight: '900',
     color: '#1F0B10',
     letterSpacing: -0.5,
   },
@@ -875,7 +875,6 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.sansMedium,
     fontSize: 12,
     color: '#8A7277',
-    fontWeight: '500',
     marginTop: 2,
   },
   headerScanBtn: {
@@ -906,7 +905,6 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.sansBold,
     color: '#FFFFFF',
     fontSize: 13,
-    fontWeight: '800',
   },
 
   // View Mode Switcher
@@ -938,7 +936,6 @@ const styles = StyleSheet.create({
   viewModeTabText: {
     fontFamily: FontFamily.sansSemiBold,
     fontSize: 12,
-    fontWeight: '700',
     color: '#800E20',
   },
   viewModeTabTextActive: {
@@ -973,7 +970,6 @@ const styles = StyleSheet.create({
   monthSelectorLabel: {
     fontFamily: FontFamily.sansBold,
     fontSize: 10,
-    fontWeight: '800',
     color: '#800E20',
     letterSpacing: 0.8,
   },
@@ -1012,7 +1008,6 @@ const styles = StyleSheet.create({
   monthPillCapsuleText: {
     fontFamily: FontFamily.sansBold,
     fontSize: 12,
-    fontWeight: '700',
     color: '#800E20',
   },
 
@@ -1038,28 +1033,24 @@ const styles = StyleSheet.create({
   heroLabel: {
     fontFamily: FontFamily.sansBold,
     fontSize: 10,
-    fontWeight: '800',
     color: 'rgba(255, 255, 255, 0.7)',
     letterSpacing: 1,
   },
   heroValueMT: {
     fontFamily: FontFamily.displayBlack,
     fontSize: 32,
-    fontWeight: '900',
     color: '#FFFFFF',
     marginTop: 2,
   },
   heroUnit: {
     fontFamily: FontFamily.displayBold,
     fontSize: 18,
-    fontWeight: '700',
     color: '#E53935',
   },
   heroBagsSub: {
     fontFamily: FontFamily.sansMedium,
     fontSize: 12,
     color: 'rgba(255, 255, 255, 0.8)',
-    fontWeight: '600',
     marginTop: 2,
   },
   heroBadgeIcon: {
@@ -1101,14 +1092,12 @@ const styles = StyleSheet.create({
   productLabel: {
     fontFamily: FontFamily.sansBold,
     fontSize: 11,
-    fontWeight: '800',
     color: '#FFFFFF',
   },
   productValue: {
     fontFamily: FontFamily.sansMedium,
     fontSize: 11,
     color: 'rgba(255, 255, 255, 0.85)',
-    fontWeight: '600',
   },
 
   // Filter Tabs
@@ -1133,7 +1122,6 @@ const styles = StyleSheet.create({
   filterTabText: {
     fontFamily: FontFamily.sansSemiBold,
     fontSize: 12,
-    fontWeight: '700',
     color: '#800E20',
   },
   filterTabTextActive: {
@@ -1150,7 +1138,6 @@ const styles = StyleSheet.create({
   sectionHeaderTitle: {
     fontFamily: FontFamily.displayBold,
     fontSize: 16,
-    fontWeight: '800',
     color: '#1F0B10',
   },
   sectionHeaderSub: {
@@ -1163,13 +1150,11 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.sansBold,
     fontSize: 12,
     color: '#800E20',
-    fontWeight: '700',
   },
   refreshLink: {
     fontFamily: FontFamily.sansBold,
     fontSize: 12,
     color: '#800E20',
-    fontWeight: '700',
   },
 
   // Leaderboard
@@ -1207,13 +1192,11 @@ const styles = StyleSheet.create({
   rankBadgeText: {
     fontFamily: FontFamily.displayBlack,
     fontSize: 13,
-    fontWeight: '900',
     color: '#1F0B10',
   },
   dealerName: {
     fontFamily: FontFamily.displayBold,
     fontSize: 14,
-    fontWeight: '800',
     color: '#1F0B10',
   },
   dealerArea: {
@@ -1225,7 +1208,6 @@ const styles = StyleSheet.create({
   dealerMT: {
     fontFamily: FontFamily.displayBold,
     fontSize: 14,
-    fontWeight: '900',
     color: '#800E20',
   },
   dealerBags: {
@@ -1264,7 +1246,6 @@ const styles = StyleSheet.create({
   saleDealer: {
     fontFamily: FontFamily.displayBold,
     fontSize: 14,
-    fontWeight: '800',
     color: '#1F0B10',
   },
   saleProduct: {
@@ -1278,12 +1259,10 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#800E20',
     marginTop: 2,
-    fontWeight: '600',
   },
   saleQuantity: {
     fontFamily: FontFamily.displayBlack,
     fontSize: 15,
-    fontWeight: '900',
     color: '#800E20',
   },
   saleMT: {
@@ -1320,7 +1299,6 @@ const styles = StyleSheet.create({
   directoryCountText: {
     fontFamily: FontFamily.displayBold,
     fontSize: 15,
-    fontWeight: '800',
     color: '#1F0B10',
   },
   directorySubText: {
@@ -1343,7 +1321,6 @@ const styles = StyleSheet.create({
   addDealerSmallBtnText: {
     fontFamily: FontFamily.sansBold,
     fontSize: 11,
-    fontWeight: '700',
     color: '#800E20',
   },
   dealersListContainer: {
@@ -1384,7 +1361,6 @@ const styles = StyleSheet.create({
   dealerFirmName: {
     fontFamily: FontFamily.displayBold,
     fontSize: 15,
-    fontWeight: '800',
     color: '#1F0B10',
     flex: 1,
   },
@@ -1399,7 +1375,6 @@ const styles = StyleSheet.create({
   statusBadgePillText: {
     fontFamily: FontFamily.sansBold,
     fontSize: 10,
-    fontWeight: '800',
   },
   statusTextActive: { color: '#16A34A' },
   statusTextInactive: { color: '#64748B' },
@@ -1438,7 +1413,6 @@ const styles = StyleSheet.create({
   dealerSalesPillVal: {
     fontFamily: FontFamily.sansBold,
     fontSize: 11,
-    fontWeight: '800',
     color: '#800E20',
   },
   dealerActionsRow: {
@@ -1465,7 +1439,6 @@ const styles = StyleSheet.create({
   dealerActionBtnOutlineText: {
     fontFamily: FontFamily.sansBold,
     fontSize: 12,
-    fontWeight: '700',
     color: '#800E20',
   },
   dealerActionBtnFill: {
@@ -1482,7 +1455,6 @@ const styles = StyleSheet.create({
   dealerActionBtnFillText: {
     fontFamily: FontFamily.sansBold,
     fontSize: 12,
-    fontWeight: '700',
     color: '#FFFFFF',
   },
   dealerActionIconBtn: {
@@ -1507,7 +1479,6 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontFamily: FontFamily.displayBold,
     fontSize: 15,
-    fontWeight: '800',
     color: '#1F0B10',
   },
   emptySub: {
@@ -1548,7 +1519,6 @@ const styles = StyleSheet.create({
   modalTitle: {
     fontFamily: FontFamily.displayBold,
     fontSize: 16,
-    fontWeight: '800',
     color: '#1F0B10',
   },
   modalCloseBtn: {
@@ -1574,7 +1544,6 @@ const styles = StyleSheet.create({
   monthOptionTextSelected: {
     fontFamily: FontFamily.sansBold,
     color: '#800E20',
-    fontWeight: '700',
   },
 
   // Dealer Details Modal
@@ -1607,7 +1576,6 @@ const styles = StyleSheet.create({
   dealerModalFirmName: {
     fontFamily: FontFamily.displayBold,
     fontSize: 16,
-    fontWeight: '800',
     color: '#1F0B10',
   },
   dealerModalSub: {
@@ -1652,7 +1620,6 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.sansBold,
     fontSize: 11,
     color: '#FFFFFF',
-    fontWeight: '700',
   },
   modalBottomActions: {
     marginTop: 16,
@@ -1675,7 +1642,6 @@ const styles = StyleSheet.create({
   modalPrimaryBtnText: {
     fontFamily: FontFamily.sansBold,
     fontSize: 13,
-    fontWeight: '800',
     color: '#FFFFFF',
   },
   modalSecondaryBtn: {
@@ -1692,7 +1658,6 @@ const styles = StyleSheet.create({
   modalSecondaryBtnText: {
     fontFamily: FontFamily.sansBold,
     fontSize: 13,
-    fontWeight: '700',
     color: '#800E20',
   },
 
@@ -1713,7 +1678,6 @@ const styles = StyleSheet.create({
   districtBarLabel: {
     fontFamily: FontFamily.sansBold,
     fontSize: 10,
-    fontWeight: '800',
     color: '#8A7277',
     letterSpacing: 0.5,
     marginRight: 4,
@@ -1738,7 +1702,6 @@ const styles = StyleSheet.create({
   districtChipText: {
     fontFamily: FontFamily.sansBold,
     fontSize: 11,
-    fontWeight: '700',
     color: '#4B5563',
   },
   districtChipTextActive: {

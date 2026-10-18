@@ -15,7 +15,8 @@ import {
   pickImageFromCamera, pickImageFromGallery,
   callCloudVisionApi, parseVisionSalesSheet,
 } from '../../src/services/visionOcr';
-import { currentDateISO } from '../../src/utils/helpers';
+import { currentDateISO, formatNumber } from '../../src/utils/helpers';
+
 import { User, Dealer, ScannedDealerSale, BatchSaleItem } from '../../src/types';
 import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
 
@@ -206,17 +207,17 @@ export default function ScanSalesScreen() {
         Toast.show({
           type: 'success',
           text1: 'Sales Saved to Sheet! 🎉',
-          text2: `${selectedStats.count} dealer counters recorded (${selectedStats.totalBags.toLocaleString()} bags / ${selectedStats.totalMT} MT).`,
+          text2: `${selectedStats.count} dealer counters recorded (${formatNumber(selectedStats.totalBags)} bags / ${selectedStats.totalMT} MT).`,
           position: 'top',
         });
 
         if (Platform.OS === 'web') {
-          window.alert(`✅ Sales Saved to Sheet!\n\n${selectedStats.count} dealer counters recorded (${selectedStats.totalBags.toLocaleString()} bags / ${selectedStats.totalMT} MT).`);
+          window.alert(`✅ Sales Saved to Sheet!\n\n${selectedStats.count} dealer counters recorded (${formatNumber(selectedStats.totalBags)} bags / ${selectedStats.totalMT} MT).`);
           router.back();
         } else {
           Alert.alert(
             'Sales Saved to Sheet! 🎉',
-            `${selectedStats.count} dealer counters recorded (${selectedStats.totalBags.toLocaleString()} bags / ${selectedStats.totalMT} MT) in Google Sheet.`,
+            `${selectedStats.count} dealer counters recorded (${formatNumber(selectedStats.totalBags)} bags / ${selectedStats.totalMT} MT) in Google Sheet.`,
             [{ text: 'OK', onPress: () => router.back() }]
           );
         }
@@ -410,7 +411,7 @@ export default function ScanSalesScreen() {
                 </View>
                 <View style={styles.totalVolumeBadge}>
                   <Text style={styles.totalVolumeMT}>{selectedStats.totalMT} <Text style={{ fontSize: 11 }}>MT</Text></Text>
-                  <Text style={styles.totalVolumeBags}>({selectedStats.totalBags.toLocaleString()} Bags)</Text>
+                  <Text style={styles.totalVolumeBags}>({formatNumber(selectedStats.totalBags)} Bags)</Text>
                 </View>
               </View>
 
@@ -418,15 +419,15 @@ export default function ScanSalesScreen() {
               <View style={styles.productSplitPillsRow}>
                 <View style={styles.productSplitPillRed}>
                   <View style={[styles.miniDot, { backgroundColor: '#EF4444' }]} />
-                  <Text style={styles.productSplitPillText}>F2R: {selectedStats.totalF2RMT} MT ({selectedStats.totalF2R.toLocaleString()} Bags)</Text>
+                  <Text style={styles.productSplitPillText}>F2R: {selectedStats.totalF2RMT} MT ({formatNumber(selectedStats.totalF2R)} Bags)</Text>
                 </View>
                 <View style={styles.productSplitPillGold}>
                   <View style={[styles.miniDot, { backgroundColor: '#F59E0B' }]} />
-                  <Text style={styles.productSplitPillText}>Gold: {selectedStats.totalGoldMT} MT ({selectedStats.totalGold.toLocaleString()} Bags)</Text>
+                  <Text style={styles.productSplitPillText}>Gold: {selectedStats.totalGoldMT} MT ({formatNumber(selectedStats.totalGold)} Bags)</Text>
                 </View>
                 <View style={styles.productSplitPillBlue}>
                   <View style={[styles.miniDot, { backgroundColor: '#3B82F6' }]} />
-                  <Text style={styles.productSplitPillText}>HPC: {selectedStats.totalHpcMT} MT ({selectedStats.totalHpc.toLocaleString()} Bags)</Text>
+                  <Text style={styles.productSplitPillText}>HPC: {selectedStats.totalHpcMT} MT ({formatNumber(selectedStats.totalHpc)} Bags)</Text>
                 </View>
               </View>
             </View>
@@ -551,7 +552,7 @@ export default function ScanSalesScreen() {
                         keyboardType="numeric"
                         placeholder="0"
                       />
-                      <Text style={styles.productSubBagsText}>{dealer.f2r_bags.toLocaleString()} Bags</Text>
+                      <Text style={styles.productSubBagsText}>{formatNumber(dealer.f2r_bags)} Bags</Text>
                     </View>
 
                     {/* ACC GOLD */}
@@ -564,7 +565,7 @@ export default function ScanSalesScreen() {
                         keyboardType="numeric"
                         placeholder="0"
                       />
-                      <Text style={styles.productSubBagsText}>{dealer.gold_bags.toLocaleString()} Bags</Text>
+                      <Text style={styles.productSubBagsText}>{formatNumber(dealer.gold_bags)} Bags</Text>
                     </View>
 
                     {/* ACC HPC */}
@@ -577,7 +578,7 @@ export default function ScanSalesScreen() {
                         keyboardType="numeric"
                         placeholder="0"
                       />
-                      <Text style={styles.productSubBagsText}>{dealer.hpc_bags.toLocaleString()} Bags</Text>
+                      <Text style={styles.productSubBagsText}>{formatNumber(dealer.hpc_bags)} Bags</Text>
                     </View>
 
                     {/* Total MT / Bags Capsule */}
@@ -587,7 +588,7 @@ export default function ScanSalesScreen() {
                         {dealer.total_mt} <Text style={{ fontSize: 10 }}>MT</Text>
                       </Text>
                       <Text style={styles.dealerTotalCapsuleMT}>
-                        {dealer.total_bags.toLocaleString()} Bags
+                        {formatNumber(dealer.total_bags)} Bags
                       </Text>
                     </View>
                   </View>
@@ -608,7 +609,7 @@ export default function ScanSalesScreen() {
               <Text style={{ fontWeight: '800', color: '#1F0B10' }}>{selectedStats.count}</Text> Counters Selected
             </Text>
             <Text style={styles.footerBagsText}>
-              {selectedStats.totalBags.toLocaleString()} Bags ({selectedStats.totalMT} MT)
+              {formatNumber(selectedStats.totalBags)} Bags ({selectedStats.totalMT} MT)
             </Text>
           </View>
 
@@ -650,7 +651,7 @@ export default function ScanSalesScreen() {
               <View style={styles.confirmModalRow}>
                 <Text style={styles.confirmModalLabel}>Total Volume:</Text>
                 <Text style={styles.confirmModalVal}>
-                  {selectedStats.totalMT} MT ({selectedStats.totalBags.toLocaleString()} Bags)
+                  {selectedStats.totalMT} MT ({formatNumber(selectedStats.totalBags)} Bags)
                 </Text>
               </View>
               <View style={styles.confirmModalRow}>
@@ -726,7 +727,6 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontFamily: FontFamily.displayBlack,
     fontSize: 18,
-    fontWeight: '900',
     color: '#1F0B10',
     letterSpacing: -0.3,
   },
@@ -776,7 +776,6 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.sansBold,
     fontSize: 10,
     color: '#FFFFFF',
-    fontWeight: '800',
     letterSpacing: 0.5,
   },
   retakePill: {
@@ -796,7 +795,6 @@ const styles = StyleSheet.create({
   uploadTitle: {
     fontFamily: FontFamily.displayBold,
     fontSize: 19,
-    fontWeight: '800',
     color: '#FFFFFF',
     marginTop: 4,
   },
@@ -832,7 +830,6 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.sansBold,
     fontSize: 13,
     color: '#800E20',
-    fontWeight: '800',
   },
   actionBtnGallery: {
     flex: 1,
@@ -851,7 +848,6 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.sansBold,
     fontSize: 13,
     color: '#FFFFFF',
-    fontWeight: '800',
   },
 
   // ── 2. SCANNING LOADER ──
@@ -867,7 +863,6 @@ const styles = StyleSheet.create({
   scanningTitle: {
     fontFamily: FontFamily.displayBold,
     fontSize: 16,
-    fontWeight: '800',
     color: '#1F0B10',
     marginTop: 12,
   },
@@ -895,7 +890,6 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.sansBold,
     fontSize: 13,
     color: '#991B1B',
-    fontWeight: '800',
   },
   errorSub: {
     fontFamily: FontFamily.sansRegular,
@@ -929,7 +923,6 @@ const styles = StyleSheet.create({
   summaryHeading: {
     fontFamily: FontFamily.displayBold,
     fontSize: 16,
-    fontWeight: '800',
     color: '#1F0B10',
   },
   summarySub: {
@@ -950,7 +943,6 @@ const styles = StyleSheet.create({
   totalVolumeMT: {
     fontFamily: FontFamily.displayBlack,
     fontSize: 18,
-    fontWeight: '900',
     color: '#800E20',
   },
   totalVolumeBags: {
@@ -1007,7 +999,6 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.sansBold,
     fontSize: 10,
     color: '#1F0B10',
-    fontWeight: '700',
   },
 
   datePickerCard: {
@@ -1025,7 +1016,6 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.sansBold,
     fontSize: 12,
     color: '#1F0B10',
-    fontWeight: '700',
   },
   dateInput: {
     fontFamily: FontFamily.sansBold,
@@ -1075,7 +1065,6 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.sansBold,
     fontSize: 11,
     color: '#800E20',
-    fontWeight: '700',
   },
 
   // ── DEALER CARD ──
@@ -1123,13 +1112,11 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.sansBold,
     fontSize: 9,
     color: '#800E20',
-    fontWeight: '800',
   },
   sapCodePillVal: {
     fontFamily: FontFamily.displayBold,
     fontSize: 11,
     color: '#800E20',
-    fontWeight: '800',
   },
   matchedBadge: {
     flexDirection: 'row',
@@ -1144,7 +1131,6 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.sansBold,
     fontSize: 9,
     color: '#15803D',
-    fontWeight: '700',
   },
   newCounterBadge: {
     flexDirection: 'row',
@@ -1159,7 +1145,6 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.sansBold,
     fontSize: 9,
     color: '#B45309',
-    fontWeight: '700',
   },
   nameRow: {
     marginBottom: 10,
@@ -1167,7 +1152,6 @@ const styles = StyleSheet.create({
   dealerNameInput: {
     fontFamily: FontFamily.displayBold,
     fontSize: 14,
-    fontWeight: '800',
     color: '#1F0B10',
     paddingVertical: 2,
     borderBottomWidth: 1,
@@ -1184,7 +1168,6 @@ const styles = StyleSheet.create({
   productInputLabel: {
     fontFamily: FontFamily.sansBold,
     fontSize: 9,
-    fontWeight: '800',
     marginBottom: 3,
   },
   productNumInput: {
@@ -1194,7 +1177,6 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     fontSize: 13,
     fontFamily: FontFamily.sansBold,
-    fontWeight: '700',
     textAlign: 'center',
   },
   productNumInputF2R: {
@@ -1234,12 +1216,10 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.sansBold,
     fontSize: 8,
     color: '#8A7277',
-    fontWeight: '800',
   },
   dealerTotalCapsuleVal: {
     fontFamily: FontFamily.displayBlack,
     fontSize: 13,
-    fontWeight: '900',
     color: '#800E20',
   },
   dealerTotalCapsuleMT: {
@@ -1302,7 +1282,6 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.sansBold,
     fontSize: 13,
     color: '#FFFFFF',
-    fontWeight: '800',
   },
 
   // ── MODAL STYLES ──
@@ -1334,7 +1313,6 @@ const styles = StyleSheet.create({
   confirmModalTitle: {
     fontFamily: FontFamily.displayBold,
     fontSize: 18,
-    fontWeight: '800',
     color: '#1F0B10',
     flex: 1,
   },
@@ -1360,7 +1338,6 @@ const styles = StyleSheet.create({
   confirmModalVal: {
     fontFamily: FontFamily.sansBold,
     fontSize: 14,
-    fontWeight: '700',
     color: '#800E20',
   },
   confirmModalActions: {
@@ -1378,7 +1355,6 @@ const styles = StyleSheet.create({
   confirmCancelBtnText: {
     fontFamily: FontFamily.sansBold,
     fontSize: 14,
-    fontWeight: '700',
     color: '#4B5563',
   },
   confirmUploadBtn: {
@@ -1392,7 +1368,6 @@ const styles = StyleSheet.create({
   confirmUploadBtnText: {
     fontFamily: FontFamily.sansBold,
     fontSize: 14,
-    fontWeight: '800',
     color: '#FFFFFF',
   },
   loadingOverlay: {
@@ -1418,7 +1393,6 @@ const styles = StyleSheet.create({
   loadingTitle: {
     fontFamily: FontFamily.displayBold,
     fontSize: 16,
-    fontWeight: '800',
     color: '#1F0B10',
     marginTop: 16,
     textAlign: 'center',

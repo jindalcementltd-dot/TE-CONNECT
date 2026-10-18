@@ -332,7 +332,6 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.sansBold,
     fontSize: 10,
     color: '#800E20',
-    fontWeight: '700',
   },
   inputHelp: {
     fontFamily: FontFamily.sansRegular,
@@ -366,7 +365,6 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.sansBold,
     fontSize: 11,
     color: '#15803D',
-    fontWeight: '700',
   },
   locationBtn: {
     flexDirection: 'row',
@@ -385,7 +383,6 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.sansBold,
     fontSize: 13,
     color: '#800E20',
-    fontWeight: '800',
   },
   locationBtnSub: {
     fontFamily: FontFamily.sansRegular,
@@ -431,6 +428,5 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.sansBold,
     fontSize: FontSize.base,
     color: Colors.white,
-    fontWeight: '800',
   },
 });

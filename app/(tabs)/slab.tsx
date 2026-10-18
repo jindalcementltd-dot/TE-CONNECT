@@ -656,7 +656,6 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontFamily: FontFamily.displayBlack,
     fontSize: 22,
-    fontWeight: '900',
     color: '#1F0B10',
     letterSpacing: -0.5,
   },
@@ -664,7 +663,6 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.sansMedium,
     fontSize: 12,
     color: '#8A7277',
-    fontWeight: '500',
     marginTop: 2,
   },
   addBtn: {
@@ -685,7 +683,6 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.sansBold,
     color: '#FFFFFF',
     fontSize: 13,
-    fontWeight: '800',
   },
   scroll: {
     flex: 1,
@@ -708,7 +705,6 @@ const styles = StyleSheet.create({
   districtBarLabel: {
     fontFamily: FontFamily.sansBold,
     fontSize: 10,
-    fontWeight: '800',
     color: '#8A7277',
     letterSpacing: 0.5,
     marginRight: 4,
@@ -733,7 +729,6 @@ const styles = StyleSheet.create({
   districtChipText: {
     fontFamily: FontFamily.sansBold,
     fontSize: 11,
-    fontWeight: '700',
     color: '#4B5563',
   },
   districtChipTextActive: {
@@ -761,7 +756,6 @@ const styles = StyleSheet.create({
   monthSelectorLabel: {
     fontFamily: FontFamily.sansBold,
     fontSize: 10,
-    fontWeight: '800',
     color: '#800E20',
     letterSpacing: 0.8,
   },
@@ -800,7 +794,6 @@ const styles = StyleSheet.create({
   monthPillCapsuleText: {
     fontFamily: FontFamily.sansBold,
     fontSize: 12,
-    fontWeight: '700',
     color: '#800E20',
   },
 
@@ -827,12 +820,10 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.sansSemiBold,
     fontSize: 11,
     color: '#8A7277',
-    fontWeight: '700',
   },
   targetCardValue: {
     fontFamily: FontFamily.displayBlack,
     fontSize: 22,
-    fontWeight: '900',
     color: '#1F0B10',
     marginVertical: 2,
   },
@@ -865,7 +856,6 @@ const styles = StyleSheet.create({
   chipsSectionTitle: {
     fontFamily: FontFamily.displayBold,
     fontSize: 12,
-    fontWeight: '800',
     color: '#1F0B10',
     marginBottom: 8,
   },
@@ -901,7 +891,6 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.sansSemiBold,
     fontSize: 12,
     color: '#1F0B10',
-    fontWeight: '700',
     marginRight: 6,
   },
   dateChipTextSelected: {
@@ -920,7 +909,6 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.sansBold,
     fontSize: 10,
     color: '#800E20',
-    fontWeight: '800',
   },
   chipCountTextSelected: {
     color: '#FFFFFF',
@@ -936,7 +924,6 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontFamily: FontFamily.displayBold,
     fontSize: 15,
-    fontWeight: '800',
     color: '#1F0B10',
   },
   sectionSub: {
@@ -950,7 +937,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#800E20',
     marginTop: 2,
-    fontWeight: '600',
   },
   countBadge: {
     backgroundColor: '#FAF0F2',
@@ -964,13 +950,11 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.sansBold,
     fontSize: 11,
     color: '#800E20',
-    fontWeight: '700',
   },
   refreshLink: {
     fontFamily: FontFamily.sansBold,
     fontSize: 12,
     color: '#800E20',
-    fontWeight: '700',
   },
 
   slabsList: {
@@ -997,7 +981,6 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontFamily: FontFamily.displayBold,
     fontSize: 15,
-    fontWeight: '800',
     color: '#1F0B10',
   },
   emptySub: {
@@ -1020,7 +1003,6 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.sansBold,
     fontSize: 12,
     color: '#800E20',
-    fontWeight: '700',
   },
 
   // Month Picker Modal
@@ -1053,7 +1035,6 @@ const styles = StyleSheet.create({
   modalTitle: {
     fontFamily: FontFamily.displayBold,
     fontSize: 16,
-    fontWeight: '800',
     color: '#1F0B10',
   },
   modalCloseBtn: {
@@ -1079,7 +1060,6 @@ const styles = StyleSheet.create({
   monthOptionTextSelected: {
     fontFamily: FontFamily.sansBold,
     color: '#800E20',
-    fontWeight: '700',
   },
 
   // Status Filter Bar
@@ -1105,7 +1085,6 @@ const styles = StyleSheet.create({
   filterTabText: {
     fontFamily: FontFamily.sansBold,
     fontSize: 12,
-    fontWeight: '700',
     color: '#4B5563',
   },
   filterTabTextActive: {
@@ -1203,7 +1182,6 @@ const cardStyles = StyleSheet.create({
   dealer: {
     fontFamily: FontFamily.displayBold,
     fontSize: 15,
-    fontWeight: '800',
     color: '#1F0B10',
   },
   dealerCompleted: {
@@ -1268,7 +1246,6 @@ const cardStyles = StyleSheet.create({
   },
   boldVal: {
     fontFamily: FontFamily.sansBold,
-    fontWeight: '700',
     color: '#1F0B10',
   },
   remarkBox: {
@@ -1326,7 +1303,6 @@ const cardStyles = StyleSheet.create({
     fontFamily: FontFamily.sansBold,
     fontSize: 11,
     color: '#15803D',
-    fontWeight: '700',
   },
   actionHintBadge: {
     backgroundColor: '#FDE8EA',
@@ -1340,7 +1316,6 @@ const cardStyles = StyleSheet.create({
     fontFamily: FontFamily.sansBold,
     fontSize: 11,
     color: '#C91F2B',
-    fontWeight: '800',
   },
 });
 
@@ -1368,7 +1343,6 @@ const badgeStyles = StyleSheet.create({
   text: {
     fontFamily: FontFamily.sansBold,
     fontSize: 10,
-    fontWeight: '800',
   },
   textUpcoming: {
     color: '#C91F2B',

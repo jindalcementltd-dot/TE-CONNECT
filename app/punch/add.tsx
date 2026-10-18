@@ -13,7 +13,8 @@ import {
   apiGetUsers, apiGetContractors, apiGetActiveTracker, apiAddPunch,
 } from '../../src/services/api';
 import { getUser } from '../../src/services/auth';
-import { currentDateISO, currentMonthISO, normalizeDate } from '../../src/utils/helpers';
+import { currentDateISO, currentMonthISO, normalizeDate, formatNumber } from '../../src/utils/helpers';
+
 import { User, ActiveTracker } from '../../src/types';
 import { addNotification } from '../../src/services/notifications';
 import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
@@ -240,7 +241,7 @@ export default function AddPunchScreen() {
             </View>
             <View style={styles.currentStatsRow}>
               <View style={styles.currentStatItem}>
-                <Text style={styles.currentStatVal}>{baselinePunchedBags.toLocaleString()}</Text>
+                <Text style={styles.currentStatVal}>{formatNumber(baselinePunchedBags)}</Text>
                 <Text style={styles.currentStatLbl}>Punched Bags</Text>
               </View>
               <View style={styles.currentStatDivider} />
@@ -584,7 +585,6 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontFamily: FontFamily.displayBold,
     fontSize: 18,
-    fontWeight: '800',
     color: '#1F0B10',
   },
   scroll: {
@@ -609,7 +609,6 @@ const styles = StyleSheet.create({
   cardHeading: {
     fontFamily: FontFamily.displayBold,
     fontSize: 15,
-    fontWeight: '800',
     color: '#1F0B10',
     marginBottom: 2,
   },
@@ -633,7 +632,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#1F0B10',
     marginBottom: 6,
-    fontWeight: '700',
   },
   input: {
     backgroundColor: '#FAF0F2',
@@ -679,7 +677,6 @@ const styles = StyleSheet.create({
   teSelectedName: {
     fontFamily: FontFamily.displayBold,
     fontSize: 15,
-    fontWeight: '800',
     color: '#1F0B10',
   },
   teSelectedSub: {
@@ -704,7 +701,6 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.sansBold,
     fontSize: 11,
     color: '#800E20',
-    fontWeight: '700',
   },
   currentActiveBadge: {
     backgroundColor: '#DCFCE7',
@@ -716,7 +712,6 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.sansBold,
     fontSize: 10,
     color: '#15803D',
-    fontWeight: '700',
   },
   currentStatsRow: {
     flexDirection: 'row',
@@ -730,7 +725,6 @@ const styles = StyleSheet.create({
   currentStatVal: {
     fontFamily: FontFamily.displayBold,
     fontSize: 14,
-    fontWeight: '800',
     color: '#1F0B10',
   },
   currentStatLbl: {
@@ -765,7 +759,6 @@ const styles = StyleSheet.create({
   productLabel: {
     fontFamily: FontFamily.displayBold,
     fontSize: 13,
-    fontWeight: '800',
     color: '#1F0B10',
   },
   productSubRate: {
@@ -791,7 +784,6 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.sansBold,
     fontSize: 11,
     color: '#800E20',
-    fontWeight: '700',
   },
   totalBagsPill: {
     backgroundColor: '#DCFCE7',
@@ -803,7 +795,6 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.sansBold,
     fontSize: 11,
     color: '#15803D',
-    fontWeight: '700',
   },
   modeToggleRow: {
     flexDirection: 'row',
@@ -827,7 +818,6 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.sansBold,
     fontSize: 11,
     color: '#800E20',
-    fontWeight: '700',
   },
   toggleModeBtnTextActive: {
     color: '#FFFFFF',
@@ -850,7 +840,6 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.sansBold,
     fontSize: 11,
     color: '#1F0B10',
-    fontWeight: '700',
   },
   previewBadge: {
     paddingHorizontal: 7,
@@ -866,7 +855,6 @@ const styles = StyleSheet.create({
   previewBadgeText: {
     fontFamily: FontFamily.sansBold,
     fontSize: 10,
-    fontWeight: '700',
   },
   previewNumbersRow: {
     flexDirection: 'row',
@@ -876,7 +864,6 @@ const styles = StyleSheet.create({
   previewActiveFraction: {
     fontFamily: FontFamily.displayBlack,
     fontSize: 22,
-    fontWeight: '900',
     color: '#800E20',
   },
   previewActiveSub: {
@@ -888,7 +875,6 @@ const styles = StyleSheet.create({
   previewPercentBig: {
     fontFamily: FontFamily.displayBlack,
     fontSize: 28,
-    fontWeight: '900',
     color: '#15803D',
   },
   submitBtn: {
@@ -908,7 +894,6 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.sansBold,
     fontSize: 15,
     color: '#FFFFFF',
-    fontWeight: '800',
   },
 
   // Modal Styles
@@ -944,7 +929,6 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.sansBold,
     fontSize: 16,
     color: '#1F0B10',
-    fontWeight: '800',
   },
   modalCloseBtn: {
     padding: 4,
@@ -969,6 +953,5 @@ const styles = StyleSheet.create({
   modalOptionTextSelected: {
     fontFamily: FontFamily.sansBold,
     color: '#800E20',
-    fontWeight: '700',
   },
 });

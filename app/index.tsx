@@ -1,12 +1,30 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Redirect } from 'expo-router';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
-import { useAuthSession } from '../src/services/auth';
+import { getSession } from '../src/services/auth';
 
 export default function Index() {
-  const { session, loading } = useAuthSession();
+  const [targetRoute, setTargetRoute] = useState<string | null>(null);
 
-  if (loading) {
+  useEffect(() => {
+    let isMounted = true;
+    getSession().then(session => {
+      if (!isMounted) return;
+      if (session && session.user) {
+        setTargetRoute('/(tabs)');
+      } else {
+        setTargetRoute('/(auth)/login');
+      }
+    }).catch(() => {
+      if (isMounted) setTargetRoute('/(auth)/login');
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  if (!targetRoute) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#E53935" />
@@ -14,12 +32,9 @@ export default function Index() {
     );
   }
 
-  if (session && session.user) {
-    return <Redirect href="/(tabs)" />;
-  }
-
-  return <Redirect href="/(auth)/login" />;
+  return <Redirect href={targetRoute as any} />;
 }
+
 
 const styles = StyleSheet.create({
   loadingContainer: {

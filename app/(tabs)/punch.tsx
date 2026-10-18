@@ -14,8 +14,9 @@ import {
 import { getUser } from '../../src/services/auth';
 import {
   currentMonthISO, normalizeDate, formatMonthYear,
-  simulateContractorPunchDistribution,
+  simulateContractorPunchDistribution, formatNumber
 } from '../../src/utils/helpers';
+
 import {
   getUserDistrict, getDealerDistrict, getSaleDistrict, getTrackerDistrict, getAvailableDistricts,
 } from '../../src/utils/district';
@@ -431,7 +432,7 @@ export default function PunchScreen() {
           {/* Big Number: MT and in brackets Bags */}
           <View style={styles.heroMainValueRow}>
             <Text style={styles.heroMainValueMT}>{totalSalesMT} <Text style={styles.heroMainUnit}>MT</Text></Text>
-            <Text style={styles.heroMainValueBags}>({totalSalesBags.toLocaleString()} Bags)</Text>
+            <Text style={styles.heroMainValueBags}>({formatNumber(totalSalesBags)} Bags)</Text>
           </View>
           <Text style={styles.heroSubtext}>Total cement dispatch & billing recorded in Google Sheet</Text>
 
@@ -445,7 +446,7 @@ export default function PunchScreen() {
                 <View style={[styles.productDot, { backgroundColor: '#EF4444' }]} />
                 <Text style={styles.productTitle}>ACC F2R</Text>
               </View>
-              <Text style={styles.productBagValue}>{f2rBags.toLocaleString()} <Text style={styles.productBagUnit}>Bags</Text></Text>
+              <Text style={styles.productBagValue}>{formatNumber(f2rBags)} <Text style={styles.productBagUnit}>Bags</Text></Text>
               <Text style={styles.productMTValue}>{f2rMT} MT ({totalSalesBags > 0 ? Math.round((f2rBags / totalSalesBags) * 100) : 0}%)</Text>
             </View>
 
@@ -457,7 +458,7 @@ export default function PunchScreen() {
                 <View style={[styles.productDot, { backgroundColor: '#F59E0B' }]} />
                 <Text style={styles.productTitle}>ACC GOLD</Text>
               </View>
-              <Text style={styles.productBagValue}>{goldBags.toLocaleString()} <Text style={styles.productBagUnit}>Bags</Text></Text>
+              <Text style={styles.productBagValue}>{formatNumber(goldBags)} <Text style={styles.productBagUnit}>Bags</Text></Text>
               <Text style={styles.productMTValue}>{goldMT} MT ({totalSalesBags > 0 ? Math.round((goldBags / totalSalesBags) * 100) : 0}%)</Text>
             </View>
           </View>
@@ -483,10 +484,10 @@ export default function PunchScreen() {
             <View style={styles.cardHighlightBox}>
               <Text style={styles.cardHighlightLabel}>REMAINING SALES TO PUNCH</Text>
               <Text style={styles.cardHighlightValue}>
-                {remainingSalesBags.toLocaleString()} <Text style={styles.cardHighlightUnit}>Bags</Text>
+                {formatNumber(remainingSalesBags)} <Text style={styles.cardHighlightUnit}>Bags</Text>
               </Text>
               <Text style={styles.cardHighlightSub}>
-                {remainingTo80Target > 0 ? `Gap: ${remainingTo80Target.toLocaleString()} bags to reach 80%` : '✅ 80% Volume Target Achieved!'}
+                {remainingTo80Target > 0 ? `Gap: ${formatNumber(remainingTo80Target)} bags to reach 80%` : '✅ 80% Volume Target Achieved!'}
               </Text>
             </View>
 
@@ -506,16 +507,16 @@ export default function PunchScreen() {
             {/* 3 Metrics Row */}
             <View style={styles.miniStatsRow}>
               <View style={styles.miniStatItem}>
-                <Text style={styles.miniStatVal}>{totalSalesBags.toLocaleString()}</Text>
+                <Text style={styles.miniStatVal}>{formatNumber(totalSalesBags)}</Text>
                 <Text style={styles.miniStatLbl}>Total Sale</Text>
               </View>
               <View style={styles.miniStatItem}>
-                <Text style={styles.miniStatVal}>{target80Bags.toLocaleString()}</Text>
+                <Text style={styles.miniStatVal}>{formatNumber(target80Bags)}</Text>
                 <Text style={styles.miniStatLbl}>80% Target</Text>
               </View>
               <View style={styles.miniStatItem}>
                 <Text style={[styles.miniStatVal, { color: punchPercent >= 80 ? '#15803D' : '#800E20' }]}>
-                  {totalTeamPunchedBags.toLocaleString()}
+                  {formatNumber(totalTeamPunchedBags)}
                 </Text>
                 <Text style={styles.miniStatLbl}>Punched ({Math.round(punchPercent)}%)</Text>
               </View>
@@ -677,7 +678,7 @@ export default function PunchScreen() {
                   Simulation Result @ {simulation.bagRate} Bags/Contractor
                 </Text>
                 <Text style={styles.simResultSub}>
-                  Total 80% Punch Target = <Text style={{ fontWeight: '800', color: '#800E20' }}>{simulation.punchTargetBags.toLocaleString()} Bags</Text> ({totalSalesMT} MT Sales)
+                  Total 80% Punch Target = <Text style={{ fontWeight: '800', color: '#800E20' }}>{formatNumber(simulation.punchTargetBags)} Bags</Text> ({totalSalesMT} MT Sales)
                 </Text>
               </View>
               <View style={[
@@ -727,7 +728,7 @@ export default function PunchScreen() {
                 <View style={styles.distRow}>
                   <View style={styles.distBullet} />
                   <Text style={styles.distText}>
-                    <Text style={{ fontWeight: '800', color: '#1F0B10' }}>{simulation.fullContractors} Contractors</Text> × {simulation.bagRate} Bags = <Text style={{ fontWeight: '800', color: '#800E20' }}>{(simulation.fullContractors * simulation.bagRate).toLocaleString()} Bags</Text>
+                    <Text style={{ fontWeight: '800', color: '#1F0B10' }}>{simulation.fullContractors} Contractors</Text> × {simulation.bagRate} Bags = <Text style={{ fontWeight: '800', color: '#800E20' }}>{formatNumber(simulation.fullContractors * simulation.bagRate)} Bags</Text>
                   </Text>
                 </View>
               ) : null}
@@ -736,14 +737,14 @@ export default function PunchScreen() {
                 <View style={styles.distRow}>
                   <View style={[styles.distBullet, { backgroundColor: '#F59E0B' }]} />
                   <Text style={styles.distText}>
-                    <Text style={{ fontWeight: '800', color: '#1F0B10' }}>1 Contractor</Text> × {simulation.remainderBags} Bags (Remainder Slot) = <Text style={{ fontWeight: '800', color: '#800E20' }}>{simulation.remainderBags.toLocaleString()} Bags</Text>
+                    <Text style={{ fontWeight: '800', color: '#1F0B10' }}>1 Contractor</Text> × {simulation.remainderBags} Bags (Remainder Slot) = <Text style={{ fontWeight: '800', color: '#800E20' }}>{formatNumber(simulation.remainderBags)} Bags</Text>
                   </Text>
                 </View>
               ) : null}
 
               <View style={styles.distTotalRow}>
                 <Text style={styles.distTotalLabel}>Total Punch Target:</Text>
-                <Text style={styles.distTotalVal}>{simulation.punchTargetBags.toLocaleString()} Bags (80% of Sales)</Text>
+                <Text style={styles.distTotalVal}>{formatNumber(simulation.punchTargetBags)} Bags (80% of Sales)</Text>
               </View>
             </View>
           </View>
@@ -788,7 +789,7 @@ export default function PunchScreen() {
 
               <Text style={styles.productRemainingLabel}>REMAINING TO 80%</Text>
               <Text style={[styles.productRemainingBagsNum, { color: '#991B1B' }]}>
-                {remainingF2R80.toLocaleString()} <Text style={styles.productRemainingBagsUnit}>Bags</Text>
+                {formatNumber(remainingF2R80)} <Text style={styles.productRemainingBagsUnit}>Bags</Text>
               </Text>
               <Text style={styles.productRemainingMT}>
                 {(remainingF2R80 / 20).toFixed(2)} MT · {remainingF2R80 === 0 ? 'Target Met ✓' : `${Math.max(0, 80 - f2rPunchPct)}% gap to 80%`}
@@ -811,21 +812,21 @@ export default function PunchScreen() {
               <View style={styles.productMiniStatsCol}>
                 <View style={styles.productStatLine}>
                   <Text style={styles.productStatKey}>Month Sales:</Text>
-                  <Text style={styles.productStatVal}>{f2rBags.toLocaleString()} Bags ({f2rMT} MT)</Text>
+                  <Text style={styles.productStatVal}>{formatNumber(f2rBags)} Bags ({f2rMT} MT)</Text>
                 </View>
                 <View style={styles.productStatLine}>
                   <Text style={styles.productStatKey}>80% Target:</Text>
-                  <Text style={styles.productStatVal}>{target80F2R.toLocaleString()} Bags</Text>
+                  <Text style={styles.productStatVal}>{formatNumber(target80F2R)} Bags</Text>
                 </View>
                 <View style={styles.productStatLine}>
                   <Text style={styles.productStatKey}>Punched So Far:</Text>
                   <Text style={[styles.productStatVal, { color: '#991B1B', fontWeight: '800' }]}>
-                    {effectiveF2RPunched.toLocaleString()} Bags ({f2rPunchPct}%)
+                    {formatNumber(effectiveF2RPunched)} Bags ({f2rPunchPct}%)
                   </Text>
                 </View>
                 <View style={[styles.productStatLine, styles.productStatLineHighlight]}>
                   <Text style={styles.productStatKeyBold}>Unpunched Sales:</Text>
-                  <Text style={styles.productStatValBold}>{remainingF2RSales.toLocaleString()} Bags</Text>
+                  <Text style={styles.productStatValBold}>{formatNumber(remainingF2RSales)} Bags</Text>
                 </View>
               </View>
             </View>
@@ -842,7 +843,7 @@ export default function PunchScreen() {
 
               <Text style={styles.productRemainingLabelGold}>REMAINING TO 80%</Text>
               <Text style={[styles.productRemainingBagsNum, { color: '#92400E' }]}>
-                {remainingGold80.toLocaleString()} <Text style={styles.productRemainingBagsUnit}>Bags</Text>
+                {formatNumber(remainingGold80)} <Text style={styles.productRemainingBagsUnit}>Bags</Text>
               </Text>
               <Text style={styles.productRemainingMTGold}>
                 {(remainingGold80 / 20).toFixed(2)} MT · {remainingGold80 === 0 ? 'Target Met ✓' : `${Math.max(0, 80 - goldPunchPct)}% gap to 80%`}
@@ -865,21 +866,21 @@ export default function PunchScreen() {
               <View style={styles.productMiniStatsCol}>
                 <View style={styles.productStatLine}>
                   <Text style={styles.productStatKey}>Month Sales:</Text>
-                  <Text style={styles.productStatVal}>{goldBags.toLocaleString()} Bags ({goldMT} MT)</Text>
+                  <Text style={styles.productStatVal}>{formatNumber(goldBags)} Bags ({goldMT} MT)</Text>
                 </View>
                 <View style={styles.productStatLine}>
                   <Text style={styles.productStatKey}>80% Target:</Text>
-                  <Text style={styles.productStatVal}>{target80Gold.toLocaleString()} Bags</Text>
+                  <Text style={styles.productStatVal}>{formatNumber(target80Gold)} Bags</Text>
                 </View>
                 <View style={styles.productStatLine}>
                   <Text style={styles.productStatKey}>Punched So Far:</Text>
                   <Text style={[styles.productStatVal, { color: '#92400E', fontWeight: '800' }]}>
-                    {effectiveGoldPunched.toLocaleString()} Bags ({goldPunchPct}%)
+                    {formatNumber(effectiveGoldPunched)} Bags ({goldPunchPct}%)
                   </Text>
                 </View>
                 <View style={[styles.productStatLine, styles.productStatLineHighlightGold]}>
                   <Text style={styles.productStatKeyBold}>Unpunched Sales:</Text>
-                  <Text style={styles.productStatValBoldGold}>{remainingGoldSales.toLocaleString()} Bags</Text>
+                  <Text style={styles.productStatValBoldGold}>{formatNumber(remainingGoldSales)} Bags</Text>
                 </View>
               </View>
             </View>
@@ -893,7 +894,7 @@ export default function PunchScreen() {
           >
             <Ionicons name="flash" size={15} color="#FFFFFF" style={{ marginRight: 6 }} />
             <Text style={styles.productPunchActionBtnText}>
-              Record Punch (F2R: {remainingF2R80.toLocaleString()} | Gold: {remainingGold80.toLocaleString()} Remaining)
+              Record Punch (F2R: {formatNumber(remainingF2R80)} | Gold: {formatNumber(remainingGold80)} Remaining)
             </Text>
           </TouchableOpacity>
         </View>
@@ -980,7 +981,7 @@ export default function PunchScreen() {
                   <View style={styles.dealerVolumeRow}>
                     <View>
                       <Text style={styles.dealerTotalBags}>
-                        {d.total_bags.toLocaleString()} <Text style={styles.dealerTotalBagsUnit}>Bags</Text>
+                        {formatNumber(d.total_bags)} <Text style={styles.dealerTotalBagsUnit}>Bags</Text>
                       </Text>
                       <Text style={styles.dealerTotalMT}>{d.total_mt.toFixed(2)} MT Total</Text>
                     </View>
@@ -1140,7 +1141,6 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontFamily: FontFamily.displayBlack,
     fontSize: 21,
-    fontWeight: '900',
     color: '#1F0B10',
     letterSpacing: -0.5,
   },
@@ -1180,7 +1180,6 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.sansBold,
     fontSize: 11,
     color: '#800E20',
-    fontWeight: '700',
   },
   scroll: {
     flex: 1,
@@ -1222,7 +1221,6 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.sansBold,
     fontSize: 10,
     color: '#FFFFFF',
-    fontWeight: '800',
     letterSpacing: 0.5,
   },
   quickAddPunchBtn: {
@@ -1238,7 +1236,6 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.sansBold,
     fontSize: 11,
     color: '#800E20',
-    fontWeight: '800',
   },
   heroMainValueRow: {
     flexDirection: 'row',
@@ -1249,21 +1246,18 @@ const styles = StyleSheet.create({
   heroMainValueMT: {
     fontFamily: FontFamily.displayBlack,
     fontSize: 34,
-    fontWeight: '900',
     color: '#FFFFFF',
     letterSpacing: -0.5,
   },
   heroMainUnit: {
     fontFamily: FontFamily.displayBold,
     fontSize: 20,
-    fontWeight: '700',
     color: '#FCA5A5',
   },
   heroMainValueBags: {
     fontFamily: FontFamily.sansBold,
     fontSize: 16,
     color: 'rgba(255, 255, 255, 0.85)',
-    fontWeight: '700',
   },
   heroSubtext: {
     fontFamily: FontFamily.sansRegular,
@@ -1299,13 +1293,11 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.sansBold,
     fontSize: 12,
     color: '#FFFFFF',
-    fontWeight: '800',
     letterSpacing: 0.5,
   },
   productBagValue: {
     fontFamily: FontFamily.displayBold,
     fontSize: 18,
-    fontWeight: '800',
     color: '#FFFFFF',
   },
   productBagUnit: {
@@ -1369,7 +1361,6 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.sansBold,
     fontSize: 10,
     color: '#800E20',
-    fontWeight: '800',
     letterSpacing: 0.5,
   },
   teSwitcherBtn: {
@@ -1387,12 +1378,10 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.sansBold,
     fontSize: 11,
     color: '#800E20',
-    fontWeight: '700',
   },
   cardTitle: {
     fontFamily: FontFamily.displayBold,
     fontSize: 16,
-    fontWeight: '800',
     color: '#1F0B10',
   },
   cardSub: {
@@ -1414,13 +1403,11 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.sansBold,
     fontSize: 10,
     color: '#800E20',
-    fontWeight: '800',
     letterSpacing: 0.5,
   },
   cardHighlightValue: {
     fontFamily: FontFamily.displayBlack,
     fontSize: 24,
-    fontWeight: '900',
     color: '#800E20',
     marginTop: 2,
   },
@@ -1462,7 +1449,6 @@ const styles = StyleSheet.create({
   miniStatVal: {
     fontFamily: FontFamily.displayBold,
     fontSize: 14,
-    fontWeight: '800',
     color: '#1F0B10',
   },
   miniStatLbl: {
@@ -1489,7 +1475,6 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.sansBold,
     fontSize: 12,
     color: '#FFFFFF',
-    fontWeight: '700',
   },
   syncedHomeTag: {
     flexDirection: 'row',
@@ -1535,7 +1520,6 @@ const styles = StyleSheet.create({
   simTitle: {
     fontFamily: FontFamily.displayBold,
     fontSize: 15,
-    fontWeight: '800',
     color: '#1F0B10',
   },
   simSub: {
@@ -1551,7 +1535,6 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.sansBold,
     fontSize: 12,
     color: '#1F0B10',
-    fontWeight: '700',
     marginBottom: 8,
   },
   presetButtonsRow: {
@@ -1575,7 +1558,6 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.sansBold,
     fontSize: 11,
     color: '#800E20',
-    fontWeight: '700',
   },
   presetChipTextActive: {
     color: '#FFFFFF',
@@ -1621,7 +1603,6 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.sansBold,
     fontSize: 13,
     color: '#1F0B10',
-    fontWeight: '800',
   },
   simResultSub: {
     fontFamily: FontFamily.sansRegular,
@@ -1643,7 +1624,6 @@ const styles = StyleSheet.create({
   simStatusPillText: {
     fontFamily: FontFamily.sansBold,
     fontSize: 10,
-    fontWeight: '700',
   },
   simMetrics3Col: {
     flexDirection: 'row',
@@ -1661,7 +1641,6 @@ const styles = StyleSheet.create({
   simMetricValue: {
     fontFamily: FontFamily.displayBlack,
     fontSize: 16,
-    fontWeight: '900',
     color: '#1F0B10',
   },
   simMetricLabel: {
@@ -1688,7 +1667,6 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.sansBold,
     fontSize: 11,
     color: '#1F0B10',
-    fontWeight: '800',
     marginBottom: 6,
   },
   distRow: {
@@ -1764,13 +1742,11 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.sansBold,
     fontSize: 9,
     color: '#800E20',
-    fontWeight: '800',
     letterSpacing: 0.5,
   },
   productRemainingTitle: {
     fontFamily: FontFamily.displayBold,
     fontSize: 17,
-    fontWeight: '800',
     color: '#1F0B10',
   },
   productRemainingSub: {
@@ -1791,7 +1767,6 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.sansBold,
     fontSize: 11,
     color: '#FFFFFF',
-    fontWeight: '800',
   },
   productTwinCardsRow: {
     gap: 12,
@@ -1828,7 +1803,6 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.sansBold,
     fontSize: 11,
     color: '#991B1B',
-    fontWeight: '800',
   },
   productPillGold: {
     flexDirection: 'row',
@@ -1843,38 +1817,32 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.sansBold,
     fontSize: 11,
     color: '#92400E',
-    fontWeight: '800',
   },
   productBalanceTargetText: {
     fontFamily: FontFamily.sansMedium,
     fontSize: 10,
     color: '#991B1B',
-    fontWeight: '700',
   },
   productBalanceTargetTextGold: {
     fontFamily: FontFamily.sansMedium,
     fontSize: 10,
     color: '#92400E',
-    fontWeight: '700',
   },
   productRemainingLabel: {
     fontFamily: FontFamily.sansBold,
     fontSize: 9,
     color: '#DC2626',
     letterSpacing: 0.5,
-    fontWeight: '800',
   },
   productRemainingLabelGold: {
     fontFamily: FontFamily.sansBold,
     fontSize: 9,
     color: '#D97706',
     letterSpacing: 0.5,
-    fontWeight: '800',
   },
   productRemainingBagsNum: {
     fontFamily: FontFamily.displayBlack,
     fontSize: 26,
-    fontWeight: '900',
     marginTop: 2,
     letterSpacing: -0.5,
   },
@@ -1950,25 +1918,21 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.sansBold,
     fontSize: 11,
     color: '#1F0B10',
-    fontWeight: '700',
   },
   productStatKeyBold: {
     fontFamily: FontFamily.sansBold,
     fontSize: 11,
     color: '#1F0B10',
-    fontWeight: '800',
   },
   productStatValBold: {
     fontFamily: FontFamily.displayBold,
     fontSize: 12,
     color: '#991B1B',
-    fontWeight: '900',
   },
   productStatValBoldGold: {
     fontFamily: FontFamily.displayBold,
     fontSize: 12,
     color: '#92400E',
-    fontWeight: '900',
   },
   productPunchActionBtn: {
     flexDirection: 'row',
@@ -1989,7 +1953,6 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.sansBold,
     fontSize: 12,
     color: '#FFFFFF',
-    fontWeight: '800',
   },
 
   // ── 4. DEALER SALES BREAKDOWN LIST ──
@@ -2005,7 +1968,6 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontFamily: FontFamily.displayBold,
     fontSize: 18,
-    fontWeight: '800',
     color: '#1F0B10',
   },
   sectionSubtitle: {
@@ -2026,7 +1988,6 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.sansBold,
     fontSize: 11,
     color: '#800E20',
-    fontWeight: '700',
   },
   searchBarContainer: {
     flexDirection: 'row',
@@ -2078,12 +2039,10 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.sansBold,
     fontSize: 12,
     color: '#800E20',
-    fontWeight: '800',
   },
   dealerNameText: {
     fontFamily: FontFamily.displayBold,
     fontSize: 15,
-    fontWeight: '800',
     color: '#1F0B10',
   },
   dealerAreaText: {
@@ -2109,14 +2068,12 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.sansBold,
     fontSize: 8,
     color: '#800E20',
-    fontWeight: '800',
     letterSpacing: 0.5,
   },
   sapCodeBadgeValue: {
     fontFamily: FontFamily.displayBold,
     fontSize: 12,
     color: '#800E20',
-    fontWeight: '800',
   },
   dealerVolumeRow: {
     flexDirection: 'row',
@@ -2127,7 +2084,6 @@ const styles = StyleSheet.create({
   dealerTotalBags: {
     fontFamily: FontFamily.displayBlack,
     fontSize: 18,
-    fontWeight: '900',
     color: '#800E20',
   },
   dealerTotalBagsUnit: {
@@ -2175,7 +2131,6 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.sansBold,
     fontSize: 10,
     color: '#1F0B10',
-    fontWeight: '700',
   },
   dealerShareTrack: {
     height: 5,
@@ -2199,7 +2154,6 @@ const styles = StyleSheet.create({
   emptyDealerTitle: {
     fontFamily: FontFamily.displayBold,
     fontSize: 15,
-    fontWeight: '800',
     color: '#1F0B10',
     marginTop: 8,
   },
@@ -2244,7 +2198,6 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.sansBold,
     fontSize: 16,
     color: '#1F0B10',
-    fontWeight: '800',
   },
   modalCloseBtn: {
     padding: 4,
@@ -2269,7 +2222,6 @@ const styles = StyleSheet.create({
   modalOptionTextSelected: {
     fontFamily: FontFamily.sansBold,
     color: '#800E20',
-    fontWeight: '700',
   },
 
   // District Selector Bar
@@ -2289,7 +2241,6 @@ const styles = StyleSheet.create({
   districtBarLabel: {
     fontFamily: FontFamily.sansBold,
     fontSize: 10,
-    fontWeight: '800',
     color: '#8A7277',
     letterSpacing: 0.5,
     marginRight: 4,
@@ -2314,7 +2265,6 @@ const styles = StyleSheet.create({
   districtChipText: {
     fontFamily: FontFamily.sansBold,
     fontSize: 11,
-    fontWeight: '700',
     color: '#4B5563',
   },
   districtChipTextActive: {

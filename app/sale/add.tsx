@@ -364,7 +364,6 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontFamily: FontFamily.displayBold,
     fontSize: 18,
-    fontWeight: '800',
     color: '#1F0B10',
   },
   scroll: {
@@ -406,7 +405,6 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.sansBold,
     fontSize: 9,
     color: '#FCA5A5',
-    fontWeight: '800',
     letterSpacing: 0.5,
   },
   autoPill: {
@@ -419,12 +417,10 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.sansBold,
     fontSize: 8,
     color: '#15803D',
-    fontWeight: '800',
   },
   aiScanTitle: {
     fontFamily: FontFamily.displayBold,
     fontSize: 15,
-    fontWeight: '800',
     color: '#FFFFFF',
   },
   aiScanSub: {
@@ -453,7 +449,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#1F0B10',
     marginBottom: 6,
-    fontWeight: '700',
   },
   required: {
     color: '#800E20',
@@ -483,7 +478,6 @@ const styles = StyleSheet.create({
   pickerSelected: {
     fontFamily: FontFamily.displayBold,
     fontSize: 14,
-    fontWeight: '800',
     color: '#1F0B10',
   },
   pickerPlaceholder: {
@@ -554,7 +548,6 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.sansBold,
     fontSize: 10,
     color: '#15803D',
-    fontWeight: '700',
   },
   quickCountRow: {
     flexDirection: 'row',
@@ -574,7 +567,6 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.sansBold,
     fontSize: 11,
     color: '#800E20',
-    fontWeight: '700',
   },
   submitBtn: {
     backgroundColor: '#800E20',
@@ -593,7 +585,6 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.sansBold,
     fontSize: 15,
     color: '#FFFFFF',
-    fontWeight: '800',
   },
   pickerOverlay: {
     flex: 1,
@@ -616,7 +607,6 @@ const styles = StyleSheet.create({
   pickerTitle: {
     fontFamily: FontFamily.displayBold,
     fontSize: 16,
-    fontWeight: '800',
     color: '#1F0B10',
   },
   pickerSearchRow: {
@@ -648,7 +638,6 @@ const styles = StyleSheet.create({
   dealerItemName: {
     fontFamily: FontFamily.displayBold,
     fontSize: 14,
-    fontWeight: '700',
     color: '#1F0B10',
   },
   dealerItemSub: {
