@@ -28,10 +28,12 @@
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
         "CAMERA",
-        "VIBRATE"
+        "VIBRATE",
+        "POST_NOTIFICATIONS"
       ],
-      "versionCode": 2
+      "versionCode": 3
     },
+
 
     "web": {
       "favicon": "./assets/favicon.png",

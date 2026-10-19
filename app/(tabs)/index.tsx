@@ -87,7 +87,15 @@ export default function HomeScreen() {
   const { data: dealers, refetch: refetchDealers } = useQuery({ queryKey: ['dealers'], queryFn: () => apiGetDealers() });
   const { data: contractors, refetch: refetchContractors } = useQuery({ queryKey: ['contractors'], queryFn: () => apiGetContractors() });
   const { data: activeTrackers, refetch: refetchActive } = useQuery({ queryKey: ['activeTrackers'], queryFn: () => apiGetActiveTracker() });
-  const { data: allSlabs, refetch: refetchSlabs } = useQuery({ queryKey: ['slabs'], queryFn: () => apiGetSlabs() });
+  const { data: allSlabs, refetch: refetchSlabs } = useQuery({ 
+    queryKey: ['slabs'], 
+    queryFn: () => apiGetSlabs(),
+    refetchInterval: 15000, // Poll every 15s in background while app is active
+    refetchIntervalInBackground: false,
+  });
+
+
+
   const { data: allMeetings, refetch: refetchMeetings } = useQuery({ queryKey: ['meetings'], queryFn: () => apiGetMeetings() });
 
   useEffect(() => {
