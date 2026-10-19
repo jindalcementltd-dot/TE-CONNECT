@@ -35,16 +35,20 @@ function MeetingTypeBadge({ type }: { type: Meeting['meeting_type'] }) {
 }
 
 function MeetingStatusBadge({ status }: { status: Meeting['status'] }) {
-  const colors: Record<string, { bg: string; text: string }> = {
-    PLANNED: { bg: '#FBE8EC', text: '#800E20' },
-    COMPLETED: { bg: '#DCFCE7', text: '#15803D' },
-    CANCELLED: { bg: '#F3F4F6', text: '#6B7280' },
-    RESCHEDULED: { bg: '#FEF3C7', text: '#D97706' },
-  };
-  const cfg = colors[status] || colors.PLANNED;
+  const isComp = status === 'COMPLETED';
+  const isCanc = status === 'CANCELLED';
+  const isResch = status === 'RESCHEDULED';
   return (
-    <View style={[badge.container, { backgroundColor: cfg.bg }]}>
-      <Text style={[badge.text, { color: cfg.text }]}>{status || 'PLANNED'}</Text>
+    <View style={[
+      badge.container,
+      isComp ? badge.containerCompleted : (isCanc ? badge.containerCancelled : (isResch ? badge.containerRescheduled : badge.containerUpcoming)),
+    ]}>
+      <Text style={[
+        badge.text,
+        isComp ? badge.textCompleted : (isCanc ? badge.textCancelled : (isResch ? badge.textRescheduled : badge.textUpcoming)),
+      ]}>
+        {isComp ? '✅ COMPLETED' : (isCanc ? '✕ CANCELLED' : (isResch ? '🔄 RESCHEDULED' : '⏳ UPCOMING'))}
+      </Text>
     </View>
   );
 }
@@ -58,26 +62,62 @@ function MeetingCard({ meeting, onPress }: { meeting: Meeting; onPress: () => vo
     }
   } catch {}
 
+  const isComp = meeting.status === 'COMPLETED';
+  const isCanc = meeting.status === 'CANCELLED';
+
   return (
-    <TouchableOpacity style={cardStyles.card} onPress={onPress} activeOpacity={0.88}>
+    <TouchableOpacity
+      style={[
+        cardStyles.card,
+        isComp ? cardStyles.cardCompleted : (isCanc ? cardStyles.cardCancelled : cardStyles.cardUpcoming),
+      ]}
+      onPress={onPress}
+      activeOpacity={0.88}
+    >
       <View style={cardStyles.header}>
-        <MeetingTypeBadge type={meeting.meeting_type} />
+        <View style={[
+          cardStyles.iconCircle,
+          isComp ? cardStyles.iconCircleCompleted : (isCanc ? cardStyles.iconCircleCancelled : cardStyles.iconCircleUpcoming),
+        ]}>
+          <MaterialCommunityIcons
+            name={isComp ? 'check-decagram' : (isCanc ? 'close-circle-outline' : 'calendar-clock')}
+            size={24}
+            color={isComp ? '#16A34A' : (isCanc ? '#6B7280' : '#7C3AED')}
+          />
+        </View>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text style={[cardStyles.name, isComp && cardStyles.nameCompleted]} numberOfLines={1}>
+            {meeting.meeting_name || `${meeting.meeting_type} Meet`}
+          </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+            <MeetingTypeBadge type={meeting.meeting_type} />
+            {meeting.location ? (
+              <Text style={cardStyles.locationText} numberOfLines={1}>📍 {meeting.location}</Text>
+            ) : null}
+          </View>
+        </View>
         <MeetingStatusBadge status={meeting.status} />
       </View>
-      <Text style={cardStyles.name}>{meeting.meeting_name || meeting.meeting_type || 'Meeting'}</Text>
 
-      {/* Date Row */}
-      <View style={cardStyles.infoRow}>
-        <Ionicons name="calendar-outline" size={13} color="#800E20" style={{ marginRight: 6 }} />
-        <Text style={cardStyles.detail}>Date: <Text style={{ fontFamily: FontFamily.sansBold, color: '#1F0B10' }}>{formattedDate}</Text></Text>
+      {/* Prominent Themed Date Banner */}
+      <View style={[
+        cardStyles.dateBanner,
+        isComp ? cardStyles.dateBannerCompleted : (isCanc ? cardStyles.dateBannerCancelled : cardStyles.dateBannerUpcoming),
+      ]}>
+        <Ionicons
+          name={isComp ? 'checkmark-circle' : 'calendar'}
+          size={16}
+          color={isComp ? '#15803D' : (isCanc ? '#6B7280' : '#7C3AED')}
+          style={{ marginRight: 6 }}
+        />
+        <Text style={[
+          cardStyles.dateBannerLabel,
+          isComp ? cardStyles.dateBannerLabelCompleted : (isCanc ? cardStyles.dateBannerLabelCancelled : cardStyles.dateBannerLabelUpcoming),
+        ]}>
+          {isComp ? 'Conducted Date:' : (isCanc ? 'Cancelled Date:' : 'Scheduled Meeting:')}{' '}
+          <Text style={[cardStyles.boldVal, isComp && { color: '#166534' }]}>{formattedDate}</Text>
+        </Text>
       </View>
-
-      {meeting.location ? (
-        <View style={cardStyles.infoRow}>
-          <Feather name="map-pin" size={13} color="#8A7277" style={{ marginRight: 6 }} />
-          <Text style={cardStyles.detail}>{meeting.location}</Text>
-        </View>
-      ) : null}
 
       {meeting.purpose ? (
         <View style={cardStyles.infoRow}>
@@ -91,9 +131,16 @@ function MeetingCard({ meeting, onPress }: { meeting: Meeting; onPress: () => vo
           <Feather name="user" size={12} color="#800E20" style={{ marginRight: 4 }} />
           <Text style={cardStyles.te}>{meeting.te || meeting.created_by || 'Team Jajpur'}</Text>
         </View>
-        {meeting.people_count ? (
-          <Text style={cardStyles.detail}>👥 {meeting.people_count} people</Text>
-        ) : null}
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          {meeting.expense_amount ? (
+            <View style={cardStyles.expenseTag}>
+              <Text style={cardStyles.expenseTagText}>💰 ₹{meeting.expense_amount}</Text>
+            </View>
+          ) : null}
+          {meeting.people_count ? (
+            <Text style={cardStyles.detail}>👥 {meeting.people_count} attendees</Text>
+          ) : null}
+        </View>
       </View>
     </TouchableOpacity>
   );
@@ -107,6 +154,7 @@ export default function MeetingScreen() {
   const [showMonthModal, setShowMonthModal] = useState<boolean>(false);
   const [selectedDate, setSelectedDate] = useState(today);
   const [refreshing, setRefreshing] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'UPCOMING' | 'COMPLETED'>('ALL');
 
   useEffect(() => {
     getUser().then(u => {
@@ -234,7 +282,20 @@ export default function MeetingScreen() {
 
   const customerMeetingsCount = monthMeetings.filter(m => m.meeting_type === 'CUSTOMER').length;
   const contractorMeetingsCount = monthMeetings.filter(m => m.meeting_type === 'CONTRACTOR').length;
+  const upcomingCount = monthMeetings.filter(m => m.status === 'PLANNED' || (m.status as any) === 'UPCOMING' || !m.status).length;
+  const completedCount = monthMeetings.filter(m => m.status === 'COMPLETED').length;
+  const totalExpense = monthMeetings.reduce((sum, m) => sum + (Number(m.expense_amount) || 0), 0);
   const totalPeopleAttended = monthMeetings.reduce((sum, m) => sum + (Number(m.people_count) || 0), 0);
+
+  const displayedMonthMeetings = useMemo(() => {
+    if (statusFilter === 'UPCOMING') {
+      return monthMeetings.filter(m => m.status === 'PLANNED' || (m.status as any) === 'UPCOMING' || !m.status);
+    }
+    if (statusFilter === 'COMPLETED') {
+      return monthMeetings.filter(m => m.status === 'COMPLETED');
+    }
+    return monthMeetings;
+  }, [monthMeetings, statusFilter]);
 
   let formattedSelectedDate = selectedDate;
   try {
@@ -322,22 +383,32 @@ export default function MeetingScreen() {
 
         {/* ── 1. MONTHLY TARGET SUMMARY CARDS ── */}
         <View style={styles.targetsRow}>
-          <View style={styles.targetCard}>
-            <Text style={styles.targetCardTitle}>Customer Meets</Text>
-            <Text style={styles.targetCardValue}>{customerMeetingsCount}</Text>
+          <TouchableOpacity
+            style={[styles.targetCard, { backgroundColor: '#FAF5FF', borderColor: '#DDD6FE' }]}
+            onPress={() => setStatusFilter(statusFilter === 'UPCOMING' ? 'ALL' : 'UPCOMING')}
+            activeOpacity={0.8}
+          >
+            <Text style={[styles.targetCardTitle, { color: '#6D28D9' }]}>⏳ Upcoming</Text>
+            <Text style={[styles.targetCardValue, { color: '#7C3AED' }]}>{upcomingCount}</Text>
             <Text style={styles.targetCardSub}>In {formattedSelectedMonth}</Text>
-          </View>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.targetCard, { backgroundColor: '#F0FDF4', borderColor: '#86EFAC' }]}
+            onPress={() => setStatusFilter(statusFilter === 'COMPLETED' ? 'ALL' : 'COMPLETED')}
+            activeOpacity={0.8}
+          >
+            <Text style={[styles.targetCardTitle, { color: '#15803D' }]}>✅ Completed</Text>
+            <Text style={[styles.targetCardValue, { color: '#16A34A' }]}>{completedCount}</Text>
+            <Text style={styles.targetCardSub}>In {formattedSelectedMonth}</Text>
+          </TouchableOpacity>
 
           <View style={styles.targetCard}>
-            <Text style={styles.targetCardTitle}>Contractor Meets</Text>
-            <Text style={[styles.targetCardValue, { color: '#C2410C' }]}>{contractorMeetingsCount}</Text>
-            <Text style={styles.targetCardSub}>In {formattedSelectedMonth}</Text>
-          </View>
-
-          <View style={styles.targetCard}>
-            <Text style={styles.targetCardTitle}>Total People</Text>
-            <Text style={[styles.targetCardValue, { color: '#16A34A' }]}>{totalPeopleAttended}</Text>
-            <Text style={styles.targetCardSub}>Attended</Text>
+            <Text style={styles.targetCardTitle}>👥 Attendees</Text>
+            <Text style={[styles.targetCardValue, { color: '#0284C7' }]}>{totalPeopleAttended}</Text>
+            <Text style={[styles.targetCardSub, totalExpense > 0 && { color: '#16A34A', fontWeight: '700' }]}>
+              {totalExpense > 0 ? `💰 ₹${totalExpense}` : 'Total joined'}
+            </Text>
           </View>
         </View>
 
@@ -448,22 +519,81 @@ export default function MeetingScreen() {
         {/* ── 5. RECORDED MEETINGS FOR SELECTED MONTH (RECENT FIRST) ── */}
         <View style={[styles.sectionHeaderRow, { marginTop: 26 }]}>
           <View>
-            <Text style={styles.sectionTitle}>Recorded Meetings for {formattedSelectedMonth} ({monthMeetings.length})</Text>
-            <Text style={styles.sectionSub}>Recent meetings appear first</Text>
+            <Text style={styles.sectionTitle}>Recorded Meetings ({displayedMonthMeetings.length})</Text>
+            <Text style={styles.sectionSub}>Recent meetings in {formattedSelectedMonth}</Text>
           </View>
           <TouchableOpacity onPress={() => onRefresh()}>
             <Text style={styles.refreshLink}>Refresh ⟳</Text>
           </TouchableOpacity>
         </View>
 
-        {monthMeetings.length === 0 ? (
+        {/* Status Filter Tabs (All / Upcoming / Completed) */}
+        <View style={styles.statusFilterRow}>
+          <TouchableOpacity
+            style={[styles.statusFilterBtn, statusFilter === 'ALL' && styles.statusFilterBtnActive]}
+            onPress={() => setStatusFilter('ALL')}
+            activeOpacity={0.8}
+          >
+            <Text style={[styles.statusFilterText, statusFilter === 'ALL' && styles.statusFilterTextActive]}>
+              All ({monthMeetings.length})
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.statusFilterBtn,
+              statusFilter === 'UPCOMING'
+                ? { backgroundColor: '#EDE9FE', borderColor: '#7C3AED' }
+                : { backgroundColor: '#FAF5FF', borderColor: '#DDD6FE' }
+            ]}
+            onPress={() => setStatusFilter('UPCOMING')}
+            activeOpacity={0.8}
+          >
+            <Text style={[
+              styles.statusFilterText,
+              { color: '#7C3AED' },
+              statusFilter === 'UPCOMING' && { fontWeight: '700' }
+            ]}>
+              ⏳ Upcoming ({upcomingCount})
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.statusFilterBtn,
+              statusFilter === 'COMPLETED'
+                ? { backgroundColor: '#DCFCE7', borderColor: '#16A34A' }
+                : { backgroundColor: '#F0FDF4', borderColor: '#86EFAC' }
+            ]}
+            onPress={() => setStatusFilter('COMPLETED')}
+            activeOpacity={0.8}
+          >
+            <Text style={[
+              styles.statusFilterText,
+              { color: '#15803D' },
+              statusFilter === 'COMPLETED' && { fontWeight: '700' }
+            ]}>
+              ✅ Completed ({completedCount})
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {displayedMonthMeetings.length === 0 ? (
           <View style={styles.emptyCard}>
-            <Text style={styles.emptyTitle}>No Meetings in {formattedSelectedMonth}</Text>
-            <Text style={styles.emptySub}>No meetings recorded in Google Sheets for this month.</Text>
+            <Text style={styles.emptyTitle}>
+              {statusFilter === 'ALL'
+                ? `No Meetings in ${formattedSelectedMonth}`
+                : `No ${statusFilter === 'UPCOMING' ? 'Upcoming' : 'Completed'} Meetings in ${formattedSelectedMonth}`}
+            </Text>
+            <Text style={styles.emptySub}>
+              {statusFilter === 'ALL'
+                ? 'No meetings recorded in Google Sheets for this month.'
+                : `Try switching filter to see other meetings or schedule a new one.`}
+            </Text>
           </View>
         ) : (
           <View style={styles.list}>
-            {monthMeetings.map(m => (
+            {displayedMonthMeetings.map(m => (
               <MeetingCard
                 key={m.meeting_id}
                 meeting={m}
@@ -826,6 +956,38 @@ const styles = StyleSheet.create({
   districtChipTextActive: {
     color: '#FFFFFF',
   },
+
+  // Status Filter Tabs
+  statusFilterRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 14,
+    marginTop: 2,
+  },
+  statusFilterBtn: {
+    flex: 1,
+    paddingVertical: 9,
+    paddingHorizontal: 8,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  statusFilterBtnActive: {
+    backgroundColor: '#800E20',
+    borderColor: '#800E20',
+  },
+  statusFilterText: {
+    fontFamily: FontFamily.sansSemiBold,
+    fontSize: 12,
+    color: '#4B5563',
+  },
+  statusFilterTextActive: {
+    color: '#FFFFFF',
+    fontFamily: FontFamily.sansBold,
+  },
 });
 
 const cardStyles = StyleSheet.create({
@@ -840,18 +1002,98 @@ const cardStyles = StyleSheet.create({
     shadowOpacity: 1,
     shadowRadius: 8,
     elevation: 2,
+    marginBottom: 12,
+  },
+  cardCompleted: {
+    backgroundColor: '#F0FDF4',
+    borderColor: '#86EFAC',
+    shadowColor: 'rgba(22, 163, 74, 0.12)',
+  },
+  cardUpcoming: {
+    backgroundColor: '#FAF5FF',
+    borderColor: '#DDD6FE',
+    shadowColor: 'rgba(124, 58, 237, 0.1)',
+  },
+  cardCancelled: {
+    backgroundColor: '#F8FAFC',
+    borderColor: '#E2E8F0',
   },
   header: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 10,
+  },
+  iconCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  iconCircleCompleted: {
+    backgroundColor: '#DCFCE7',
+  },
+  iconCircleUpcoming: {
+    backgroundColor: '#EDE9FE',
+  },
+  iconCircleCancelled: {
+    backgroundColor: '#F1F5F9',
   },
   name: {
     fontFamily: FontFamily.displayBold,
     fontSize: 16,
     color: '#1F0B10',
-    marginBottom: 8,
+    marginBottom: 3,
+  },
+  nameCompleted: {
+    color: '#14532D',
+  },
+  locationText: {
+    fontFamily: FontFamily.sansMedium,
+    fontSize: 11,
+    color: '#6B7280',
+  },
+  dateBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    marginVertical: 8,
+  },
+  dateBannerCompleted: {
+    backgroundColor: '#DCFCE7',
+    borderWidth: 1,
+    borderColor: '#86EFAC',
+  },
+  dateBannerUpcoming: {
+    backgroundColor: '#EDE9FE',
+    borderWidth: 1,
+    borderColor: '#C4B5FD',
+  },
+  dateBannerCancelled: {
+    backgroundColor: '#F1F5F9',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  dateBannerLabel: {
+    fontFamily: FontFamily.sansMedium,
+    fontSize: 12,
+    flex: 1,
+  },
+  dateBannerLabelCompleted: {
+    color: '#15803D',
+  },
+  dateBannerLabelUpcoming: {
+    color: '#6D28D9',
+  },
+  dateBannerLabelCancelled: {
+    color: '#64748B',
+  },
+  boldVal: {
+    fontFamily: FontFamily.sansBold,
+    fontWeight: '700',
   },
   infoRow: {
     flexDirection: 'row',
@@ -885,16 +1127,54 @@ const cardStyles = StyleSheet.create({
     fontSize: 11,
     color: '#800E20',
   },
-});
-
-const badge = StyleSheet.create({
-  container: {
+  expenseTag: {
+    backgroundColor: '#DCFCE7',
+    borderWidth: 1,
+    borderColor: '#86EFAC',
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 8,
   },
+  expenseTagText: {
+    fontFamily: FontFamily.sansBold,
+    fontSize: 11,
+    color: '#15803D',
+  },
+});
+
+const badge = StyleSheet.create({
+  container: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 10,
+  },
+  containerCompleted: {
+    backgroundColor: '#DCFCE7',
+  },
+  containerUpcoming: {
+    backgroundColor: '#EDE9FE',
+  },
+  containerCancelled: {
+    backgroundColor: '#F3F4F6',
+  },
+  containerRescheduled: {
+    backgroundColor: '#FEF3C7',
+  },
   text: {
     fontFamily: FontFamily.sansBold,
     fontSize: 10,
+    letterSpacing: 0.3,
+  },
+  textCompleted: {
+    color: '#15803D',
+  },
+  textUpcoming: {
+    color: '#7C3AED',
+  },
+  textCancelled: {
+    color: '#6B7280',
+  },
+  textRescheduled: {
+    color: '#D97706',
   },
 });

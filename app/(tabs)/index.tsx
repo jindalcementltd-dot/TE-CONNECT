@@ -52,6 +52,7 @@ export default function HomeScreen() {
   const [meetingToAttend, setMeetingToAttend] = useState<Meeting | null>(null);
   const [attendCreditTE, setAttendCreditTE] = useState<string>('');
   const [attendPeopleCount, setAttendPeopleCount] = useState<string>('');
+  const [attendExpense, setAttendExpense] = useState<string>('');
   const [attendOutcome, setAttendOutcome] = useState<string>('');
   const [isSubmittingAttendance, setIsSubmittingAttendance] = useState<boolean>(false);
 
@@ -417,6 +418,7 @@ export default function HomeScreen() {
     setMeetingToAttend(meeting);
     setAttendCreditTE(user?.name || meeting.te || (teList[0] || ''));
     setAttendPeopleCount(meeting.people_count ? String(meeting.people_count) : '');
+    setAttendExpense(meeting.expense_amount ? String(meeting.expense_amount) : '');
     setAttendOutcome(meeting.outcome || '');
   };
 
@@ -424,6 +426,7 @@ export default function HomeScreen() {
     if (!meetingToAttend) return;
     setIsSubmittingAttendance(true);
     const count = Number(attendPeopleCount) || (meetingToAttend.people_count ? Number(meetingToAttend.people_count) : 0);
+    const expense = Number(attendExpense) || 0;
     const creditedTo = attendCreditTE || user?.name || meetingToAttend.te || 'Team Jajpur';
 
     try {
@@ -431,6 +434,7 @@ export default function HomeScreen() {
         status: 'COMPLETED',
         te: creditedTo,
         people_count: count > 0 ? count : undefined,
+        expense_amount: expense > 0 ? expense : undefined,
         outcome: attendOutcome.trim() || undefined,
         updated_by: user?.name || creditedTo,
       });
@@ -438,7 +442,7 @@ export default function HomeScreen() {
       Toast.show({
         type: 'success',
         text1: 'Meeting Attended! 🎉',
-        text2: `${count > 0 ? `${count} attendees` : 'Meeting'} credited to ${creditedTo}!`,
+        text2: `${count > 0 ? `${count} attendees` : 'Meeting'} credited to ${creditedTo}!${expense > 0 ? ` (₹${expense} Expense)` : ''}`,
         position: 'top',
         visibilityTime: 3500,
       });
@@ -949,21 +953,48 @@ export default function HomeScreen() {
             return (
               <Link href={`/meeting/${meeting.meeting_id}` as any} asChild key={meeting.meeting_id || `meeting_${meetIdx}`}>
                 <TouchableOpacity activeOpacity={0.7}>
-                  <View style={styles.glassListRow}>
-                    <View style={styles.dateBox}>
-                      <Text style={styles.dateDay}>{day}</Text>
-                      <Text style={styles.dateMonth}>{month}</Text>
+                  <View style={[
+                    styles.glassListRow,
+                    isCompleted
+                      ? { backgroundColor: 'rgba(240, 253, 244, 0.75)', borderWidth: 1.5, borderColor: '#86EFAC' }
+                      : { backgroundColor: 'rgba(250, 245, 255, 0.85)', borderWidth: 1.5, borderColor: '#DDD6FE' }
+                  ]}>
+                    <View style={[
+                      styles.dateBox,
+                      isCompleted ? { backgroundColor: '#DCFCE7' } : { backgroundColor: '#EDE9FE' }
+                    ]}>
+                      <Text style={[styles.dateDay, isCompleted ? { color: '#16A34A' } : { color: '#7C3AED' }]}>{day}</Text>
+                      <Text style={[styles.dateMonth, isCompleted ? { color: '#15803D' } : { color: '#6D28D9' }]}>{month}</Text>
                     </View>
-                    <View style={styles.listIconCircle}>
-                      <Ionicons name="people" size={22} color={Colors.info} />
+                    <View style={[
+                      styles.listIconCircle,
+                      isCompleted ? { backgroundColor: '#DCFCE7' } : { backgroundColor: '#EDE9FE' }
+                    ]}>
+                      <Ionicons
+                        name={isCompleted ? "checkmark-circle" : "people"}
+                        size={22}
+                        color={isCompleted ? "#16A34A" : "#7C3AED"}
+                      />
                     </View>
                     <View style={styles.listInfo}>
-                      <Text style={styles.listTitle}>{meeting.meeting_name || `${meeting.meeting_type} Meet`}</Text>
-                      <Text style={styles.listSub}>{meeting.location || 'Jajpur'}{meeting.people_count ? ` · ${meeting.people_count} Attended` : ''}</Text>
+                      <Text style={[styles.listTitle, isCompleted && { color: '#14532D' }]}>
+                        {meeting.meeting_name || `${meeting.meeting_type} Meet`}
+                      </Text>
+                      <Text style={styles.listSub}>
+                        {meeting.location || 'Jajpur'}
+                        {meeting.people_count ? ` · 👥 ${meeting.people_count}` : ''}
+                        {meeting.expense_amount ? ` · 💰 ₹${meeting.expense_amount}` : ''}
+                      </Text>
                     </View>
-                    <View style={[styles.countPill, isCompleted ? { backgroundColor: '#DCFCE7' } : { backgroundColor: '#EDE9FE' }]}>
-                      <Text style={[styles.countPillText, isCompleted ? { color: '#16A34A' } : { color: '#7C3AED' }]}>
-                        {meeting.status || 'PLANNED'}
+                    <View style={[
+                      styles.countPill,
+                      isCompleted ? { backgroundColor: '#DCFCE7' } : { backgroundColor: '#EDE9FE' }
+                    ]}>
+                      <Text style={[
+                        styles.countPillText,
+                        isCompleted ? { color: '#15803D' } : { color: '#7C3AED' }
+                      ]}>
+                        {isCompleted ? '✅ COMPLETED' : (meeting.status || '⏳ UPCOMING')}
                       </Text>
                     </View>
                   </View>
@@ -1236,7 +1267,37 @@ export default function HomeScreen() {
                     </View>
                   </View>
 
-                  {/* 3. Meeting Outcome / Notes */}
+                  {/* 3. Meeting Expense (Kharch) */}
+                  <View style={styles.attendFieldGroup}>
+                    <Text style={styles.attendFieldLabel}>
+                      Meeting Expense (₹) / ଖର୍ଚ୍ଚ ଟଙ୍କା
+                    </Text>
+                    <Text style={styles.attendFieldSubtext}>
+                      Chai, nasta ya meeting par kitna kharcha hua (Optional):
+                    </Text>
+                    <TextInput
+                      style={styles.attendInput}
+                      keyboardType="numeric"
+                      placeholder="e.g. ₹500"
+                      placeholderTextColor={Colors.textMuted}
+                      value={attendExpense}
+                      onChangeText={setAttendExpense}
+                    />
+                    <View style={styles.quickCountRow}>
+                      {[200, 500, 1000, 1500].map((amt) => (
+                        <TouchableOpacity
+                          key={amt}
+                          style={[styles.quickCountBtn, { backgroundColor: '#DCFCE7', borderColor: '#86EFAC' }]}
+                          onPress={() => setAttendExpense(String(amt))}
+                          activeOpacity={0.8}
+                        >
+                          <Text style={[styles.quickCountBtnText, { color: '#15803D' }]}>+₹{amt}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
+
+                  {/* 4. Meeting Outcome / Notes */}
                   <View style={styles.attendFieldGroup}>
                     <Text style={styles.attendFieldLabel}>Meeting Outcome / Remark (Optional)</Text>
                     <TextInput
