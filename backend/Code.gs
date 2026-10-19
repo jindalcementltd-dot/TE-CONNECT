@@ -1745,7 +1745,7 @@ function handlePublicPageSlab(params) {
 '  var parts = val.split("-");' +
 '  var d = new Date(parts[0], parseInt(parts[1], 10) - 1, parts[2]);' +
 '  document.getElementById("datePreviewText").textContent = "✓ ବଛାଯାଇଛି (Custom Date): " + fmtDisp(d) + " (" + val + ")";' +
-'}'' +
+'}' +
 'function captureGPS(){' +
 '  if(navigator.geolocation){' +
 '    navigator.geolocation.getCurrentPosition(function(pos){' +
