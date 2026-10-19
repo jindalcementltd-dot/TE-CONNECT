@@ -68,7 +68,14 @@
           "cameraPermission": "TE CONNECT needs camera access."
         }
       ],
-      "expo-font"
+      "expo-font",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#C91F2B"
+        }
+      ]
     ],
     "scheme": "teconnect",
     "extra": {

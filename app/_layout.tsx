@@ -24,6 +24,7 @@ import {
 import { UndoProvider } from '../src/context/UndoContext';
 import { getUser } from '../src/services/auth';
 import { registerPushNotifications } from '../src/services/fcmPush';
+import { setupAndroidNotificationChannel, requestAppNotificationPermission } from '../src/services/notifications';
 import ErrorBoundary from '../components/ErrorBoundary';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
@@ -54,6 +55,10 @@ export default function RootLayout() {
   const [forceReady, setForceReady] = useState(false);
 
   useEffect(() => {
+    // Setup Android notification channel and ask permission
+    setupAndroidNotificationChannel().catch(() => {});
+    requestAppNotificationPermission().catch(() => {});
+
     // Failsafe timeout: After 1.2s, always let the app render even if fonts are delayed or offline
     const timer = setTimeout(() => {
       setForceReady(true);

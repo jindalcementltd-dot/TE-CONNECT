@@ -1,8 +1,23 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Vibration, Platform } from 'react-native';
 import Toast from 'react-native-toast-message';
+import { Audio } from 'expo-av';
+import * as Notifications from 'expo-notifications';
 import { Slab } from '../types';
 import { CHIME_BASE64 } from './chimeBase64';
+
+// Configure expo-notifications handler for native apps (foreground notifications)
+if (Platform.OS !== 'web') {
+  try {
+    Notifications.setNotificationHandler({
+      handleNotification: async () => ({
+        shouldShowAlert: true,
+        shouldPlaySound: true,
+        shouldSetBadge: true,
+      }),
+    });
+  } catch (e) {}
+}
 
 const NOTIFICATIONS_STORAGE_KEY = 'teconnect_notifications_v1';
 const SEEN_SLABS_KEY = 'teconnect_seen_slab_ids_v1';
@@ -32,7 +47,48 @@ const DEFAULT_NOTIFICATIONS: AppNotification[] = [
 ];
 
 // ──────────────────────────────────────────────────────────
-// PERSISTENT AUDIO CONTEXT & MOBILE AUTOPLAY UNLOCKER
+// ANDROID NOTIFICATION CHANNEL & PERMISSIONS
+// ──────────────────────────────────────────────────────────
+export async function setupAndroidNotificationChannel() {
+  if (Platform.OS === 'android') {
+    try {
+      await Notifications.setNotificationChannelAsync('default', {
+        name: 'TE CONNECT Alerts',
+        importance: Notifications.AndroidImportance.MAX,
+        vibrationPattern: [0, 250, 150, 250, 150, 400],
+        lightColor: '#C91F2B',
+        enableLights: true,
+        enableVibrate: true,
+        showBadge: true,
+      });
+    } catch (e) {
+      console.warn('[NotificationChannel] error:', e);
+    }
+  }
+}
+
+export async function requestAppNotificationPermission(): Promise<boolean> {
+  if (Platform.OS !== 'web') {
+    try {
+      await setupAndroidNotificationChannel();
+      const { status: existingStatus } = await Notifications.getPermissionsAsync();
+      let finalStatus = existingStatus;
+      if (existingStatus !== 'granted') {
+        const { status } = await Notifications.requestPermissionsAsync();
+        finalStatus = status;
+      }
+      return finalStatus === 'granted';
+    } catch (e) {
+      console.warn('[Permissions] native error:', e);
+      return false;
+    }
+  } else {
+    return requestPushPermission();
+  }
+}
+
+// ──────────────────────────────────────────────────────────
+// NATIVE & WEB AUDIO ENGINE
 // ──────────────────────────────────────────────────────────
 let sharedAudioCtx: any = null;
 let sharedAudioEl: any = null;
@@ -49,8 +105,9 @@ export function initAndUnlockAudio() {
       sharedAudioCtx.resume().catch(() => {});
     }
 
-    if (!sharedAudioEl && typeof Audio !== 'undefined') {
-      sharedAudioEl = new Audio(CHIME_BASE64);
+    const DomAudio = typeof window !== 'undefined' ? (window as any).Audio : null;
+    if (!sharedAudioEl && DomAudio) {
+      sharedAudioEl = new DomAudio(CHIME_BASE64);
       sharedAudioEl.volume = 1.0;
       sharedAudioEl.load();
     }
@@ -71,22 +128,47 @@ if (Platform.OS === 'web' && typeof window !== 'undefined' && typeof window.addE
   window.addEventListener('touchend', unlockHandler, { passive: true });
 }
 
-
 /**
  * Signature Distinct Audio Chime
- * Dual-engine: plays high-fidelity base64 WAV chime via HTML5 Audio
- * with Web Audio API synthesis fallback. Works on mobile Safari, Android Chrome & PWA.
+ * Native Android APK: Plays chime via expo-av
+ * Web Browser: Dual-engine Base64 HTML5 Audio + Web Audio synthesizer fallback
  */
-export function playNotificationSound() {
-  if (Platform.OS !== 'web') return;
+export async function playNotificationSound() {
+  // 1. Native Android / iOS Audio
+  if (Platform.OS !== 'web') {
+    try {
+      await Audio.setAudioModeAsync({
+        playsInSilentModeIOS: true,
+        staysActiveInBackground: false,
+        shouldDuckAndroid: true,
+      });
+
+      const { sound } = await Audio.Sound.createAsync(
+        { uri: CHIME_BASE64 },
+        { shouldPlay: true, volume: 1.0 }
+      );
+
+      sound.setOnPlaybackStatusUpdate((status) => {
+        if (status.isLoaded && status.didJustFinish) {
+          sound.unloadAsync().catch(() => {});
+        }
+      });
+    } catch (e) {
+      console.warn('[Audio] native playback error:', e);
+    }
+    return;
+  }
+
+  // 2. Web Browser Audio
   initAndUnlockAudio();
 
   let played = false;
 
   // Engine 1: HTML5 Audio with Base64 Chime WAV
   try {
-    if (typeof Audio !== 'undefined') {
-      const audio = new Audio(CHIME_BASE64);
+    const DomAudio = typeof window !== 'undefined' ? (window as any).Audio : null;
+    if (DomAudio) {
+      const audio = new DomAudio(CHIME_BASE64);
       audio.volume = 1.0;
       const promise = audio.play();
       if (promise !== undefined) {
@@ -95,16 +177,13 @@ export function playNotificationSound() {
             played = true;
           })
           .catch(() => {
-            // If autoplay was blocked, fallback to Web Audio synthesizer
             synthesizeWebAudioChime();
           });
       } else {
         played = true;
       }
     }
-  } catch (e) {
-    // Fall back to Web Audio
-  }
+  } catch (e) {}
 
   if (!played) {
     synthesizeWebAudioChime();
@@ -121,7 +200,7 @@ function synthesizeWebAudioChime() {
     if (!sharedAudioCtx) {
       sharedAudioCtx = new AudioCtx();
     }
-    if (sharedAudioCtx.state === 'suspended') {
+    if (sharedAudioCtx && sharedAudioCtx.state === 'suspended') {
       sharedAudioCtx.resume().catch(() => {});
     }
 
@@ -240,20 +319,38 @@ export async function addNotification(
   const updated = [newNotif, ...list].slice(0, 50); // Keep latest 50
   await AsyncStorage.setItem(NOTIFICATIONS_STORAGE_KEY, JSON.stringify(updated));
 
-  // 1. Play signature sound chime immediately
+  // 1. Play signature sound chime immediately (Native Android APK + Web)
   playNotificationSound();
 
-  // 2. Trigger vibration
+  // 2. Trigger distinct rhythmic vibration
   try {
     if (Platform.OS !== 'web') {
-      Vibration.vibrate([0, 120, 60, 120]);
+      Vibration.vibrate([0, 250, 150, 250, 150, 400]);
     } else if (typeof navigator !== 'undefined' && navigator.vibrate) {
-      navigator.vibrate([120, 60, 120]);
+      navigator.vibrate([250, 150, 250, 150, 400]);
     }
   } catch (e) {}
 
-  // 3. Send OS Native Web Push notification if allowed
-  sendBrowserPushNotification(title, body);
+  // 3. System Notification
+  if (Platform.OS !== 'web') {
+    try {
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title,
+          body,
+          data: data || {},
+          sound: true,
+          color: '#C91F2B',
+          vibrate: [0, 250, 150, 250, 150, 400],
+        },
+        trigger: null, // show immediately
+      });
+    } catch (e) {
+      console.warn('[Notifications] Native schedule error:', e);
+    }
+  } else {
+    sendBrowserPushNotification(title, body);
+  }
 
   // 4. In-App visual toast banner
   Toast.show({
@@ -264,6 +361,18 @@ export async function addNotification(
   });
 
   return newNotif;
+}
+
+export async function testAppNotification(title?: string, body?: string) {
+  const notifTitle = title || '🔔 TE CONNECT Alert';
+  const notifBody = body || 'Sound & Notification working successfully on your device!';
+
+  await addNotification(
+    notifTitle,
+    notifBody,
+    'SYSTEM',
+    { test: true }
+  );
 }
 
 export async function markNotificationAsRead(id: string): Promise<void> {

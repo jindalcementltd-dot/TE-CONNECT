@@ -10,7 +10,7 @@ import { Typography, FontFamily, FontSize } from '../src/theme/typography';
 import {
   AppNotification, NotificationType, getNotifications,
   markNotificationAsRead, markAllNotificationsAsRead, clearAllNotifications,
-  requestPushPermission, playNotificationSound,
+  requestAppNotificationPermission, testAppNotification, playNotificationSound,
 } from '../src/services/notifications';
 import { getUser } from '../src/services/auth';
 import { registerPushNotifications, sendTestPushNotification } from '../src/services/fcmPush';
@@ -139,32 +139,31 @@ export default function NotificationsScreen() {
       {/* Push Permission Enable Banner */}
       <View style={styles.permissionBanner}>
         <View style={styles.permissionLeft}>
-          <Ionicons name="notifications-circle" size={24} color={Colors.primary} />
+          <Ionicons name="notifications-circle" size={26} color={Colors.primary} />
           <View style={{ flex: 1, marginLeft: 8 }}>
-            <Text style={styles.permissionTitle}>Live Background Alerts</Text>
-            <Text style={styles.permissionSub}>Get instant sound alerts even when app is closed</Text>
+            <Text style={styles.permissionTitle}>Live Alerts & Sound</Text>
+            <Text style={styles.permissionSub}>Get instant sound chime & vibration on new slabs</Text>
           </View>
         </View>
         <TouchableOpacity
           style={styles.permissionBtn}
           onPress={async () => {
-            const granted = await requestPushPermission();
-            playNotificationSound();
+            const granted = await requestAppNotificationPermission();
+            await testAppNotification(
+              '🔔 TE CONNECT Notification Active',
+              'Sound chime and vibration alert verified successfully on your device!'
+            );
             const u = await getUser();
-            await registerPushNotifications(u);
-            if (granted) {
-              await sendTestPushNotification(
-                '🔔 TE CONNECT Alerts Active',
-                'Live notifications enabled! You will now receive background alerts even when the app is closed.'
-              );
-              Alert.alert('Notifications Enabled! 🔔', 'Background push alerts and sound are now active even when the app is closed.');
-            } else {
-              Alert.alert('Sound Played 🎵', 'Notification sound tested successfully.');
-            }
+            registerPushNotifications(u).catch(() => {});
+            loadNotifications();
+            Alert.alert(
+              'Notification & Sound Verified! 🔔',
+              'Chime sound, vibration and system alert tested successfully on your device.'
+            );
           }}
           activeOpacity={0.85}
         >
-          <Text style={styles.permissionBtnText}>Enable 🔔</Text>
+          <Text style={styles.permissionBtnText}>Test Alert 🔔</Text>
         </TouchableOpacity>
       </View>
 

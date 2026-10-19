@@ -1500,7 +1500,8 @@ function sendPushNotificationToSubscribers(title, body) {
 
 function serveHtml(html) {
   return HtmlService.createHtmlOutput(html)
-    .setTitle('TE CONNECT')
+    .setTitle('TE CONNECT - ସ୍ଲାବ୍ ଢଳାଇ ବୁକିଂ')
+    .addMetaTag('viewport', 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
 
@@ -1535,8 +1536,8 @@ function handlePublicPageSlab(params) {
 '<title>TE CONNECT - ସ୍ଲାବ୍ ଢଳାଇ ବୁକିଂ (Slab Booking)</title>' +
 '<style>' +
 '*, *::before, *::after{box-sizing:border-box;margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Roboto,sans-serif}' +
-'html,body{width:100%;max-width:100%;overflow-x:hidden;-webkit-text-size-adjust:100%}' +
-'body{background:#F1F5F9;color:#0F172A;min-height:100vh;padding:12px 10px 36px;margin:0 auto;max-width:480px}' +
+'html,body{width:100%;max-width:100%;overflow-x:hidden;-webkit-text-size-adjust:100%;touch-action:manipulation}' +
+'body{background:#F1F5F9;color:#0F172A;min-height:100vh;padding:10px 8px 36px;margin:0 auto;max-width:480px}' +
 '.header{text-align:center;padding:14px 10px;background:#FFFFFF;border-radius:16px;margin-bottom:12px;border:1.5px solid #E2E8F0;box-shadow:0 2px 8px rgba(0,0,0,0.04);width:100%}' +
 '.logo{font-size:22px;font-weight:900;letter-spacing:1px;color:#0F172A}' +
 '.logo span{color:#C91F2B}' +
@@ -1544,7 +1545,7 @@ function handlePublicPageSlab(params) {
 '.sub-desc{font-size:11px;color:#64748B;margin-top:2px;font-weight:600}' +
 '.dealer-card{background:#FFFFFF;border:2px solid #86EFAC;border-radius:16px;padding:14px;margin-bottom:12px;box-shadow:0 4px 12px rgba(22,163,74,0.08);width:100%}' +
 '.verified{display:inline-flex;align-items:center;gap:4px;background:#DCFCE7;color:#15803D;font-size:11px;font-weight:800;padding:4px 8px;border-radius:6px;text-transform:uppercase;margin-bottom:6px}' +
-'.dealer-name{font-size:19px;font-weight:900;color:#0F172A;line-height:1.25}' +
+'.dealer-name{font-size:18px;font-weight:900;color:#0F172A;line-height:1.25}' +
 '.dealer-area{font-size:13px;font-weight:700;color:#334155;margin-top:4px}' +
 '.dealer-phone{font-size:12px;color:#0F766E;font-weight:700;margin-top:3px}' +
 '.card{background:#FFFFFF;border-radius:16px;padding:14px;margin-bottom:12px;border:1.5px solid #E2E8F0;box-shadow:0 2px 8px rgba(0,0,0,0.04);width:100%}' +
@@ -1564,18 +1565,24 @@ function handlePublicPageSlab(params) {
 '.bag-main-input{flex:1;min-width:0;border:none;outline:none;font-size:20px;font-weight:900;color:#0F172A;padding:10px 0;-webkit-appearance:none}' +
 '.bag-main-unit{font-size:13px;font-weight:800;color:#475569;margin-left:8px;flex-shrink:0}' +
 '.chips-title{font-size:12px;font-weight:800;color:#475569;margin-bottom:6px}' +
-'.chips{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;width:100%}' +
+'.chips{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;width:100%}' +
 '.chip{border:1.5px solid #E2E8F0;border-radius:10px;background:#F8FAFC;padding:8px 2px;text-align:center;cursor:pointer;transition:all 0.15s;min-width:0}' +
 '.chip.active{border-color:#C91F2B;background:#FDE8EA;color:#C91F2B}' +
-'.chip-val{font-size:16px;font-weight:900;display:block}' +
+'.chip-val{font-size:15px;font-weight:900;display:block}' +
 '.chip-lbl{font-size:10px;font-weight:700;color:#64748B}' +
 '.chip.active .chip-lbl{color:#C91F2B}' +
 '.date-chips{display:flex;gap:6px;width:100%;margin-bottom:6px}' +
-'.date-chip{flex:1;min-width:0;border:1.5px solid #E2E8F0;border-radius:10px;background:#F8FAFC;padding:10px 4px;text-align:center;cursor:pointer}' +
+'.date-chip{flex:1 1 0;min-width:0;border:1.5px solid #E2E8F0;border-radius:10px;background:#F8FAFC;padding:10px 4px;text-align:center;cursor:pointer}' +
 '.date-chip.active{border-color:#C91F2B;background:#FDE8EA;color:#C91F2B}' +
 '.date-chip .lbl{font-size:12px;font-weight:800;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}' +
 '.date-chip .sub{font-size:11px;color:#64748B;margin-top:2px;font-weight:700}' +
 '.date-chip.active .sub{color:#C91F2B}' +
+'.custom-date-box{margin-top:10px;background:#F8FAFC;border:1.5px dashed #CBD5E1;border-radius:12px;padding:10px 12px}' +
+'.custom-date-title{font-size:12px;font-weight:800;color:#334155;margin-bottom:6px;display:flex;align-items:center;gap:5px}' +
+'.date-picker-wrap{position:relative;width:100%}' +
+'.date-input-field{width:100%;border:2px solid #CBD5E1;border-radius:10px;padding:10px 12px;font-size:15px;font-weight:800;color:#0F172A;background:#FFFFFF;outline:none;cursor:pointer;-webkit-appearance:none;appearance:none;box-sizing:border-box}' +
+'.date-input-field:focus{border-color:#C91F2B}' +
+'.date-selected-preview{font-size:11px;font-weight:700;color:#C91F2B;margin-top:6px;line-height:1.3}' +
 '.input-group{margin-bottom:10px}' +
 '.input-label{display:block;font-size:12px;font-weight:800;color:#334155;margin-bottom:5px}' +
 '.text-input{width:100%;border:1.5px solid #E2E8F0;border-radius:10px;padding:11px 12px;font-size:15px;outline:none;background:#FFFFFF;font-weight:600;-webkit-appearance:none}' +
@@ -1655,14 +1662,20 @@ function handlePublicPageSlab(params) {
 '  <div class="card">' +
 '    <div class="step-title">' +
 '      <div class="step-num step-num-gray">3</div>' +
-'      <div class="step-text">ଢଳାଇ ତାରିଖ (Slab Casting Date 📅)<span class="step-sub">କେଉଁ ଦିନ ଢଳାଇ ହେବ? ବାଛନ୍ତୁ:</span></div>' +
+'      <div class="step-text">ଢଳାଇ ତାରିଖ (Slab Casting Date 📅)<span class="step-sub">କେଉଁ ଦିନ ଢଳାଇ ହେବ? ବାଛନ୍ତୁ କିମ୍ବା କ୍ୟାଲେଣ୍ଡରରୁ ଚୟନ କରନ୍ତୁ:</span></div>' +
 '    </div>' +
 '    <div class="date-chips">' +
 '      <div class="date-chip active" id="dChipToday" onclick="selectDate(0, this)"><span class="lbl">ଆଜି (Today)</span><span class="sub" id="subToday"></span></div>' +
 '      <div class="date-chip" id="dChipTom" onclick="selectDate(1, this)"><span class="lbl">ଆସନ୍ତାକାଲି</span><span class="sub" id="subTom"></span></div>' +
 '      <div class="date-chip" id="dChipNext" onclick="selectDate(2, this)"><span class="lbl">ପରଦିନ</span><span class="sub" id="subNext"></span></div>' +
 '    </div>' +
-'    <input type="date" id="slab_date" style="display:none">' +
+'    <div class="custom-date-box">' +
+'      <div class="custom-date-title"><span>📅</span> କିମ୍ବା କ୍ୟାଲେଣ୍ଡରରୁ ଅନ୍ୟ ତାରିଖ ବାଛନ୍ତୁ (Custom Date):</div>' +
+'      <div class="date-picker-wrap">' +
+'        <input type="date" id="slab_date" class="date-input-field" onchange="customDateSelected(this.value)">' +
+'      </div>' +
+'      <div class="date-selected-preview" id="datePreviewText">✓ ବଛାଯାଇଛି (Selected): ଆଜି (Today)</div>' +
+'    </div>' +
 '  </div>' +
 '  <div class="card">' +
 '    <div class="step-title">' +
@@ -1694,7 +1707,9 @@ function handlePublicPageSlab(params) {
 'var today = new Date();' +
 'function fmtDate(d){ return d.toISOString().split("T")[0]; }' +
 'function fmtDisp(d){ var m=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]; return d.getDate() + " " + m[d.getMonth()]; }' +
-'document.getElementById("slab_date").value = fmtDate(today);' +
+'var slabDateInput = document.getElementById("slab_date");' +
+'slabDateInput.value = fmtDate(today);' +
+'slabDateInput.min = fmtDate(today);' +
 'document.getElementById("subToday").textContent = fmtDisp(today);' +
 'var tom = new Date(today); tom.setDate(tom.getDate()+1);' +
 'document.getElementById("subTom").textContent = fmtDisp(tom);' +
@@ -1717,10 +1732,20 @@ function handlePublicPageSlab(params) {
 '}' +
 'function selectDate(offset, el){' +
 '  var d = new Date(); d.setDate(d.getDate()+offset);' +
-'  document.getElementById("slab_date").value = fmtDate(d);' +
+'  var iso = fmtDate(d);' +
+'  document.getElementById("slab_date").value = iso;' +
 '  document.querySelectorAll(".date-chip").forEach(function(c){ c.classList.remove("active"); });' +
-'  el.classList.add("active");' +
+'  if(el) el.classList.add("active");' +
+'  var labels = ["ଆଜି (Today)", "ଆସନ୍ତାକାଲି (Tomorrow)", "ପରଦିନ (In 2 Days)"];' +
+'  document.getElementById("datePreviewText").textContent = "✓ ବଛାଯାଇଛି (Selected): " + (labels[offset] || fmtDisp(d));' +
 '}' +
+'function customDateSelected(val){' +
+'  if(!val) return;' +
+'  document.querySelectorAll(".date-chip").forEach(function(c){ c.classList.remove("active"); });' +
+'  var parts = val.split("-");' +
+'  var d = new Date(parts[0], parseInt(parts[1], 10) - 1, parts[2]);' +
+'  document.getElementById("datePreviewText").textContent = "✓ ବଛାଯାଇଛି (Custom Date): " + fmtDisp(d) + " (" + val + ")";' +
+'}'' +
 'function captureGPS(){' +
 '  if(navigator.geolocation){' +
 '    navigator.geolocation.getCurrentPosition(function(pos){' +
