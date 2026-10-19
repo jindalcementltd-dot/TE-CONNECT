@@ -174,6 +174,8 @@ export default function MeetingScreen() {
   const { data: allMeetings, refetch: refetchMeetings } = useQuery({
     queryKey: ['meetings'],
     queryFn: () => apiGetMeetings(),
+    refetchInterval: 12000,
+    refetchIntervalInBackground: false,
   });
 
   const onRefresh = useCallback(async () => {

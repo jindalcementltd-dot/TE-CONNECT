@@ -3,7 +3,7 @@ import { Vibration, Platform } from 'react-native';
 import Toast from 'react-native-toast-message';
 import { Audio } from 'expo-av';
 import * as Notifications from 'expo-notifications';
-import { Slab } from '../types';
+import { Slab, Meeting, User } from '../types';
 import { CHIME_BASE64 } from './chimeBase64';
 
 // Configure expo-notifications handler for native apps (foreground notifications)
@@ -21,6 +21,7 @@ if (Platform.OS !== 'web') {
 
 const NOTIFICATIONS_STORAGE_KEY = 'teconnect_notifications_v1';
 const SEEN_SLABS_KEY = 'teconnect_seen_slab_ids_v1';
+const SEEN_MEETINGS_KEY = 'teconnect_seen_meeting_ids_v1';
 
 export type NotificationType = 'SLAB' | 'PUNCH' | 'SALE' | 'MEETING' | 'DEALER' | 'SYSTEM';
 
@@ -391,32 +392,102 @@ export async function clearAllNotifications(): Promise<void> {
   await AsyncStorage.setItem(NOTIFICATIONS_STORAGE_KEY, JSON.stringify([]));
 }
 
-export async function checkAndNotifyNewSlabs(slabs: Slab[]): Promise<void> {
+export async function checkAndNotifyNewSlabs(slabs: Slab[], currentUser?: User | null): Promise<void> {
   if (!slabs || slabs.length === 0) return;
   try {
     const rawSeen = await AsyncStorage.getItem(SEEN_SLABS_KEY);
     const seenIds: string[] = rawSeen ? JSON.parse(rawSeen) : [];
+    const currentUserName = (currentUser?.name || '').trim().toLowerCase();
 
-    // Find new slabs from DEALER_QR or PUBLIC_LINK that haven't been notified yet
-    const newQrSlabs = slabs.filter(
-      s => s.slab_id && !seenIds.includes(s.slab_id) && (s.source === 'DEALER_QR' || s.source === 'PUBLIC_LINK')
-    );
+    // Initialize seen IDs on first launch so we don't spam notifications for old records
+    if (seenIds.length === 0) {
+      const initialSeen = slabs.map(s => s.slab_id).filter(Boolean).slice(-200);
+      await AsyncStorage.setItem(SEEN_SLABS_KEY, JSON.stringify(initialSeen));
+      return;
+    }
 
-    if (newQrSlabs.length > 0) {
-      for (const slab of newQrSlabs.slice(0, 3)) {
+    // Find new slabs that haven't been notified on this device yet
+    const newSlabs = slabs.filter(s => {
+      if (!s.slab_id) return false;
+      if (seenIds.includes(s.slab_id)) return false;
+      // If created by the current user on this device, skip notifying themself
+      const creator = (s.created_by || '').trim().toLowerCase();
+      if (creator && currentUserName && creator === currentUserName) return false;
+      return true;
+    });
+
+    if (newSlabs.length > 0) {
+      for (const slab of newSlabs.slice(0, 3)) {
+        const isQr = slab.source === 'DEALER_QR' || slab.source === 'PUBLIC_LINK';
+        const title = isQr
+          ? `🏗️ New QR Slab Booking! (${slab.dealer_name || 'Dealer'})`
+          : `🏗️ New Slab Scheduled! (${slab.dealer_name || 'Dealer'})`;
+        const by = slab.created_by ? `By ${slab.created_by} | ` : '';
+        const cement = slab.expected_cement ? `Cement: ${slab.expected_cement}` : '';
+        const contractor = slab.contractor_name ? `Contractor: ${slab.contractor_name}` : '';
+        const date = slab.slab_date ? `Date: ${slab.slab_date}` : '';
+        const body = [by, cement, contractor, date].filter(Boolean).join(' | ') || 'New slab scheduled';
+
         await addNotification(
-          `🏗️ New QR Slab Booking! (${slab.dealer_name || 'Dealer'})`,
-          `Cement: ${slab.expected_cement || '50 Bags'} | Date: ${slab.slab_date} | Contact: ${slab.contractor_name || slab.remark || 'Counter Booking'}`,
+          title,
+          body,
           'SLAB',
           { slab_id: slab.slab_id, dealer_id: slab.dealer_id }
         );
       }
-      const updatedSeen = Array.from(new Set([...seenIds, ...slabs.map(s => s.slab_id)])).slice(-200);
+      const updatedSeen = Array.from(new Set([...seenIds, ...slabs.map(s => s.slab_id).filter(Boolean)])).slice(-300);
       await AsyncStorage.setItem(SEEN_SLABS_KEY, JSON.stringify(updatedSeen));
-    } else if (seenIds.length === 0) {
-      // Initialize seen IDs with current records so existing records don't trigger bulk toasts
-      const initialSeen = slabs.map(s => s.slab_id).slice(-200);
-      await AsyncStorage.setItem(SEEN_SLABS_KEY, JSON.stringify(initialSeen));
+    }
+  } catch (e) {
+    // Ignore notification check error
+  }
+}
+
+export async function checkAndNotifyNewMeetings(meetings: Meeting[], currentUser?: User | null): Promise<void> {
+  if (!meetings || meetings.length === 0) return;
+  try {
+    const rawSeen = await AsyncStorage.getItem(SEEN_MEETINGS_KEY);
+    const seenIds: string[] = rawSeen ? JSON.parse(rawSeen) : [];
+    const currentUserName = (currentUser?.name || '').trim().toLowerCase();
+
+    // First time app opens: mark existing meetings as seen so we don't alert on past meetings
+    if (seenIds.length === 0) {
+      const initialSeen = meetings.map(m => m.meeting_id).filter(Boolean).slice(-200);
+      await AsyncStorage.setItem(SEEN_MEETINGS_KEY, JSON.stringify(initialSeen));
+      return;
+    }
+
+    // Find new meetings not seen yet
+    const newMeetings = meetings.filter(m => {
+      if (!m.meeting_id) return false;
+      if (seenIds.includes(m.meeting_id)) return false;
+      // If created by the current user on this device, skip notifying themself
+      const creator = (m.created_by || '').trim().toLowerCase();
+      if (creator && currentUserName && creator === currentUserName) return false;
+      return true;
+    });
+
+    if (newMeetings.length > 0) {
+      for (const meeting of newMeetings.slice(0, 3)) {
+        const typeLabel = meeting.meeting_type === 'CUSTOMER' 
+          ? 'Customer Meet' 
+          : (meeting.meeting_type === 'CONTRACTOR' ? 'Contractor Meet' : 'Meeting');
+        const title = `🤝 New Meeting: ${meeting.meeting_name || typeLabel}`;
+        const by = meeting.te || meeting.created_by || 'Team member';
+        const loc = meeting.location ? ` | 📍 ${meeting.location}` : '';
+        const date = meeting.meeting_date || 'Scheduled';
+        const attendees = meeting.people_count ? ` | 👥 ${meeting.people_count} attendees` : '';
+
+        await addNotification(
+          title,
+          `Scheduled by ${by}${loc} for ${date}${attendees}.`,
+          'MEETING',
+          { meeting_id: meeting.meeting_id }
+        );
+      }
+
+      const updatedSeen = Array.from(new Set([...seenIds, ...meetings.map(m => m.meeting_id).filter(Boolean)])).slice(-300);
+      await AsyncStorage.setItem(SEEN_MEETINGS_KEY, JSON.stringify(updatedSeen));
     }
   } catch (e) {
     // Ignore notification check error

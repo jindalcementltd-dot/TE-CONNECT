@@ -27,7 +27,7 @@ import { FontFamily } from '../../src/theme/typography';
 import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
 import { format, parseISO } from 'date-fns';
 import { Colors } from '../../src/theme/colors';
-import { getUnreadNotificationsCount, checkAndNotifyNewSlabs } from '../../src/services/notifications';
+import { getUnreadNotificationsCount, checkAndNotifyNewSlabs, checkAndNotifyNewMeetings } from '../../src/services/notifications';
 
 const { width } = Dimensions.get('window');
 
@@ -91,23 +91,36 @@ export default function HomeScreen() {
   const { data: allSlabs, refetch: refetchSlabs } = useQuery({ 
     queryKey: ['slabs'], 
     queryFn: () => apiGetSlabs(),
-    refetchInterval: 15000, // Poll every 15s in background while app is active
+    refetchInterval: 12000, // Poll every 12s in background while app is active
     refetchIntervalInBackground: false,
   });
 
-
-
-  const { data: allMeetings, refetch: refetchMeetings } = useQuery({ queryKey: ['meetings'], queryFn: () => apiGetMeetings() });
+  const { data: allMeetings, refetch: refetchMeetings } = useQuery({ 
+    queryKey: ['meetings'], 
+    queryFn: () => apiGetMeetings(),
+    refetchInterval: 12000, // Poll every 12s in background so all phones get instant updates
+    refetchIntervalInBackground: false,
+  });
 
   useEffect(() => {
     if (allSlabs && allSlabs.length > 0) {
       try {
-        checkAndNotifyNewSlabs(allSlabs).then(() => {
+        checkAndNotifyNewSlabs(allSlabs, user).then(() => {
           getUnreadNotificationsCount().then(setUnreadNotifCount).catch(() => {});
         }).catch(() => {});
       } catch {}
     }
-  }, [allSlabs]);
+  }, [allSlabs, user]);
+
+  useEffect(() => {
+    if (allMeetings && allMeetings.length > 0) {
+      try {
+        checkAndNotifyNewMeetings(allMeetings, user).then(() => {
+          getUnreadNotificationsCount().then(setUnreadNotifCount).catch(() => {});
+        }).catch(() => {});
+      } catch {}
+    }
+  }, [allMeetings, user]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);

@@ -12,6 +12,7 @@ import { Typography, FontFamily, FontSize } from '../../src/theme/typography';
 import { apiCreateMeeting } from '../../src/services/api';
 import { getUser } from '../../src/services/auth';
 import { currentDateISO } from '../../src/utils/helpers';
+import { addNotification } from '../../src/services/notifications';
 import { User, MeetingType } from '../../src/types';
 import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
 
@@ -37,6 +38,12 @@ export default function AddMeetingScreen() {
     onSuccess: (res) => {
       if (res.success) {
         Toast.show({ type: 'success', text1: 'Meeting Scheduled ✅', text2: 'Saved to Google Sheet successfully.' });
+        addNotification(
+          `🤝 Meeting Scheduled: ${meetingName || meetingType}`,
+          `Scheduled for ${meetingDate} in ${location || 'Jajpur'}.`,
+          'MEETING',
+          { meeting_id: res.data?.meeting_id }
+        ).catch(() => {});
         queryClient.invalidateQueries({ queryKey: ['meetings'] });
         queryClient.invalidateQueries({ queryKey: ['meetingTargetSummary'] });
         queryClient.invalidateQueries({ queryKey: ['todaySummary'] });
