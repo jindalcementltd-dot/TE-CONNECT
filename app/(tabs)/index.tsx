@@ -13,7 +13,7 @@ import {
   apiGetContractors, apiGetUsers, apiGetSlabs, apiGetMeetings,
   apiUpdateSlab, apiUpdateMeeting
 } from '../../src/services/api';
-import { getUser } from '../../src/services/auth';
+import { getUser, syncUserFromLiveList } from '../../src/services/auth';
 import {
   getGreeting, normalizeDate, currentMonthISO, formatDateShort, formatMonthYear, formatNumber
 } from '../../src/utils/helpers';
@@ -84,6 +84,17 @@ export default function HomeScreen() {
 
   const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: () => apiGetSettings() });
   const { data: usersList, refetch: refetchUsers } = useQuery({ queryKey: ['users'], queryFn: () => apiGetUsers() });
+
+  // Live profile & district sync when USERS sheet is updated
+  useEffect(() => {
+    if (usersList && usersList.length > 0) {
+      syncUserFromLiveList(usersList).then(updated => {
+        if (updated) {
+          setUser(updated);
+        }
+      }).catch(() => {});
+    }
+  }, [usersList]);
   const { data: allSales, refetch: refetchSales } = useQuery({ queryKey: ['sales'], queryFn: () => apiGetSales() });
   const { data: dealers, refetch: refetchDealers } = useQuery({ queryKey: ['dealers'], queryFn: () => apiGetDealers() });
   const { data: contractors, refetch: refetchContractors } = useQuery({ queryKey: ['contractors'], queryFn: () => apiGetContractors() });
@@ -167,63 +178,59 @@ export default function HomeScreen() {
   // SCOPED DEALERS FILTERED BY DISTRICT AND USER ROLE:
   const scopedDealers = useMemo(() => {
     const list = (dealers || []).filter(d => d && d.dealer_id);
-    if (user?.role === 'TE') {
-      const userDist = getUserDistrict(user);
-      const cleanName = (user.name || '').trim().toLowerCase();
-      return list.filter(d => {
-        const dDist = getDealerDistrict(d, usersList);
-        const isTeMatch = d.assigned_te && d.assigned_te.trim().toLowerCase() === cleanName;
-        return isTeMatch || dDist.toLowerCase() === userDist.toLowerCase();
-      });
-    }
     if (!activeDistrict || activeDistrict === 'ALL') return list;
-    return list.filter(d => getDealerDistrict(d, usersList).toLowerCase() === activeDistrict.toLowerCase());
+    return list.filter(d => {
+      const dDist = getDealerDistrict(d, usersList);
+      if (user?.role === 'TE') {
+        const cleanName = (user.name || '').trim().toLowerCase();
+        const isTeMatch = d.assigned_te && d.assigned_te.trim().toLowerCase() === cleanName;
+        return isTeMatch || dDist.toLowerCase() === activeDistrict.toLowerCase();
+      }
+      return dDist.toLowerCase() === activeDistrict.toLowerCase();
+    });
   }, [dealers, usersList, user, activeDistrict]);
 
   // MONTHLY DATA FILTERED BY selectedMonth AND DISTRICT
   const allSlabsList = useMemo(() => {
     const list = (allSlabs || []).filter(s => s && s.slab_date && normalizeDate(s.slab_date).startsWith(selectedMonth));
-    if (user?.role === 'TE') {
-      const userDist = getUserDistrict(user);
-      const cleanName = (user.name || '').trim().toLowerCase();
-      return list.filter(s => {
-        const sDist = getSlabDistrict(s, dealers, usersList);
-        const isTeMatch = s.assigned_te && s.assigned_te.trim().toLowerCase() === cleanName;
-        return isTeMatch || sDist.toLowerCase() === userDist.toLowerCase();
-      });
-    }
     if (!activeDistrict || activeDistrict === 'ALL') return list;
-    return list.filter(s => getSlabDistrict(s, dealers, usersList).toLowerCase() === activeDistrict.toLowerCase());
+    return list.filter(s => {
+      const sDist = getSlabDistrict(s, dealers, usersList);
+      if (user?.role === 'TE') {
+        const cleanName = (user.name || '').trim().toLowerCase();
+        const isTeMatch = s.assigned_te && s.assigned_te.trim().toLowerCase() === cleanName;
+        return isTeMatch || sDist.toLowerCase() === activeDistrict.toLowerCase();
+      }
+      return sDist.toLowerCase() === activeDistrict.toLowerCase();
+    });
   }, [allSlabs, selectedMonth, dealers, usersList, user, activeDistrict]);
 
   const allMeetingsList = useMemo(() => {
     const list = (allMeetings || []).filter(m => m && m.meeting_date && normalizeDate(m.meeting_date).startsWith(selectedMonth));
-    if (user?.role === 'TE') {
-      const userDist = getUserDistrict(user);
-      const cleanName = (user.name || '').trim().toLowerCase();
-      return list.filter(m => {
-        const mDist = getMeetingDistrict(m, usersList);
-        const isTeMatch = m.te && m.te.trim().toLowerCase() === cleanName;
-        return isTeMatch || mDist.toLowerCase() === userDist.toLowerCase();
-      });
-    }
     if (!activeDistrict || activeDistrict === 'ALL') return list;
-    return list.filter(m => getMeetingDistrict(m, usersList).toLowerCase() === activeDistrict.toLowerCase());
+    return list.filter(m => {
+      const mDist = getMeetingDistrict(m, usersList);
+      if (user?.role === 'TE') {
+        const cleanName = (user.name || '').trim().toLowerCase();
+        const isTeMatch = m.te && m.te.trim().toLowerCase() === cleanName;
+        return isTeMatch || mDist.toLowerCase() === activeDistrict.toLowerCase();
+      }
+      return mDist.toLowerCase() === activeDistrict.toLowerCase();
+    });
   }, [allMeetings, selectedMonth, usersList, user, activeDistrict]);
 
   const allSalesList = useMemo(() => {
     const list = (allSales || []).filter(s => s && s.sale_date && normalizeDate(s.sale_date).startsWith(selectedMonth));
-    if (user?.role === 'TE') {
-      const userDist = getUserDistrict(user);
-      const cleanName = (user.name || '').trim().toLowerCase();
-      return list.filter(s => {
-        const sDist = getSaleDistrict(s, dealers, usersList);
-        const isTeMatch = s.assigned_te && s.assigned_te.trim().toLowerCase() === cleanName;
-        return isTeMatch || sDist.toLowerCase() === userDist.toLowerCase();
-      });
-    }
     if (!activeDistrict || activeDistrict === 'ALL') return list;
-    return list.filter(s => getSaleDistrict(s, dealers, usersList).toLowerCase() === activeDistrict.toLowerCase());
+    return list.filter(s => {
+      const sDist = getSaleDistrict(s, dealers, usersList);
+      if (user?.role === 'TE') {
+        const cleanName = (user.name || '').trim().toLowerCase();
+        const isTeMatch = s.assigned_te && s.assigned_te.trim().toLowerCase() === cleanName;
+        return isTeMatch || sDist.toLowerCase() === activeDistrict.toLowerCase();
+      }
+      return sDist.toLowerCase() === activeDistrict.toLowerCase();
+    });
   }, [allSales, selectedMonth, dealers, usersList, user, activeDistrict]);
 
   const filteredActiveTrackers = useMemo(() => {
@@ -558,19 +565,14 @@ export default function HomeScreen() {
               <Text style={styles.userName} numberOfLines={1}>{firstName}</Text>
               <TouchableOpacity
                 style={styles.territoryRow}
-                onPress={() => {
-                  if (user?.role !== 'TE') setShowDistrictModal(true);
-                }}
-                disabled={user?.role === 'TE'}
+                onPress={() => setShowDistrictModal(true)}
                 activeOpacity={0.7}
               >
                 <Ionicons name="location-sharp" size={11} color={Colors.primary} style={{ marginRight: 2 }} />
                 <Text style={styles.territoryText} numberOfLines={1}>
-                  District {user?.role === 'TE' ? getUserDistrict(user) : activeDistrict}
+                  District {activeDistrict}
                 </Text>
-                {user?.role !== 'TE' && (
-                  <Ionicons name="chevron-down" size={10} color={Colors.primary} style={{ marginLeft: 3 }} />
-                )}
+                <Ionicons name="chevron-down" size={10} color={Colors.primary} style={{ marginLeft: 3 }} />
               </TouchableOpacity>
             </View>
           </View>
@@ -600,8 +602,8 @@ export default function HomeScreen() {
           />
         </View>
 
-        {/* DISTRICT SELECTOR BAR (For Admins / Managers) */}
-        {user?.role !== 'TE' && availableDistricts.length > 0 && (
+        {/* DISTRICT SELECTOR BAR (For All Users) */}
+        {availableDistricts.length > 0 && (
           <View style={styles.districtBarContainer}>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.districtBarScroll}>
               <Text style={styles.districtBarLabel}>📍 DISTRICT:</Text>
@@ -1105,6 +1107,59 @@ export default function HomeScreen() {
                     {isSelected && (
                       <Ionicons name="checkmark" size={18} color={Colors.primary} />
                     )}
+                  </TouchableOpacity>
+                );
+              }}
+            />
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* ── DISTRICT PICKER MODAL ── */}
+      <Modal
+        visible={showDistrictModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowDistrictModal(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowDistrictModal(false)}
+        >
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select Territory / District</Text>
+              <TouchableOpacity onPress={() => setShowDistrictModal(false)} style={styles.modalCloseBtn}>
+                <Ionicons name="close" size={20} color={Colors.textPrimary} />
+              </TouchableOpacity>
+            </View>
+            <FlatList
+              data={['ALL', ...availableDistricts]}
+              keyExtractor={(item) => item}
+              renderItem={({ item }) => {
+                const isSelected = item === 'ALL' ? activeDistrict === 'ALL' : activeDistrict.toLowerCase() === item.toLowerCase();
+                const label = item === 'ALL' ? 'All Districts (Full Team)' : `District ${item}`;
+
+                return (
+                  <TouchableOpacity
+                    style={[styles.monthOptionRow, isSelected && styles.monthOptionSelected]}
+                    onPress={() => {
+                      setActiveDistrict(item);
+                      setShowDistrictModal(false);
+                    }}
+                  >
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                      <Ionicons
+                        name={isSelected ? "radio-button-on" : "radio-button-off"}
+                        size={18}
+                        color={isSelected ? Colors.primary : Colors.textMuted}
+                      />
+                      <Text style={[styles.monthOptionText, isSelected && styles.monthOptionTextSelected]}>
+                        {label}
+                      </Text>
+                    </View>
+                    {isSelected && <Ionicons name="checkmark" size={18} color={Colors.primary} />}
                   </TouchableOpacity>
                 );
               }}

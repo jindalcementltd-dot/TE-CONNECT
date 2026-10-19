@@ -8,7 +8,7 @@ import { router } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { Colors } from '../../src/theme/colors';
 import { apiGetSlabs, apiGetUsers, apiGetDealers } from '../../src/services/api';
-import { getUser } from '../../src/services/auth';
+import { getUser, syncUserFromLiveList } from '../../src/services/auth';
 import { currentMonthISO, normalizeDate } from '../../src/utils/helpers';
 import {
   getUserDistrict, getSlabDistrict, getAvailableDistricts
@@ -168,6 +168,17 @@ export default function SlabScreen() {
     queryFn: () => apiGetUsers(),
   });
 
+  // Live profile & district sync when USERS sheet is updated
+  useEffect(() => {
+    if (usersList && usersList.length > 0) {
+      syncUserFromLiveList(usersList).then(updated => {
+        if (updated) {
+          setUser(updated);
+        }
+      }).catch(() => {});
+    }
+  }, [usersList]);
+
   const { data: dealers } = useQuery({
     queryKey: ['dealers'],
     queryFn: () => apiGetDealers(),
@@ -176,6 +187,7 @@ export default function SlabScreen() {
   const { data: slabs, isLoading, refetch } = useQuery({
     queryKey: ['slabs'],
     queryFn: () => apiGetSlabs(),
+    refetchInterval: 12000,
   });
 
   const onRefresh = useCallback(async () => {
@@ -194,17 +206,17 @@ export default function SlabScreen() {
   // Filter slabs strictly by District and TE role
   const scopedRawSlabs = useMemo(() => {
     const list = (rawSlabs || []).filter(s => s && s.slab_date);
-    if (user?.role === 'TE') {
-      const cleanName = (user.name || '').trim().toLowerCase();
-      return list.filter(s => {
-        const sDist = getSlabDistrict(s, dealers, usersList);
-        const isTeMatch = s.assigned_te && s.assigned_te.trim().toLowerCase() === cleanName;
-        return isTeMatch || sDist.toLowerCase() === userDistrict.toLowerCase();
-      });
-    }
     if (!activeDistrict || activeDistrict === 'ALL') return list;
-    return list.filter(s => getSlabDistrict(s, dealers, usersList).toLowerCase() === activeDistrict.toLowerCase());
-  }, [rawSlabs, user, userDistrict, activeDistrict, dealers, usersList]);
+    return list.filter(s => {
+      const sDist = getSlabDistrict(s, dealers, usersList);
+      if (user?.role === 'TE') {
+        const cleanName = (user.name || '').trim().toLowerCase();
+        const isTeMatch = s.assigned_te && s.assigned_te.trim().toLowerCase() === cleanName;
+        return isTeMatch || sDist.toLowerCase() === activeDistrict.toLowerCase();
+      }
+      return sDist.toLowerCase() === activeDistrict.toLowerCase();
+    });
+  }, [rawSlabs, user, activeDistrict, dealers, usersList]);
 
   // Compute available months from scoped slab dates
   const availableMonths = useMemo(() => {
@@ -311,7 +323,7 @@ export default function SlabScreen() {
         <View>
           <Text style={styles.headerTitle}>Slab Castings</Text>
           <Text style={styles.headerSub}>
-            District {user?.role === 'TE' ? userDistrict : activeDistrict} • {user?.role === 'TE' ? (user.name || 'My Slabs') : 'Consolidated Team'}
+            District {activeDistrict} • {user?.role === 'TE' ? (user.name || 'My Slabs') : 'Consolidated Team'}
           </Text>
         </View>
         <TouchableOpacity
@@ -330,8 +342,8 @@ export default function SlabScreen() {
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#800E20" />}
       >
-        {/* DISTRICT SELECTOR BAR (For Admins / Managers) */}
-        {user?.role !== 'TE' && availableDistricts.length > 0 && (
+        {/* DISTRICT SELECTOR BAR (For All Users) */}
+        {availableDistricts.length > 0 && (
           <View style={styles.districtBarContainer}>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.districtBarScroll}>
               <Text style={styles.districtBarLabel}>📍 DISTRICT:</Text>

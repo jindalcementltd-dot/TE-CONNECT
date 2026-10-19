@@ -8,7 +8,7 @@ import { router } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { Colors } from '../../src/theme/colors';
 import { apiGetMeetings, apiGetUsers } from '../../src/services/api';
-import { getUser } from '../../src/services/auth';
+import { getUser, syncUserFromLiveList } from '../../src/services/auth';
 import { currentMonthISO, formatPercent, normalizeDate } from '../../src/utils/helpers';
 import { getUserDistrict, getMeetingDistrict, getAvailableDistricts } from '../../src/utils/district';
 import { Meeting, User } from '../../src/types';
@@ -171,6 +171,17 @@ export default function MeetingScreen() {
     queryFn: () => apiGetUsers(),
   });
 
+  // Live profile & district sync when USERS sheet is updated
+  useEffect(() => {
+    if (usersList && usersList.length > 0) {
+      syncUserFromLiveList(usersList).then(updated => {
+        if (updated) {
+          setUser(updated);
+        }
+      }).catch(() => {});
+    }
+  }, [usersList]);
+
   const { data: allMeetings, refetch: refetchMeetings } = useQuery({
     queryKey: ['meetings'],
     queryFn: () => apiGetMeetings(),
@@ -191,17 +202,16 @@ export default function MeetingScreen() {
   // SCOPED MEETINGS BY DISTRICT AND USER ROLE:
   const scopedRawMeetings = useMemo(() => {
     const list = (allMeetings || []).filter(m => m && m.meeting_date);
-    if (user?.role === 'TE') {
-      const userDist = getUserDistrict(user);
-      const cleanName = (user.name || '').trim().toLowerCase();
-      return list.filter(m => {
-        const mDist = getMeetingDistrict(m, usersList);
-        const isTeMatch = m.te && m.te.trim().toLowerCase() === cleanName;
-        return isTeMatch || mDist.toLowerCase() === userDist.toLowerCase();
-      });
-    }
     if (!activeDistrict || activeDistrict === 'ALL') return list;
-    return list.filter(m => getMeetingDistrict(m, usersList).toLowerCase() === activeDistrict.toLowerCase());
+    return list.filter(m => {
+      const mDist = getMeetingDistrict(m, usersList);
+      if (user?.role === 'TE') {
+        const cleanName = (user.name || '').trim().toLowerCase();
+        const isTeMatch = m.te && m.te.trim().toLowerCase() === cleanName;
+        return isTeMatch || mDist.toLowerCase() === activeDistrict.toLowerCase();
+      }
+      return mDist.toLowerCase() === activeDistrict.toLowerCase();
+    });
   }, [allMeetings, usersList, user, activeDistrict]);
 
   const rawMeetings = scopedRawMeetings;
@@ -313,7 +323,7 @@ export default function MeetingScreen() {
         <View>
           <Text style={styles.headerTitle}>Meetings Command</Text>
           <Text style={styles.headerSub}>
-            District {user?.role === 'TE' ? getUserDistrict(user) : activeDistrict} • {user?.role === 'TE' ? (user.name || 'My Territory') : 'Consolidated Team'}
+            District {activeDistrict} • {user?.role === 'TE' ? (user.name || 'My Territory') : 'Consolidated Team'}
           </Text>
         </View>
         <TouchableOpacity
@@ -326,8 +336,8 @@ export default function MeetingScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* DISTRICT SELECTOR BAR (For Admins / Managers) */}
-      {user?.role !== 'TE' && availableDistricts.length > 0 && (
+      {/* DISTRICT SELECTOR BAR (For All Users) */}
+      {availableDistricts.length > 0 && (
         <View style={styles.districtBarContainer}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.districtBarScroll}>
             <Text style={styles.districtBarLabel}>📍 DISTRICT:</Text>

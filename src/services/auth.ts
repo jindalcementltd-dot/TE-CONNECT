@@ -201,6 +201,49 @@ export async function getUser(): Promise<User | null> {
   return session?.user ?? null;
 }
 
+/**
+ * Live sync: Updates the locally stored user profile (district, territory, role, team)
+ * whenever a fresh USERS list is fetched from Google Sheets.
+ */
+export async function syncUserFromLiveList(usersList?: User[] | null): Promise<User | null> {
+  if (!usersList || usersList.length === 0) return getUser();
+  const current = await getUser();
+  if (!current) return null;
+
+  const found = usersList.find(u => {
+    if (!u) return false;
+    const sameLogin = u.login_id && current.login_id && u.login_id.trim().toLowerCase() === current.login_id.trim().toLowerCase();
+    const sameId = u.user_id && current.user_id && u.user_id === current.user_id;
+    return sameLogin || sameId;
+  });
+
+  if (found) {
+    const hasChanged =
+      current.district !== found.district ||
+      current.territory !== found.territory ||
+      current.role !== found.role ||
+      current.team !== found.team ||
+      current.name !== found.name ||
+      current.active !== found.active;
+
+    if (hasChanged) {
+      const updatedUser: User = {
+        ...current,
+        ...found,
+      };
+      const session = await getSession();
+      if (session) {
+        const newSession = { ...session, user: updatedUser };
+        memorySession = newSession;
+        notifyListeners(newSession);
+        setStorageItem(SESSION_KEY, JSON.stringify(newSession)).catch(() => {});
+      }
+      return updatedUser;
+    }
+  }
+  return current;
+}
+
 export async function logout(): Promise<void> {
   memorySession = null;
   memoryLoaded = true;
