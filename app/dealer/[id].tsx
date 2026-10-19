@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity,
   Platform, ActivityIndicator, Share, Alert, Linking, Modal, Dimensions, Image,
@@ -9,6 +9,7 @@ import QRCode from 'react-native-qrcode-svg';
 import Toast from 'react-native-toast-message';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
+import { captureRef } from 'react-native-view-shot';
 import { Colors } from '../../src/theme/colors';
 import { Spacing, BorderRadius } from '../../src/theme/spacing';
 import { Typography, FontFamily, FontSize } from '../../src/theme/typography';
@@ -20,6 +21,8 @@ export default function DealerQRScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const queryClient = useQueryClient();
   const [qrRef, setQrRef] = useState<any>(null);
+  const posterRef = useRef<View>(null);
+  const modalPosterRef = useRef<View>(null);
   const [showStandeeModal, setShowStandeeModal] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [qrViewMode, setQrViewMode] = useState<'poster' | 'simple'>('poster');
@@ -113,194 +116,246 @@ export default function DealerQRScreen() {
   };
 
   // Download Full HD Standee Poster
-  const handleDownloadPoster = () => {
-    if (!qrRef) {
-      Toast.show({ type: 'error', text1: 'QR Not Ready', text2: 'Please wait for QR to load.' });
-      return;
-    }
-
+  const handleDownloadPoster = async () => {
     setDownloading(true);
-    qrRef.toDataURL(async (qrBase64: string) => {
-      try {
-        const cleanName = (dealer.dealer_name || 'Dealer').replace(/[^a-zA-Z0-9_-]/g, '_');
 
-        if (Platform.OS === 'web' && typeof window !== 'undefined') {
-          // Preload QR image
-          const qrImg = new (window as any).Image();
-          qrImg.src = `data:image/png;base64,${qrBase64}`;
-          await new Promise<void>((resolve) => {
-            qrImg.onload = () => resolve();
-            qrImg.onerror = () => resolve();
-          });
+    if (Platform.OS === 'web') {
+      if (!qrRef) {
+        Toast.show({ type: 'error', text1: 'QR Not Ready', text2: 'Please wait for QR to load.' });
+        setDownloading(false);
+        return;
+      }
 
-          // Attempt to load official standee template image
-          const bgImg = new (window as any).Image();
-          bgImg.crossOrigin = 'anonymous';
-          let bgLoaded = false;
+      qrRef.toDataURL(async (qrBase64: string) => {
+        try {
+          const cleanName = (dealer.dealer_name || 'Dealer').replace(/[^a-zA-Z0-9_-]/g, '_');
 
-          await new Promise<void>((resolve) => {
-            const timeout = setTimeout(() => resolve(), 2500); // 2.5s safeguard
-            bgImg.onload = () => {
-              clearTimeout(timeout);
-              bgLoaded = true;
-              resolve();
-            };
-            bgImg.onerror = () => {
-              clearTimeout(timeout);
-              // Fallback to direct public path
-              const fallback = new (window as any).Image();
-              fallback.crossOrigin = 'anonymous';
-              fallback.onload = () => {
-                bgImg.src = fallback.src;
+          if (typeof window !== 'undefined') {
+            // Preload QR image
+            const qrImg = new (window as any).Image();
+            qrImg.src = `data:image/png;base64,${qrBase64}`;
+            await new Promise<void>((resolve) => {
+              qrImg.onload = () => resolve();
+              qrImg.onerror = () => resolve();
+            });
+
+            // Attempt to load official standee template image
+            const bgImg = new (window as any).Image();
+            bgImg.crossOrigin = 'anonymous';
+            let bgLoaded = false;
+
+            await new Promise<void>((resolve) => {
+              const timeout = setTimeout(() => resolve(), 2500); // 2.5s safeguard
+              bgImg.onload = () => {
+                clearTimeout(timeout);
                 bgLoaded = true;
                 resolve();
               };
-              fallback.onerror = () => resolve();
-              fallback.src = '/qr-standee-template.jpg';
-            };
-            bgImg.src = '/qr-standee-template.jpg';
-          });
-
-          const canvas = document.createElement('canvas');
-          canvas.width = 682;
-          canvas.height = 1024;
-          const ctx = canvas.getContext('2d');
-
-          if (ctx) {
-            if (bgLoaded) {
-              // Draw using loaded official background template
-              ctx.drawImage(bgImg, 0, 0, 682, 1024);
-              ctx.drawImage(qrImg, 74, 624, 214, 214);
-
-              ctx.fillStyle = '#0F172A';
-              ctx.font = 'bold 13px sans-serif';
-              ctx.textAlign = 'center';
-              ctx.fillText(dealer.dealer_name, 181, 834);
-
-              ctx.fillStyle = '#FFFFFF';
-              ctx.font = '900 17px sans-serif';
-              ctx.textAlign = 'center';
-              ctx.fillText(dealer.dealer_name.toUpperCase(), 181, 874);
-
-              ctx.fillStyle = '#FEF08A';
-              ctx.font = 'bold 13px sans-serif';
-              ctx.fillText(`📍 ${dealer.area || dealer.address || 'Jajpur Territory'}`, 181, 894);
-
-              if (dealer.phone) {
-                ctx.fillStyle = '#FFFFFF';
-                ctx.font = '600 12px sans-serif';
-                ctx.fillText(`📞 ${dealer.phone}`, 181, 912);
-              }
-            } else {
-              // FULL HIGH-DEFINITION STANDEE DRAWN PROGRAMMATICALLY — NEVER FAILS!
-              const grad = ctx.createLinearGradient(0, 0, 0, 1024);
-              grad.addColorStop(0, '#7A0C16');
-              grad.addColorStop(0.35, '#C91F2B');
-              grad.addColorStop(0.7, '#A91420');
-              grad.addColorStop(1, '#50080E');
-              ctx.fillStyle = grad;
-              ctx.fillRect(0, 0, 682, 1024);
-
-              // Top Gold Trim
-              ctx.fillStyle = '#F59E0B';
-              ctx.fillRect(0, 0, 682, 12);
-
-              // Top Header
-              ctx.fillStyle = '#FFFFFF';
-              ctx.font = '900 32px sans-serif';
-              ctx.textAlign = 'center';
-              ctx.fillText('🏗️ TE CONNECT', 341, 68);
-
-              ctx.fillStyle = '#FEF08A';
-              ctx.font = 'bold 15px sans-serif';
-              ctx.fillText('ADANI ACC CEMENT · JAJPUR TERRITORY', 341, 98);
-
-              // White Card Box for Standee QR
-              ctx.fillStyle = '#FFFFFF';
-              if ((ctx as any).roundRect) {
-                (ctx as any).roundRect(76, 130, 530, 570, 24);
-              } else {
-                ctx.fillRect(76, 130, 530, 570);
-              }
-              ctx.fill();
-
-              // Card Title
-              ctx.fillStyle = '#991B1B';
-              ctx.font = '900 24px sans-serif';
-              ctx.fillText('SLAB CASTING BOOKING', 341, 180);
-
-              ctx.fillStyle = '#4B5563';
-              ctx.font = 'bold 14px sans-serif';
-              ctx.fillText('ସ୍ଲାବ୍ ଢଳାଇ ପାଇଁ ଏଠାରେ QR ସ୍କାନ୍ କରନ୍ତୁ', 341, 206);
-
-              // QR Code in Center
-              ctx.drawImage(qrImg, 161, 230, 360, 360);
-
-              // Guidance below QR
-              ctx.fillStyle = '#1E293B';
-              ctx.font = 'bold 14px sans-serif';
-              ctx.fillText('1. Scan QR  ·  2. Enter Mobile  ·  3. Slab Booked!', 341, 630);
-
-              ctx.fillStyle = '#C91F2B';
-              ctx.font = 'bold 12px sans-serif';
-              ctx.fillText('Camera / PhonePe / Paytm / Google Lens', 341, 655);
-
-              // Dealer Identity Banner Box
-              ctx.fillStyle = '#0F172A';
-              if ((ctx as any).roundRect) {
-                (ctx as any).roundRect(76, 725, 530, 180, 20);
-              } else {
-                ctx.fillRect(76, 725, 530, 180);
-              }
-              ctx.fill();
-
-              ctx.fillStyle = '#F59E0B';
-              ctx.font = 'bold 13px sans-serif';
-              ctx.fillText('AUTHORIZED DEALER COUNTER', 341, 762);
-
-              ctx.fillStyle = '#FFFFFF';
-              ctx.font = '900 23px sans-serif';
-              ctx.fillText(dealer.dealer_name.toUpperCase(), 341, 802);
-
-              ctx.fillStyle = '#E2E8F0';
-              ctx.font = 'bold 14px sans-serif';
-              ctx.fillText(`📍 ${dealer.area || dealer.address || 'Jajpur Territory'}`, 341, 836);
-
-              if (dealer.phone) {
-                ctx.fillStyle = '#38BDF8';
-                ctx.font = 'bold 14px sans-serif';
-                ctx.fillText(`📞 Contact: ${dealer.phone}`, 341, 866);
-              }
-
-              // Footer
-              ctx.fillStyle = '#CBD5E1';
-              ctx.font = '12px sans-serif';
-              ctx.fillText('TE CONNECT Technical Engineering Platform · All Rights Reserved', 341, 985);
-            }
-
-            const posterData = canvas.toDataURL('image/png');
-            const link = document.createElement('a');
-            link.href = posterData;
-            link.download = `TE_CONNECT_Standee_${cleanName}.png`;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-
-            Toast.show({
-              type: 'success',
-              text1: 'Full Standee Poster Saved! 🖼️',
-              text2: 'High-definition counter standee downloaded.',
+              bgImg.onerror = () => {
+                clearTimeout(timeout);
+                // Fallback to direct public path
+                const fallback = new (window as any).Image();
+                fallback.crossOrigin = 'anonymous';
+                fallback.onload = () => {
+                  bgImg.src = fallback.src;
+                  bgLoaded = true;
+                  resolve();
+                };
+                fallback.onerror = () => resolve();
+                fallback.src = '/qr-standee-template.jpg';
+              };
+              bgImg.src = '/qr-standee-template.jpg';
             });
+
+            const canvas = document.createElement('canvas');
+            canvas.width = 682;
+            canvas.height = 1024;
+            const ctx = canvas.getContext('2d');
+
+            if (ctx) {
+              if (bgLoaded) {
+                // Draw using loaded official background template
+                ctx.drawImage(bgImg, 0, 0, 682, 1024);
+                ctx.drawImage(qrImg, 74, 624, 214, 214);
+
+                ctx.fillStyle = '#0F172A';
+                ctx.font = 'bold 13px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText(dealer.dealer_name, 181, 834);
+
+                ctx.fillStyle = '#FFFFFF';
+                ctx.font = '900 17px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText(dealer.dealer_name.toUpperCase(), 181, 874);
+
+                ctx.fillStyle = '#FEF08A';
+                ctx.font = 'bold 13px sans-serif';
+                ctx.fillText(`📍 ${dealer.area || dealer.address || 'Jajpur Territory'}`, 181, 894);
+
+                if (dealer.phone) {
+                  ctx.fillStyle = '#FFFFFF';
+                  ctx.font = '600 12px sans-serif';
+                  ctx.fillText(`📞 ${dealer.phone}`, 181, 912);
+                }
+              } else {
+                // FULL HIGH-DEFINITION STANDEE DRAWN PROGRAMMATICALLY — NEVER FAILS!
+                const grad = ctx.createLinearGradient(0, 0, 0, 1024);
+                grad.addColorStop(0, '#7A0C16');
+                grad.addColorStop(0.35, '#C91F2B');
+                grad.addColorStop(0.7, '#A91420');
+                grad.addColorStop(1, '#50080E');
+                ctx.fillStyle = grad;
+                ctx.fillRect(0, 0, 682, 1024);
+
+                // Top Gold Trim
+                ctx.fillStyle = '#F59E0B';
+                ctx.fillRect(0, 0, 682, 12);
+
+                // Top Header
+                ctx.fillStyle = '#FFFFFF';
+                ctx.font = '900 32px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText('🏗️ TE CONNECT', 341, 68);
+
+                ctx.fillStyle = '#FEF08A';
+                ctx.font = 'bold 15px sans-serif';
+                ctx.fillText('ADANI ACC CEMENT · JAJPUR TERRITORY', 341, 98);
+
+                // White Card Box for Standee QR
+                ctx.fillStyle = '#FFFFFF';
+                if ((ctx as any).roundRect) {
+                  (ctx as any).roundRect(76, 130, 530, 570, 24);
+                } else {
+                  ctx.fillRect(76, 130, 530, 570);
+                }
+                ctx.fill();
+
+                // Card Title
+                ctx.fillStyle = '#991B1B';
+                ctx.font = '900 24px sans-serif';
+                ctx.fillText('SLAB CASTING BOOKING', 341, 180);
+
+                ctx.fillStyle = '#4B5563';
+                ctx.font = 'bold 14px sans-serif';
+                ctx.fillText('ସ୍ଲାବ୍ ଢଳାଇ ପାଇଁ ଏଠାରେ QR ସ୍କାନ୍ କରନ୍ତୁ', 341, 206);
+
+                // QR Code in Center
+                ctx.drawImage(qrImg, 161, 230, 360, 360);
+
+                // Guidance below QR
+                ctx.fillStyle = '#1E293B';
+                ctx.font = 'bold 14px sans-serif';
+                ctx.fillText('1. Scan QR  ·  2. Enter Mobile  ·  3. Slab Booked!', 341, 630);
+
+                ctx.fillStyle = '#C91F2B';
+                ctx.font = 'bold 12px sans-serif';
+                ctx.fillText('Camera / PhonePe / Paytm / Google Lens', 341, 655);
+
+                // Dealer Identity Banner Box
+                ctx.fillStyle = '#0F172A';
+                if ((ctx as any).roundRect) {
+                  (ctx as any).roundRect(76, 725, 530, 180, 20);
+                } else {
+                  ctx.fillRect(76, 725, 530, 180);
+                }
+                ctx.fill();
+
+                ctx.fillStyle = '#F59E0B';
+                ctx.font = 'bold 13px sans-serif';
+                ctx.fillText('AUTHORIZED DEALER COUNTER', 341, 762);
+
+                ctx.fillStyle = '#FFFFFF';
+                ctx.font = '900 23px sans-serif';
+                ctx.fillText(dealer.dealer_name.toUpperCase(), 341, 802);
+
+                ctx.fillStyle = '#E2E8F0';
+                ctx.font = 'bold 14px sans-serif';
+                ctx.fillText(`📍 ${dealer.area || dealer.address || 'Jajpur Territory'}`, 341, 836);
+
+                if (dealer.phone) {
+                  ctx.fillStyle = '#38BDF8';
+                  ctx.font = 'bold 14px sans-serif';
+                  ctx.fillText(`📞 Contact: ${dealer.phone}`, 341, 866);
+                }
+
+                // Footer
+                ctx.fillStyle = '#CBD5E1';
+                ctx.font = '12px sans-serif';
+                ctx.fillText('TE CONNECT Technical Engineering Platform · All Rights Reserved', 341, 985);
+              }
+
+              const posterData = canvas.toDataURL('image/png');
+              const link = document.createElement('a');
+              link.href = posterData;
+              link.download = `TE_CONNECT_Standee_${cleanName}.png`;
+              document.body.appendChild(link);
+              link.click();
+              document.body.removeChild(link);
+
+              Toast.show({
+                type: 'success',
+                text1: 'Full Standee Poster Saved! 🖼️',
+                text2: 'High-definition counter standee downloaded.',
+              });
+            }
           }
-        } else {
+        } catch (err: any) {
           handleDownloadQR();
+        } finally {
+          setDownloading(false);
+        }
+      });
+    } else {
+      // NATIVE MOBILE (Android & iOS) — captures complete standee poster
+      try {
+        const targetRef = (showStandeeModal && modalPosterRef.current) ? modalPosterRef : posterRef;
+        if (!targetRef.current) {
+          throw new Error('Poster reference not ready');
+        }
+
+        const uri = await captureRef(targetRef.current, {
+          format: 'png',
+          quality: 1.0,
+          result: 'tmpfile',
+        });
+
+        const cleanName = (dealer.dealer_name || 'Dealer').replace(/[^a-zA-Z0-9_-]/g, '_');
+        const fileUri = `${FileSystem.cacheDirectory}TE_CONNECT_Standee_${cleanName}.png`;
+
+        await FileSystem.copyAsync({
+          from: uri,
+          to: fileUri,
+        });
+
+        if (await Sharing.isAvailableAsync()) {
+          await Sharing.shareAsync(fileUri, {
+            mimeType: 'image/png',
+            dialogTitle: `Save or Print Standee Poster for ${dealer.dealer_name}`,
+            UTI: 'public.png',
+          });
+          Toast.show({
+            type: 'success',
+            text1: 'Full Standee Ready! 🖼️',
+            text2: 'Save to Photos, Gallery, or Share on WhatsApp.',
+          });
+        } else {
+          Toast.show({ type: 'success', text1: 'Standee Saved', text2: fileUri });
         }
       } catch (err: any) {
+        console.warn('captureRef failed, falling back to QR:', err);
         handleDownloadQR();
       } finally {
         setDownloading(false);
       }
-    });
+    }
+  };
+
+  const handleSharePosterImage = () => {
+    if (Platform.OS === 'web') {
+      handleWhatsAppShare();
+    } else {
+      handleDownloadPoster();
+    }
   };
 
   const handleShare = async () => {
@@ -610,6 +665,52 @@ export default function DealerQRScreen() {
         <View style={{ height: Spacing['5xl'] }} />
       </ScrollView>
 
+      {/* Off-screen Standee Frame for instant background capture on mobile */}
+      <View
+        style={{
+          position: 'absolute',
+          left: 0,
+          top: 0,
+          opacity: 0.01,
+          zIndex: -999,
+        }}
+        pointerEvents="none"
+      >
+        <View ref={posterRef} collapsable={false} style={modalStyles.standeeFrame}>
+          <Image
+            source={require('../../assets/images/qr-standee-template.jpg')}
+            style={modalStyles.standeeBg}
+            resizeMode="cover"
+          />
+
+          <View style={modalStyles.standeeQrBox}>
+            <QRCode
+              value={slabLink}
+              size={94}
+              color="#000000"
+              backgroundColor="#FFFFFF"
+            />
+            <Text style={modalStyles.standeeQrDealer} numberOfLines={1}>
+              {dealer.dealer_name}
+            </Text>
+          </View>
+
+          <View style={modalStyles.standeeBannerBox}>
+            <Text style={modalStyles.standeeBannerName} numberOfLines={1}>
+              {dealer.dealer_name.toUpperCase()}
+            </Text>
+            <Text style={modalStyles.standeeBannerArea} numberOfLines={1}>
+              📍 {dealer.area || dealer.address || 'Jajpur Territory'}
+            </Text>
+            {dealer.phone ? (
+              <Text style={modalStyles.standeeBannerPhone}>
+                📞 {dealer.phone}
+              </Text>
+            ) : null}
+          </View>
+        </View>
+      </View>
+
       {/* Standee Poster Modal - Ready to screenshot / print for counter */}
       <Modal visible={showStandeeModal} animationType="slide" transparent>
         <View style={modalStyles.overlay}>
@@ -626,7 +727,7 @@ export default function DealerQRScreen() {
 
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={modalStyles.posterScroll}>
               {/* Official Adani ACC Cement Standee Poster Container */}
-              <View style={modalStyles.standeeFrame}>
+              <View ref={modalPosterRef} collapsable={false} style={modalStyles.standeeFrame}>
                 <Image
                   source={require('../../assets/images/qr-standee-template.jpg')}
                   style={modalStyles.standeeBg}
@@ -687,7 +788,7 @@ export default function DealerQRScreen() {
 
               <TouchableOpacity
                 style={modalStyles.modalShareBtnFull}
-                onPress={handleWhatsAppShare}
+                onPress={handleSharePosterImage}
                 activeOpacity={0.85}
               >
                 <Ionicons name="logo-whatsapp" size={18} color="#FFFFFF" style={{ marginRight: 6 }} />
