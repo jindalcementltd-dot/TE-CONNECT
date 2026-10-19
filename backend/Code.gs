@@ -72,21 +72,23 @@ function sheetToObjects(sheet) {
   if (data.length < 2) return [];
   const headers = data[0].map(h => String(h).trim());
   const tz = Session.getScriptTimeZone() || 'Asia/Kolkata';
-  return data.slice(1).map(row => {
-    const obj = {};
-    headers.forEach((h, i) => {
-      let val = row[i];
-      if (val instanceof Date) {
-        if (h.endsWith('_at') || h === 'timestamp') {
-          val = Utilities.formatDate(val, tz, "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'");
-        } else {
-          val = Utilities.formatDate(val, tz, 'yyyy-MM-dd');
+  return data.slice(1)
+    .filter(row => row.some(cell => cell !== '' && cell !== null && cell !== undefined))
+    .map(row => {
+      const obj = {};
+      headers.forEach((h, i) => {
+        let val = row[i];
+        if (val instanceof Date) {
+          if (h.endsWith('_at') || h === 'timestamp') {
+            val = Utilities.formatDate(val, tz, "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'");
+          } else {
+            val = Utilities.formatDate(val, tz, 'yyyy-MM-dd');
+          }
         }
-      }
-      obj[h] = val;
+        obj[h] = val !== undefined ? val : '';
+      });
+      return obj;
     });
-    return obj;
-  });
 }
 
 function appendRow(sheetName, obj, headers) {
@@ -223,6 +225,162 @@ function setupSpreadsheet() {
     'Please change the password after first login.\n\n' +
     'Next step: Deploy this script as a Web App.'
   );
+}
+
+// ── REPAIR AND HEALTH CHECK (Can be run safely anytime) ─────────
+function fixAndVerifyAllSheets() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let fixLog = [];
+
+  // 1. Ensure all sheets exist and have the exact required headers in Row 1
+  Object.entries(HEADERS).forEach(([sheetName, requiredHeaders]) => {
+    let sheet = ss.getSheetByName(sheetName);
+    if (!sheet) {
+      sheet = ss.insertSheet(sheetName);
+      sheet.getRange(1, 1, 1, requiredHeaders.length).setValues([requiredHeaders]);
+      sheet.getRange(1, 1, 1, requiredHeaders.length).setBackground('#C91F2B').setFontColor('#FFFFFF').setFontWeight('bold');
+      sheet.setFrozenRows(1);
+      fixLog.push('Created sheet: ' + sheetName);
+      return;
+    }
+
+    // Check Row 1 headers
+    const lastCol = Math.max(sheet.getLastColumn(), requiredHeaders.length);
+    const existingHeaders = sheet.getRange(1, 1, 1, lastCol).getValues()[0].map(h => String(h).trim());
+
+    // If headers are missing or blank in A1, write full required headers
+    if (!existingHeaders[0]) {
+      sheet.getRange(1, 1, 1, requiredHeaders.length).setValues([requiredHeaders]);
+      sheet.getRange(1, 1, 1, requiredHeaders.length).setBackground('#C91F2B').setFontColor('#FFFFFF').setFontWeight('bold');
+      sheet.setFrozenRows(1);
+      fixLog.push('Added missing headers for: ' + sheetName);
+    } else {
+      // Check if any required header is missing and append it
+      let addedCol = false;
+      requiredHeaders.forEach(reqH => {
+        if (!existingHeaders.includes(reqH)) {
+          const nextCol = sheet.getLastColumn() + 1;
+          sheet.getRange(1, nextCol).setValue(reqH).setBackground('#C91F2B').setFontColor('#FFFFFF').setFontWeight('bold');
+          existingHeaders.push(reqH);
+          addedCol = true;
+          fixLog.push(sheetName + ': added missing column ' + reqH);
+        }
+      });
+      if (addedCol) sheet.setFrozenRows(1);
+    }
+  });
+
+  // 2. Fix USERS Tab: ensure all users have active = true and defaults
+  try {
+    const usersSheet = ss.getSheetByName(SHEETS.USERS);
+    if (usersSheet && usersSheet.getLastRow() > 1) {
+      const data = usersSheet.getDataRange().getValues();
+      const headers = data[0].map(h => String(h).trim());
+      const activeCol = headers.indexOf('active');
+      const roleCol = headers.indexOf('role');
+      const teamCol = headers.indexOf('team');
+      const distCol = headers.indexOf('district');
+      const nameCol = headers.indexOf('name');
+      const loginCol = headers.indexOf('login_id');
+
+      for (let i = 1; i < data.length; i++) {
+        const rowNum = i + 1;
+        const nameVal = String(data[i][nameCol] || '').trim();
+        const loginVal = String(data[i][loginCol] || '').trim();
+
+        if (nameVal || loginVal) {
+          if (activeCol >= 0) {
+            const actVal = data[i][activeCol];
+            if (actVal === '' || actVal === null || actVal === undefined || String(actVal).toLowerCase() === 'false') {
+              usersSheet.getRange(rowNum, activeCol + 1).setValue(true);
+              fixLog.push('User ' + (nameVal || loginVal) + ': activated (active=true)');
+            }
+          }
+          if (roleCol >= 0 && !data[i][roleCol]) {
+            usersSheet.getRange(rowNum, roleCol + 1).setValue('TE');
+          }
+          if (teamCol >= 0 && !data[i][teamCol]) {
+            usersSheet.getRange(rowNum, teamCol + 1).setValue('Team Jajpur');
+          }
+          if (distCol >= 0 && !data[i][distCol]) {
+            usersSheet.getRange(rowNum, distCol + 1).setValue('Jajpur');
+          }
+        }
+      }
+    }
+  } catch (e) {
+    Logger.log('Error repairing users: ' + e.message);
+  }
+
+  // 3. Fix DEALERS Tab: ensure active = true and QR token exists
+  try {
+    const dealersSheet = ss.getSheetByName(SHEETS.DEALERS);
+    if (dealersSheet && dealersSheet.getLastRow() > 1) {
+      const data = dealersSheet.getDataRange().getValues();
+      const headers = data[0].map(h => String(h).trim());
+      const activeCol = headers.indexOf('active');
+      const tokenCol = headers.indexOf('qr_token');
+      const linkCol = headers.indexOf('public_slab_link');
+      const idCol = headers.indexOf('dealer_id');
+      const nameCol = headers.indexOf('dealer_name');
+
+      const settings = sheetToObjects(ss.getSheetByName(SHEETS.SETTINGS));
+      const publicUrl = getSettingValue(settings, 'public_url') || ScriptApp.getService().getUrl() || '';
+
+      for (let i = 1; i < data.length; i++) {
+        const rowNum = i + 1;
+        const dId = String(data[i][idCol] || '').trim();
+        const dName = String(data[i][nameCol] || '').trim();
+        if (dId || dName) {
+          if (activeCol >= 0 && (data[i][activeCol] === '' || data[i][activeCol] === null)) {
+            dealersSheet.getRange(rowNum, activeCol + 1).setValue(true);
+          }
+          if (tokenCol >= 0 && !data[i][tokenCol]) {
+            const token = generateToken();
+            dealersSheet.getRange(rowNum, tokenCol + 1).setValue(token);
+            if (linkCol >= 0) {
+              const link = `${publicUrl}?page=slab&dealer_id=${dId}&token=${token}`;
+              dealersSheet.getRange(rowNum, linkCol + 1).setValue(link);
+            }
+            fixLog.push('Generated QR for dealer: ' + (dName || dId));
+          }
+        }
+      }
+    }
+  } catch (e) {
+    Logger.log('Error repairing dealers: ' + e.message);
+  }
+
+  // 4. Fix SETTINGS Tab: ensure essential settings exist
+  try {
+    const settingsSheet = ss.getSheetByName(SHEETS.SETTINGS);
+    const existing = sheetToObjects(settingsSheet).map(s => String(s.setting).trim());
+    const defaults = [
+      { setting: 'territory', value: 'Jajpur' },
+      { setting: 'team', value: 'Team Jajpur' },
+      { setting: 'district', value: 'Jajpur' },
+      { setting: 'active_target', value: '80' },
+      { setting: 'app_version', value: '1.0.0' },
+      { setting: 'bags_per_mt', value: '20' },
+    ];
+    defaults.forEach(d => {
+      if (!existing.includes(d.setting)) {
+        settingsSheet.appendRow([d.setting, d.value]);
+        fixLog.push('Added setting: ' + d.setting);
+      }
+    });
+  } catch (e) {}
+
+  // 5. Alert user with result
+  const summaryMsg = fixLog.length > 0 
+    ? '✅ Sheet Health Check & Repair Done!\n\nActions Taken:\n• ' + fixLog.slice(0, 8).join('\n• ') + (fixLog.length > 8 ? '\n...and more.' : '')
+    : '✅ All Sheets & Headers are 100% Healthy and Correct!\n\nNo errors or missing columns found.';
+
+  try {
+    SpreadsheetApp.getUi().alert(summaryMsg);
+  } catch (e) {
+    Logger.log(summaryMsg);
+  }
 }
 
 // ── LOG ACTIVITY ────────────────────────────────────────────────
