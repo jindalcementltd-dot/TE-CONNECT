@@ -1737,6 +1737,39 @@ function sendPushNotificationToSubscribers(title, body, data) {
         });
       } catch (errWeb) {}
     });
+
+    // Native Android Firebase FCM dispatch
+    if (sheet) {
+      const subs = sheetToObjects(sheet);
+      subs.forEach(function(sub) {
+        if (!sub || !sub.endpoint) return;
+        const ep = String(sub.endpoint).trim();
+        if (ep.indexOf('ExponentPushToken') !== 0 && ep.indexOf('ExpoPushToken') !== 0 && ep.indexOf('http') !== 0 && ep.length > 25) {
+          try {
+            UrlFetchApp.fetch('https://fcm.googleapis.com/fcm/send', {
+              method: 'post',
+              contentType: 'application/json',
+              headers: {
+                'Authorization': 'key=AIzaSyDJ9-KHy_tSzwMHVxTEQnl_zWxo7F4hue0'
+              },
+              payload: JSON.stringify({
+                to: ep,
+                priority: 'high',
+                notification: {
+                  title: title,
+                  body: body,
+                  sound: 'default'
+                },
+                data: data || {}
+              }),
+              muteHttpExceptions: true
+            });
+          } catch (errFcm) {
+            Logger.log('FCM dispatch error: ' + errFcm.message);
+          }
+        }
+      });
+    }
   } catch (e) {
     Logger.log('Push dispatch error: ' + e.message);
   }

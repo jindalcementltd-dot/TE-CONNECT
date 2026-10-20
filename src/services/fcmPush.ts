@@ -48,26 +48,46 @@ export async function registerPushNotifications(user?: User | null): Promise<boo
         return false;
       }
 
-      let expoToken: string | null = null;
+      let pushToken: string | null = null;
+      let tokenType = 'expo';
       let regError = '';
 
       const projectId =
         Constants?.expoConfig?.extra?.eas?.projectId ?? Constants?.easConfig?.projectId;
 
+      // 1. Try Expo push token
       try {
         const tokenData = await (projectId && projectId !== 'YOUR_EAS_PROJECT_ID'
           ? Notifications.getExpoPushTokenAsync({ projectId })
           : Notifications.getExpoPushTokenAsync());
-        expoToken = tokenData?.data || null;
+        if (tokenData?.data) {
+          pushToken = tokenData.data;
+          tokenType = 'expo';
+        }
       } catch (err: any) {
         regError = err?.message || String(err);
         console.log('[Push] getExpoPushTokenAsync note:', regError);
       }
 
-      if (expoToken) {
+      // 2. If Expo token was not obtained, get native Android FCM token via google-services
+      if (!pushToken) {
+        try {
+          const deviceTokenData = await Notifications.getDevicePushTokenAsync();
+          if (deviceTokenData?.data) {
+            pushToken = deviceTokenData.data;
+            tokenType = 'fcm';
+          }
+        } catch (devErr: any) {
+          regError = devErr?.message || String(devErr);
+          console.log('[Push] getDevicePushTokenAsync note:', regError);
+        }
+      }
+
+      if (pushToken) {
         await AsyncStorage.setItem(PUSH_SUB_KEY, JSON.stringify({
           registered: true,
-          token: expoToken,
+          token: pushToken,
+          token_type: tokenType,
           platform: Platform.OS,
           user: user?.name || 'Unknown',
           district: user?.district || 'Jajpur',
@@ -79,8 +99,8 @@ export async function registerPushNotifications(user?: User | null): Promise<boo
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             action: 'registerPushSubscription',
-            endpoint: expoToken,
-            token_type: 'expo',
+            endpoint: pushToken,
+            token_type: tokenType,
             user_name: user?.name || '',
             user_role: user?.role || '',
             district: user?.district || '',
@@ -91,7 +111,7 @@ export async function registerPushNotifications(user?: User | null): Promise<boo
       } else {
         await AsyncStorage.setItem(PUSH_SUB_KEY, JSON.stringify({
           registered: false,
-          error: regError || 'Failed to acquire Expo push token from device.',
+          error: regError || 'Failed to acquire push token from device.',
           platform: Platform.OS,
           updatedAt: new Date().toISOString(),
         }));
