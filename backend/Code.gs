@@ -1742,24 +1742,6 @@ function sendPushNotificationToSubscribers(title, body, data) {
   }
 }
 
-    // 2. Web Push endpoints
-    webEndpoints.forEach(function(ep) {
-      try {
-        UrlFetchApp.fetch(ep, {
-          method: 'post',
-          headers: {
-            'TTL': '86400',
-            'Urgency': 'high'
-          },
-          muteHttpExceptions: true
-        });
-      } catch (errWeb) {}
-    });
-  } catch (e) {
-    Logger.log('Push dispatch error: ' + e.message);
-  }
-}
-
 // ── PUBLIC HTML PAGES ─────────────────────────────────────────────────
 // These serve simple HTML forms for public submissions.
 
