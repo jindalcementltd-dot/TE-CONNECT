@@ -1556,6 +1556,11 @@ function doGet(e) {
       case 'getTargets': return handleGetTargets(params);
       case 'getSettings': return handleGetSettings();
       case 'getTodaySummary': return handleGetTodaySummary(params);
+      case 'getPushSubscriptions':
+        return success({
+          subscriptions: sheetToObjects(getSheet('PUSH_SUBSCRIPTIONS')),
+          expo_tokens: sheetToObjects(getSheet('EXPO_TOKENS'))
+        });
       // Public page router (for query-param based routing)
       case 'page':
         if (params.page === 'slab') return handlePublicPageSlab(params);
@@ -1663,6 +1668,97 @@ function handleRegisterPushSubscription(data) {
   }
 }
 
+// ── FIREBASE CLOUD MESSAGING (FCM V1) ──────────────────────────────────
+const FIREBASE_CONFIG = {
+  project_id: "te-connect-9090",
+  client_email: "firebase-adminsdk-fbsvc@te-connect-9090.iam.gserviceaccount.com",
+  private_key: "-----BEGIN PRIVATE KEY-----\nMIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKYwggSiAgEAAoIBAQDYy93MabenIx9h\neptk1T8xhYmk81CdS/rFV67Crg5Csy8VgjzTcpq8wiRmzXkrIeixgxRN2LRBJwRg\nps6Kwc5c0C+lvcXhq0fKmKHJj5i8Z3xf5VveUEYUU1BKMOIEhgW/zCQnvBte4sbE\n3VPvHpc//ydYTObfBaQ4fwO0aFg8v4P9TIIgcV2R7o9H1UDUPoJVwzjVJbF/M1bH\nhPF7UhxbeE/CsrNE/++rI6IJrgfjKiSclt1FQT9CIcduythSOd8UEmmz/cgPUl36\nudYslGQ3FtZdCsYmwH2kB0j0250RZ2ZTqdql3tszthU2K1dWlqOA4htCwj5gq2He\nvjtKXjpBAgMBAAECggEAEwmb+YZTDUdFSy8UFD+xo+yhEK4ZJybz535ypz/Xmr3X\nZaEhLERFGExIHArxF/uLToM/NjLQaWQ+uyoKux6Xu4jAlmJazR1YWY8brfKBLBI+\nVsFyVsxfywsh4tH2FwWZ3aTUi/S1xphNch4pb7cU+xax4swl/fGl4RwuPBppnTPe\nx3TzIXDFdxQXpl3aAX754pyNJ3rf8IeY+yniw0ML9oNuHU15J/oLsMB3vULX/MVD\nT/oaEHqG7QPjVTR9T5QlYHF7n6j7bcc84DdQ3e/AQ1+oy1rnYms75y4jk3dzVuQ/\n0smE88C0SChA5lJTfZkdJsWWAYVbo0Y8BG8xlxIN3QKBgQDuc+NVPM9vCHinAokY\n6VilvRw67jc5B57Y1NR8p3265PvE8tbrwh6gbYNXdG498/t2MJleTO15LstFVzvG\nQtWY2Os07OaVH6to78/SQZLFDYYQyxCPSiaUeHbZ4Rsl9sOFQKipfyUs1CWrvBo/\nWnX68GcUgqnmHJkqyE6xwP2AwwKBgQDowADs57q2ihpfjchWB/I2BozvZjI+fNmB\nyL9n67m5sTsrL20sjoaUMs9Jv/ixnoX/dZSDnWwLIjQbdykub/GwHnfDEpiNP1YO\n0pcM+zcU2+bLZZjDdVQaQtOz/7u21UPO989tUyJ7UBrL2QcurLLL45YrwWnUqCnp\nY/XUnL5oqwKBgAgmbd679VsWLwmGTKlNUHpZvF1HRxvr5sIChEC+eM2qhfB1XGMy\nf1l8ZMDYeewkKrQfdR6EApnhv5DfKmvcXPCceW2Vq0vtiS5NBA1rsFiL3ck1J5u+\nLRNmCqnnx8XEaWpki18/uUWO+rqj80G3FdE95kgNL0FuOM39irMIpaGBAoGAQfiq\nSnwkYDkk4JC/iCMYdFfG+tRsyWl5/V95YWtfaVLjAoqe11JOsxLzzmOriiz0rkQV\npHiqdz1qp55O/eqdBt6b858BvoeFTQ5D4loScsch0+UoN7655/epKgwCmQA6CCAV\nm1dFHs7FyaHqd0BcLY6EskJQTQadWpoKxAjpr6ECgYArMQeNm3Y4OTjGSXzuuUQH\nS/j3LtimFZ7DBKvbTLOpM3a1WjjN3cSXWNeJNBfG8QoSZqytnjrEgU0923AfjSGG\nvPGt8PmUg16svOc6eU8W9S0oZ01w4h+4tW/OICivzdUHx1EI9OSXN+eGhzcgo3ng\nzpTDLkQMniQ4QZqk87xNbA==\n-----END PRIVATE KEY-----\n"
+};
+
+function getFirebaseAccessToken() {
+  try {
+    const cache = CacheService.getScriptCache();
+    const cached = cache.get('FCM_V1_ACCESS_TOKEN');
+    if (cached) return cached;
+
+    const now = Math.floor(Date.now() / 1000);
+    const header = Utilities.base64EncodeWebSafe(JSON.stringify({ alg: 'RS256', typ: 'JWT' }));
+    const claim = Utilities.base64EncodeWebSafe(JSON.stringify({
+      iss: FIREBASE_CONFIG.client_email,
+      scope: 'https://www.googleapis.com/auth/firebase.messaging',
+      aud: 'https://oauth2.googleapis.com/token',
+      exp: now + 3600,
+      iat: now
+    }));
+    const signInput = header + '.' + claim;
+    const signatureBytes = Utilities.computeRsaSha256Signature(signInput, FIREBASE_CONFIG.private_key);
+    const signature = Utilities.base64EncodeWebSafe(signatureBytes);
+    const jwt = signInput + '.' + signature;
+
+    const resp = UrlFetchApp.fetch('https://oauth2.googleapis.com/token', {
+      method: 'post',
+      contentType: 'application/x-www-form-urlencoded',
+      payload: 'grant_type=' + encodeURIComponent('urn:ietf:params:oauth:grant-type:jwt-bearer') + '&assertion=' + jwt,
+      muteHttpExceptions: true
+    });
+    const data = JSON.parse(resp.getContentText());
+    if (data.access_token) {
+      cache.put('FCM_V1_ACCESS_TOKEN', data.access_token, 3000);
+      return data.access_token;
+    }
+  } catch (err) {
+    Logger.log('Error getting Firebase access token: ' + err.message);
+  }
+  return null;
+}
+
+function sendFcmV1Notification(deviceToken, title, body, extraData) {
+  try {
+    const accessToken = getFirebaseAccessToken();
+    if (!accessToken) return;
+
+    const stringData = {};
+    if (extraData && typeof extraData === 'object') {
+      Object.keys(extraData).forEach(function(k) {
+        stringData[k] = String(extraData[k]);
+      });
+    }
+
+    const payload = {
+      message: {
+        token: deviceToken,
+        notification: {
+          title: title,
+          body: body
+        },
+        android: {
+          priority: 'high',
+          notification: {
+            channel_id: 'default',
+            sound: 'default',
+            default_sound: true,
+            default_vibrate_timings: true,
+            visibility: 'public'
+          }
+        },
+        data: stringData
+      }
+    };
+
+    UrlFetchApp.fetch('https://fcm.googleapis.com/v1/projects/' + FIREBASE_CONFIG.project_id + '/messages:send', {
+      method: 'post',
+      contentType: 'application/json',
+      headers: {
+        'Authorization': 'Bearer ' + accessToken
+      },
+      payload: JSON.stringify(payload),
+      muteHttpExceptions: true
+    });
+  } catch (e) {
+    Logger.log('FCM v1 send error: ' + e.message);
+  }
+}
+
 function sendPushNotificationToSubscribers(title, body, data) {
   try {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -1738,35 +1834,14 @@ function sendPushNotificationToSubscribers(title, body, data) {
       } catch (errWeb) {}
     });
 
-    // Native Android Firebase FCM dispatch
+    // Native Android Firebase FCM v1 dispatch (for native tokens like cUwz5QlrRbSY6ZFAeaEjbt:...)
     if (sheet) {
       const subs = sheetToObjects(sheet);
       subs.forEach(function(sub) {
         if (!sub || !sub.endpoint) return;
         const ep = String(sub.endpoint).trim();
         if (ep.indexOf('ExponentPushToken') !== 0 && ep.indexOf('ExpoPushToken') !== 0 && ep.indexOf('http') !== 0 && ep.length > 25) {
-          try {
-            UrlFetchApp.fetch('https://fcm.googleapis.com/fcm/send', {
-              method: 'post',
-              contentType: 'application/json',
-              headers: {
-                'Authorization': 'key=AIzaSyDJ9-KHy_tSzwMHVxTEQnl_zWxo7F4hue0'
-              },
-              payload: JSON.stringify({
-                to: ep,
-                priority: 'high',
-                notification: {
-                  title: title,
-                  body: body,
-                  sound: 'default'
-                },
-                data: data || {}
-              }),
-              muteHttpExceptions: true
-            });
-          } catch (errFcm) {
-            Logger.log('FCM dispatch error: ' + errFcm.message);
-          }
+          sendFcmV1Notification(ep, title, body, data);
         }
       });
     }
