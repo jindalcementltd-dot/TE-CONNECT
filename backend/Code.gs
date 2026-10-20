@@ -1285,6 +1285,7 @@ function handleCreateMeeting(data) {
   };
   appendRow(SHEETS.MEETINGS, meetingObj, HEADERS.MEETINGS);
   logActivity(data.created_by, data.created_by, 'CREATE_MEETING', 'MEETINGS', meeting_id, 'Created meeting: ' + data.meeting_name);
+  sendPushNotificationToSubscribers('New Meeting Scheduled', (data.meeting_name || data.meeting_type) + ' by ' + (data.te || data.created_by || 'TE'), { meeting_id: meeting_id });
   return success(meetingObj, 'Meeting added successfully.');
 }
 
@@ -1424,6 +1425,7 @@ function handlePublicMeetingSubmit(data) {
   };
   appendRow(SHEETS.MEETINGS, meetingObj, HEADERS.MEETINGS);
   logActivity('', 'PUBLIC', 'PUBLIC_MEETING_SUBMIT', 'MEETINGS', meeting_id, 'Public link submission');
+  sendPushNotificationToSubscribers('New Public Meeting', 'Meeting request for ' + data.meeting_date + ' (' + data.meeting_type + ')', { meeting_id: meeting_id });
   return success(null, 'Meeting submitted successfully. Thank you!');
 }
 
@@ -1627,7 +1629,7 @@ function handleRegisterPushSubscription(data) {
   }
 }
 
-function sendPushNotificationToSubscribers(title, body) {
+function sendPushNotificationToSubscribers(title, body, data) {
   try {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     const sheet = ss.getSheetByName('PUSH_SUBSCRIPTIONS');
@@ -1635,10 +1637,48 @@ function sendPushNotificationToSubscribers(title, body) {
     const subs = sheetToObjects(sheet);
     if (!subs || subs.length === 0) return;
 
+    const expoTokens = [];
+    const webEndpoints = [];
+
     subs.forEach(function(sub) {
       if (!sub || !sub.endpoint) return;
+      const ep = String(sub.endpoint).trim();
+      if (ep.indexOf('ExponentPushToken') === 0 || ep.indexOf('ExpoPushToken') === 0) {
+        expoTokens.push(ep);
+      } else if (ep.indexOf('http') === 0) {
+        webEndpoints.push(ep);
+      }
+    });
+
+    // 1. Mobile Android / iOS (Expo Push API)
+    if (expoTokens.length > 0) {
       try {
-        UrlFetchApp.fetch(sub.endpoint, {
+        const payload = expoTokens.map(function(t) {
+          return {
+            to: t,
+            sound: 'default',
+            title: title,
+            body: body,
+            data: data || {},
+            priority: 'high',
+            channelId: 'default'
+          };
+        });
+        UrlFetchApp.fetch('https://exp.host/--/api/v2/push/send', {
+          method: 'post',
+          contentType: 'application/json',
+          payload: JSON.stringify(payload),
+          muteHttpExceptions: true
+        });
+      } catch (errExpo) {
+        Logger.log('Expo push dispatch error: ' + errExpo.message);
+      }
+    }
+
+    // 2. Web Push endpoints
+    webEndpoints.forEach(function(ep) {
+      try {
+        UrlFetchApp.fetch(ep, {
           method: 'post',
           headers: {
             'TTL': '86400',
@@ -1646,7 +1686,7 @@ function sendPushNotificationToSubscribers(title, body) {
           },
           muteHttpExceptions: true
         });
-      } catch (err) {}
+      } catch (errWeb) {}
     });
   } catch (e) {
     Logger.log('Push dispatch error: ' + e.message);

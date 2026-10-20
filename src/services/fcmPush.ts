@@ -1,6 +1,8 @@
 // TE CONNECT — Firebase Cloud Messaging & Web Push Client
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Notifications from 'expo-notifications';
+import Constants from 'expo-constants';
 import { User } from '../types';
 import { APPS_SCRIPT_URL } from '../config/api';
 
@@ -27,7 +29,57 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array {
  * to Web Push notifications using the Firebase VAPID key.
  */
 export async function registerPushNotifications(user?: User | null): Promise<boolean> {
-  if (Platform.OS !== 'web' || typeof window === 'undefined') {
+  // ── NATIVE ANDROID / IOS EXPO PUSH TOKEN ─────────────────
+  if (Platform.OS !== 'web') {
+    try {
+      const { status: existingStatus } = await Notifications.getPermissionsAsync();
+      let finalStatus = existingStatus;
+      if (existingStatus !== 'granted') {
+        const { status } = await Notifications.requestPermissionsAsync();
+        finalStatus = status;
+      }
+      if (finalStatus !== 'granted') return false;
+
+      const projectId =
+        Constants?.expoConfig?.extra?.eas?.projectId ?? Constants?.easConfig?.projectId;
+
+      const tokenData = await Notifications.getExpoPushTokenAsync(
+        projectId && projectId !== 'YOUR_EAS_PROJECT_ID' ? { projectId } : undefined
+      ).catch(() => null);
+
+      const expoToken = tokenData?.data;
+      if (expoToken) {
+        await AsyncStorage.setItem(PUSH_SUB_KEY, JSON.stringify({
+          token: expoToken,
+          platform: Platform.OS,
+          user: user?.name || 'Unknown',
+          district: user?.district || 'Jajpur',
+          registeredAt: new Date().toISOString(),
+        }));
+
+        await fetch(APPS_SCRIPT_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'registerPushSubscription',
+            endpoint: expoToken,
+            token_type: 'expo',
+            user_name: user?.name || '',
+            user_role: user?.role || '',
+            district: user?.district || '',
+            platform: Platform.OS,
+          }),
+        }).catch(() => {});
+        return true;
+      }
+    } catch (e) {
+      console.log('[Push] Native push registration note:', e);
+    }
+    return false;
+  }
+
+  // ── WEB SERVICE WORKER PUSH ──────────────────────────────
+  if (typeof window === 'undefined') {
     return false;
   }
 

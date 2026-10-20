@@ -5,6 +5,8 @@ import { Audio } from 'expo-av';
 import * as Notifications from 'expo-notifications';
 import { Slab, Meeting, User } from '../types';
 import { CHIME_BASE64 } from './chimeBase64';
+import { apiGetSlabs, apiGetMeetings } from './api';
+import { getUser } from './auth';
 
 // Configure expo-notifications handler for native apps (foreground notifications)
 if (Platform.OS !== 'web') {
@@ -61,6 +63,9 @@ export async function setupAndroidNotificationChannel() {
         enableLights: true,
         enableVibrate: true,
         showBadge: true,
+        sound: 'default',
+        lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+        bypassDnd: false,
       });
     } catch (e) {
       console.warn('[NotificationChannel] error:', e);
@@ -492,4 +497,56 @@ export async function checkAndNotifyNewMeetings(meetings: Meeting[], currentUser
   } catch (e) {
     // Ignore notification check error
   }
+}
+
+// ──────────────────────────────────────────────────────────
+// PERSISTENT BACKGROUND NOTIFICATION SYNC
+// Continuously checks for slabs & meetings every 12 seconds
+// even when user is on another screen or app is in background.
+// ──────────────────────────────────────────────────────────
+let bgSyncTimer: any = null;
+let isSyncRunning = false;
+
+export async function runBackgroundSyncOnce(): Promise<void> {
+  if (isSyncRunning) return;
+  isSyncRunning = true;
+  try {
+    const user = await getUser();
+    const [slabs, meetings] = await Promise.all([
+      apiGetSlabs().catch(() => []),
+      apiGetMeetings().catch(() => []),
+    ]);
+
+    if (slabs && slabs.length > 0) {
+      await checkAndNotifyNewSlabs(slabs, user);
+    }
+    if (meetings && meetings.length > 0) {
+      await checkAndNotifyNewMeetings(meetings, user);
+    }
+  } catch (e) {
+    // Silent in background loop
+  } finally {
+    isSyncRunning = false;
+  }
+}
+
+export function startBackgroundNotificationSync(): () => void {
+  if (!bgSyncTimer) {
+    // Initial run after brief delay
+    setTimeout(() => {
+      runBackgroundSyncOnce().catch(() => {});
+    }, 2500);
+
+    // Continuous 12-second heartbeat
+    bgSyncTimer = setInterval(() => {
+      runBackgroundSyncOnce().catch(() => {});
+    }, 12000);
+  }
+
+  return () => {
+    if (bgSyncTimer) {
+      clearInterval(bgSyncTimer);
+      bgSyncTimer = null;
+    }
+  };
 }

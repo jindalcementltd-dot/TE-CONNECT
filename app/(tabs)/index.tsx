@@ -102,15 +102,15 @@ export default function HomeScreen() {
   const { data: allSlabs, refetch: refetchSlabs } = useQuery({ 
     queryKey: ['slabs'], 
     queryFn: () => apiGetSlabs(),
-    refetchInterval: 12000, // Poll every 12s in background while app is active
-    refetchIntervalInBackground: false,
+    refetchInterval: 12000, // Poll every 12s continuously
+    refetchIntervalInBackground: true,
   });
 
   const { data: allMeetings, refetch: refetchMeetings } = useQuery({ 
     queryKey: ['meetings'], 
     queryFn: () => apiGetMeetings(),
-    refetchInterval: 12000, // Poll every 12s in background so all phones get instant updates
-    refetchIntervalInBackground: false,
+    refetchInterval: 12000, // Poll every 12s continuously
+    refetchIntervalInBackground: true,
   });
 
   useEffect(() => {

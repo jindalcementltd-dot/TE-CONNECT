@@ -29,7 +29,10 @@
         "ACCESS_COARSE_LOCATION",
         "CAMERA",
         "VIBRATE",
-        "POST_NOTIFICATIONS"
+        "POST_NOTIFICATIONS",
+        "RECEIVE_BOOT_COMPLETED",
+        "WAKE_LOCK",
+        "FOREGROUND_SERVICE"
       ],
       "versionCode": 3
     },

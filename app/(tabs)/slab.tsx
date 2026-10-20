@@ -188,6 +188,7 @@ export default function SlabScreen() {
     queryKey: ['slabs'],
     queryFn: () => apiGetSlabs(),
     refetchInterval: 12000,
+    refetchIntervalInBackground: true,
   });
 
   const onRefresh = useCallback(async () => {
