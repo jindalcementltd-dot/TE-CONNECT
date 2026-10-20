@@ -23,6 +23,8 @@ const SHEETS = {
   TARGETS: 'TARGETS',
   SETTINGS: 'SETTINGS',
   ACTIVITY_LOG: 'ACTIVITY_LOG',
+  PUSH_SUBSCRIPTIONS: 'PUSH_SUBSCRIPTIONS',
+  EXPO_TOKENS: 'EXPO_TOKENS',
 };
 
 // ── COLUMN HEADERS ────────────────────────────────────────────
@@ -37,6 +39,8 @@ const HEADERS = {
   TARGETS: ['target_id','month','year','te','active_target','customer_meeting_target','contractor_meeting_target'],
   SETTINGS: ['setting','value'],
   ACTIVITY_LOG: ['activity_id','user_id','user_name','action','module','record_id','timestamp','details'],
+  PUSH_SUBSCRIPTIONS: ['subscription_id','endpoint','p256dh','auth','user_name','user_role','district','updated_at'],
+  EXPO_TOKENS: ['token','user_name','registered_at'],
 };
 
 // ── RESPONSE HELPERS ─────────────────────────────────────────
@@ -174,6 +178,15 @@ function setupSpreadsheet() {
   });
 
   // Setup default SETTINGS
+  // Also ensure EXPO_TOKENS sheet exists for storing Expo push tokens
+  const expoSheet = ss.getSheetByName('EXPO_TOKENS');
+  if (!expoSheet) {
+    const sheet = ss.insertSheet('EXPO_TOKENS');
+    // Headers: Token, User, RegisteredAt
+    sheet.getRange(1, 1, 1, 3).setValues([['token', 'user_name', 'registered_at']]);
+    sheet.setFrozenRows(1);
+    Logger.log('Created sheet: EXPO_TOKENS');
+  }
   const settingsSheet = ss.getSheetByName(SHEETS.SETTINGS);
   const settingsData = sheetToObjects(settingsSheet);
   const existingSettings = settingsData.map(s => s.setting);
@@ -218,13 +231,20 @@ function setupSpreadsheet() {
     Logger.log('Default admin user created. Login: admin / Admin@123');
   }
 
-  SpreadsheetApp.getUi().alert(
-    'TE CONNECT Setup Complete! \u2705\n\n' +
-    'All sheets created.\n\n' +
-    'Default admin user:\nLogin: admin\nPassword: Admin@123\n\n' +
-    'Please change the password after first login.\n\n' +
-    'Next step: Deploy this script as a Web App.'
-  );
+  try {
+    const ui = SpreadsheetApp.getUi();
+    if (ui) {
+      ui.alert(
+        'TE CONNECT Setup Complete! \u2705\n\n' +
+        'All sheets created.\n\n' +
+        'Default admin user:\nLogin: admin\nPassword: Admin@123\n\n' +
+        'Please change the password after first login.\n\n' +
+        'Next step: Deploy this script as a Web App.'
+      );
+    }
+  } catch (uiErr) {
+    Logger.log('TE CONNECT Setup Complete! All sheets created successfully.');
+  }
 }
 
 // ── REPAIR AND HEALTH CHECK (Can be run safely anytime) ─────────
@@ -1594,7 +1614,7 @@ function handleRegisterPushSubscription(data) {
       sheet = ss.insertSheet('PUSH_SUBSCRIPTIONS');
       sheet.appendRow(['subscription_id', 'endpoint', 'p256dh', 'auth', 'user_name', 'user_role', 'district', 'updated_at']);
     }
-    const endpoint = data.endpoint || '';
+    const endpoint = String(data.endpoint || data.token || '').trim();
     if (!endpoint) return success(null, 'No endpoint');
 
     const keys = data.keys || {};
@@ -1603,7 +1623,7 @@ function handleRegisterPushSubscription(data) {
     const now = new Date().toISOString();
 
     const subs = sheetToObjects(sheet);
-    const existing = subs.find(s => String(s.endpoint) === String(endpoint));
+    const existing = subs.find(s => String(s.endpoint) === endpoint);
     if (existing) {
       updateRowById('PUSH_SUBSCRIPTIONS', 'endpoint', endpoint, {
         user_name: data.user_name || existing.user_name || '',
@@ -1623,6 +1643,20 @@ function handleRegisterPushSubscription(data) {
         now,
       ]);
     }
+
+    // Also sync to EXPO_TOKENS if it is an Expo token
+    if (endpoint.indexOf('ExponentPushToken') === 0 || endpoint.indexOf('ExpoPushToken') === 0) {
+      let expoSheet = ss.getSheetByName('EXPO_TOKENS');
+      if (!expoSheet) {
+        expoSheet = ss.insertSheet('EXPO_TOKENS');
+        expoSheet.appendRow(['token', 'user_name', 'registered_at']);
+      }
+      const expoRows = sheetToObjects(expoSheet);
+      if (!expoRows.some(r => String(r.token) === endpoint)) {
+        expoSheet.appendRow([endpoint, data.user_name || '', now]);
+      }
+    }
+
     return success(null, 'Subscription registered.');
   } catch (e) {
     return success(null, 'Ignored: ' + e.message);
@@ -1632,25 +1666,39 @@ function handleRegisterPushSubscription(data) {
 function sendPushNotificationToSubscribers(title, body, data) {
   try {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
-    const sheet = ss.getSheetByName('PUSH_SUBSCRIPTIONS');
-    if (!sheet) return;
-    const subs = sheetToObjects(sheet);
-    if (!subs || subs.length === 0) return;
-
-    const expoTokens = [];
+    const expoTokensSet = {};
     const webEndpoints = [];
 
-    subs.forEach(function(sub) {
-      if (!sub || !sub.endpoint) return;
-      const ep = String(sub.endpoint).trim();
-      if (ep.indexOf('ExponentPushToken') === 0 || ep.indexOf('ExpoPushToken') === 0) {
-        expoTokens.push(ep);
-      } else if (ep.indexOf('http') === 0) {
-        webEndpoints.push(ep);
-      }
-    });
+    // 1. Collect from PUSH_SUBSCRIPTIONS
+    const sheet = ss.getSheetByName('PUSH_SUBSCRIPTIONS');
+    if (sheet) {
+      const subs = sheetToObjects(sheet);
+      subs.forEach(function(sub) {
+        if (!sub || !sub.endpoint) return;
+        const ep = String(sub.endpoint).trim();
+        if (ep.indexOf('ExponentPushToken') === 0 || ep.indexOf('ExpoPushToken') === 0) {
+          expoTokensSet[ep] = true;
+        } else if (ep.indexOf('http') === 0) {
+          webEndpoints.push(ep);
+        }
+      });
+    }
 
-    // 1. Mobile Android / iOS (Expo Push API)
+    // 2. Collect from EXPO_TOKENS
+    const expoSheet = ss.getSheetByName('EXPO_TOKENS');
+    if (expoSheet) {
+      const expoRows = sheetToObjects(expoSheet);
+      expoRows.forEach(function(r) {
+        const t = String(r.token || '').trim();
+        if (t.indexOf('ExponentPushToken') === 0 || t.indexOf('ExpoPushToken') === 0) {
+          expoTokensSet[t] = true;
+        }
+      });
+    }
+
+    const expoTokens = Object.keys(expoTokensSet);
+
+    // Mobile Android / iOS via Expo Push API
     if (expoTokens.length > 0) {
       try {
         const payload = expoTokens.map(function(t) {
@@ -1661,7 +1709,8 @@ function sendPushNotificationToSubscribers(title, body, data) {
             body: body,
             data: data || {},
             priority: 'high',
-            channelId: 'default'
+            channelId: 'default',
+            _displayInForeground: true,
           };
         });
         UrlFetchApp.fetch('https://exp.host/--/api/v2/push/send', {
@@ -1674,6 +1723,24 @@ function sendPushNotificationToSubscribers(title, body, data) {
         Logger.log('Expo push dispatch error: ' + errExpo.message);
       }
     }
+
+    // Web Push endpoints
+    webEndpoints.forEach(function(ep) {
+      try {
+        UrlFetchApp.fetch(ep, {
+          method: 'post',
+          headers: {
+            'TTL': '86400',
+            'Urgency': 'high'
+          },
+          muteHttpExceptions: true
+        });
+      } catch (errWeb) {}
+    });
+  } catch (e) {
+    Logger.log('Push dispatch error: ' + e.message);
+  }
+}
 
     // 2. Web Push endpoints
     webEndpoints.forEach(function(ep) {

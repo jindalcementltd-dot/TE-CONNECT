@@ -13,7 +13,7 @@ import {
   requestAppNotificationPermission, testAppNotification, playNotificationSound,
 } from '../src/services/notifications';
 import { getUser } from '../src/services/auth';
-import { registerPushNotifications, sendTestPushNotification } from '../src/services/fcmPush';
+import { registerPushNotifications, sendTestPushNotification, getPushStatus } from '../src/services/fcmPush';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { formatDistanceToNow, parseISO } from 'date-fns';
 
@@ -154,12 +154,20 @@ export default function NotificationsScreen() {
               'Sound chime and vibration alert verified successfully on your device!'
             );
             const u = await getUser();
-            registerPushNotifications(u).catch(() => {});
+            await registerPushNotifications(u).catch(() => {});
             loadNotifications();
-            Alert.alert(
-              'Notification & Sound Verified! 🔔',
-              'Chime sound, vibration and system alert tested successfully on your device.'
-            );
+            const pushStatus = await getPushStatus();
+            if (pushStatus.registered) {
+              Alert.alert(
+                'Notification & Push Connected! 🔔',
+                `Sound & Vibration verified.\n\nBackground Push is ACTIVE!\nToken: ${pushStatus.token?.slice(0, 24)}...`
+              );
+            } else {
+              Alert.alert(
+                'Notification Verified 🔔',
+                `Local sound chime & alerts working.\n\nPush Note: ${pushStatus.error || 'Registering push...'}`
+              );
+            }
           }}
           activeOpacity={0.85}
         >

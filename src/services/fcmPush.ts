@@ -38,18 +38,35 @@ export async function registerPushNotifications(user?: User | null): Promise<boo
         const { status } = await Notifications.requestPermissionsAsync();
         finalStatus = status;
       }
-      if (finalStatus !== 'granted') return false;
+      if (finalStatus !== 'granted') {
+        await AsyncStorage.setItem(PUSH_SUB_KEY, JSON.stringify({
+          registered: false,
+          error: 'Notification permission not granted by user in phone settings.',
+          platform: Platform.OS,
+          updatedAt: new Date().toISOString(),
+        }));
+        return false;
+      }
+
+      let expoToken: string | null = null;
+      let regError = '';
 
       const projectId =
         Constants?.expoConfig?.extra?.eas?.projectId ?? Constants?.easConfig?.projectId;
 
-      const tokenData = await Notifications.getExpoPushTokenAsync(
-        projectId && projectId !== 'YOUR_EAS_PROJECT_ID' ? { projectId } : undefined
-      ).catch(() => null);
+      try {
+        const tokenData = await (projectId && projectId !== 'YOUR_EAS_PROJECT_ID'
+          ? Notifications.getExpoPushTokenAsync({ projectId })
+          : Notifications.getExpoPushTokenAsync());
+        expoToken = tokenData?.data || null;
+      } catch (err: any) {
+        regError = err?.message || String(err);
+        console.log('[Push] getExpoPushTokenAsync note:', regError);
+      }
 
-      const expoToken = tokenData?.data;
       if (expoToken) {
         await AsyncStorage.setItem(PUSH_SUB_KEY, JSON.stringify({
+          registered: true,
           token: expoToken,
           platform: Platform.OS,
           user: user?.name || 'Unknown',
@@ -71,8 +88,15 @@ export async function registerPushNotifications(user?: User | null): Promise<boo
           }),
         }).catch(() => {});
         return true;
+      } else {
+        await AsyncStorage.setItem(PUSH_SUB_KEY, JSON.stringify({
+          registered: false,
+          error: regError || 'Failed to acquire Expo push token from device.',
+          platform: Platform.OS,
+          updatedAt: new Date().toISOString(),
+        }));
       }
-    } catch (e) {
+    } catch (e: any) {
       console.log('[Push] Native push registration note:', e);
     }
     return false;
@@ -209,4 +233,27 @@ export async function sendTestPushNotification(title?: string, body?: string): P
     console.warn('[Push] Failed to trigger test notification:', e);
   }
   return false;
+}
+
+export async function getPushStatus(): Promise<{
+  registered: boolean;
+  token?: string;
+  error?: string;
+  platform: string;
+}> {
+  try {
+    const raw = await AsyncStorage.getItem(PUSH_SUB_KEY);
+    if (!raw) {
+      return { registered: false, platform: Platform.OS, error: 'Push not registered yet' };
+    }
+    const parsed = JSON.parse(raw);
+    return {
+      registered: !!(parsed.token || parsed.subscription),
+      token: parsed.token || (parsed.subscription ? 'Web Push Active' : undefined),
+      error: parsed.error,
+      platform: parsed.platform || Platform.OS,
+    };
+  } catch (e: any) {
+    return { registered: false, platform: Platform.OS, error: e?.message };
+  }
 }

@@ -433,12 +433,7 @@ export async function checkAndNotifyNewSlabs(slabs: Slab[], currentUser?: User |
         const date = slab.slab_date ? `Date: ${slab.slab_date}` : '';
         const body = [by, cement, contractor, date].filter(Boolean).join(' | ') || 'New slab scheduled';
 
-        await addNotification(
-          title,
-          body,
-          'SLAB',
-          { slab_id: slab.slab_id, dealer_id: slab.dealer_id }
-        );
+        await addNotification(title, body, 'SLAB', { slab_id: slab.slab_id, dealer_id: slab.dealer_id });
       }
       const updatedSeen = Array.from(new Set([...seenIds, ...slabs.map(s => s.slab_id).filter(Boolean)])).slice(-300);
       await AsyncStorage.setItem(SEEN_SLABS_KEY, JSON.stringify(updatedSeen));
