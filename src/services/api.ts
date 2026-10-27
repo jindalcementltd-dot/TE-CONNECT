@@ -3,7 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   ApiResponse, User, Dealer, Contractor, Slab, Sale,
   ActiveTracker, Meeting, Target, Setting,
-  AddSlabForm, AddSaleForm, AddMeetingForm, AddPunchForm,
+  AddSlabForm, AddSaleForm, AddMeetingForm, AddPunchForm, PunchRecord,
   PublicSlabForm, PublicMeetingForm, DealerSalesSummary,
   TEActiveSummary, MeetingTargetSummary, TodaySummary,
   Product, BatchSaleItem
@@ -226,6 +226,10 @@ export async function apiGetDealerSalesSummary(month: string): Promise<DealerSal
 // ── ACTIVE / PUNCH ─────────────────────────────────────────
 export async function apiGetActiveTracker(params?: { month?: string; te?: string }): Promise<ActiveTracker[]> {
   return get<ActiveTracker[]>('getActiveTracker', params as any);
+}
+
+export async function apiGetPunches(params?: { month?: string; dealer_id?: string; te?: string }): Promise<PunchRecord[]> {
+  return get<PunchRecord[]>('getPunches', params as any);
 }
 
 export async function apiAddPunch(data: AddPunchForm & { updated_by: string }): Promise<ApiResponse<ActiveTracker>> {

@@ -254,12 +254,33 @@ export interface AddMeetingForm {
 export interface AddPunchForm {
   date: string;
   te: string;
+  dealer_id?: string;
+  dealer_name?: string;
   punch_quantity_bags?: number;
   f2r_bags?: number;
   gold_bags?: number;
+  points?: number;
   total_contractors?: number;
   active_contractors?: number;
   remark?: string;
+}
+
+export interface PunchRecord {
+  punch_id: string;
+  date: string;
+  month: string;
+  te: string;
+  dealer_id?: string;
+  dealer_name?: string;
+  f2r_bags?: number;
+  gold_bags?: number;
+  punched_quantity_bags: number;
+  points?: number;
+  total_contractors?: number;
+  active_contractors?: number;
+  remark?: string;
+  created_by?: string;
+  created_at?: string;
 }
 
 export interface PublicSlabForm {

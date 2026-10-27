@@ -25,6 +25,7 @@ const SHEETS = {
   ACTIVITY_LOG: 'ACTIVITY_LOG',
   PUSH_SUBSCRIPTIONS: 'PUSH_SUBSCRIPTIONS',
   EXPO_TOKENS: 'EXPO_TOKENS',
+  PUNCHES: 'PUNCHES',
 };
 
 // ── COLUMN HEADERS ────────────────────────────────────────────
@@ -41,6 +42,7 @@ const HEADERS = {
   ACTIVITY_LOG: ['activity_id','user_id','user_name','action','module','record_id','timestamp','details'],
   PUSH_SUBSCRIPTIONS: ['subscription_id','endpoint','p256dh','auth','user_name','user_role','district','updated_at'],
   EXPO_TOKENS: ['token','user_name','registered_at'],
+  PUNCHES: ['punch_id','date','month','te','dealer_id','dealer_name','punched_quantity_bags','f2r_bags','gold_bags','points','total_contractors','active_contractors','remark','created_by','created_at'],
 };
 
 // ── RESPONSE HELPERS ─────────────────────────────────────────
@@ -728,6 +730,28 @@ function handleGetActiveTracker(params) {
   return success(filtered);
 }
 
+function handleGetPunches(params) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName(SHEETS.PUNCHES);
+  if (!sheet) {
+    sheet = ss.insertSheet(SHEETS.PUNCHES);
+    sheet.getRange(1, 1, 1, HEADERS.PUNCHES.length).setValues([HEADERS.PUNCHES]);
+    return success([]);
+  }
+  const punches = sheetToObjects(sheet);
+  let filtered = punches;
+  if (params && params.month) {
+    filtered = filtered.filter(p => String(p.month || p.date).startsWith(params.month));
+  }
+  if (params && params.dealer_id) {
+    filtered = filtered.filter(p => String(p.dealer_id).toLowerCase() === String(params.dealer_id).toLowerCase());
+  }
+  if (params && params.te) {
+    filtered = filtered.filter(p => String(p.te).toLowerCase() === String(params.te).toLowerCase());
+  }
+  return success(filtered);
+}
+
 function handleGetTEActiveSummary(params) {
   const month = params.month || getCurrentMonth();
   const sales = sheetToObjects(getSheet(SHEETS.SALES));
@@ -1166,12 +1190,46 @@ function handleAddPunch(data) {
   const f2rBags = Number(data.f2r_bags) || 0;
   const goldBags = Number(data.gold_bags) || 0;
   const punchQty = (Number(data.punch_quantity_bags) || 0) || (f2rBags + goldBags);
+  const points = (data.points !== undefined && data.points !== '')
+    ? Number(data.points)
+    : (f2rBags * 2 + goldBags * 3);
 
   if (!data.date || !data.te || (!punchQty && data.total_contractors === undefined && data.active_contractors === undefined)) {
     return error('Date, TE, and punch quantity or contractor counts are required.');
   }
 
   const month = String(data.date).substring(0, 7);
+  const now = new Date().toISOString();
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+
+  // 1. Record individual punch record in PUNCHES sheet
+  let punchesSheet = ss.getSheetByName(SHEETS.PUNCHES);
+  if (!punchesSheet) {
+    punchesSheet = ss.insertSheet(SHEETS.PUNCHES);
+    punchesSheet.getRange(1, 1, 1, HEADERS.PUNCHES.length).setValues([HEADERS.PUNCHES]);
+  }
+
+  const punch_id = generateId('PCH');
+  const punchObj = {
+    punch_id: punch_id,
+    date: data.date,
+    month: month,
+    te: data.te,
+    dealer_id: data.dealer_id || '',
+    dealer_name: data.dealer_name || '',
+    punched_quantity_bags: punchQty,
+    f2r_bags: f2rBags,
+    gold_bags: goldBags,
+    points: points,
+    total_contractors: Number(data.total_contractors) || 0,
+    active_contractors: Number(data.active_contractors) || 0,
+    remark: data.remark || '',
+    created_by: data.updated_by || data.te,
+    created_at: now
+  };
+  appendRow(SHEETS.PUNCHES, punchObj, HEADERS.PUNCHES);
+
+  // 2. Aggregate into ACTIVE_TRACKER for backwards compatibility & quick summary
   const sheet = getSheet(SHEETS.ACTIVE_TRACKER);
   const trackers = sheetToObjects(sheet);
 
@@ -1181,8 +1239,7 @@ function handleAddPunch(data) {
     String(t.te).toLowerCase() === String(data.te).toLowerCase()
   );
 
-  const now = new Date().toISOString();
-
+  let returnObj = punchObj;
   if (existingIdx >= 0) {
     const existing = trackers[existingIdx];
     const newPunch = (Number(existing.punched_quantity_bags) || 0) + punchQty;
@@ -1210,8 +1267,8 @@ function handleAddPunch(data) {
       updated_at: now,
     };
     updateRowById(SHEETS.ACTIVE_TRACKER, 'tracker_id', existing.tracker_id, updates, HEADERS.ACTIVE_TRACKER);
-    logActivity(data.updated_by, data.updated_by, 'ADD_PUNCH', 'ACTIVE_TRACKER', existing.tracker_id, 'Added ' + punchQty + ' bags punch for ' + data.te);
-    return success({ ...existing, ...updates }, 'Punch recorded.');
+    logActivity(data.updated_by, data.updated_by, 'ADD_PUNCH', 'PUNCHES', punch_id, 'Added ' + punchQty + ' bags punch (' + points + ' pts) for ' + (data.dealer_name || data.te));
+    returnObj = { ...existing, ...updates, last_punch: punchObj };
   } else {
     const tracker_id = generateId('TRK');
     const totalC = Number(data.total_contractors) || 0;
@@ -1231,9 +1288,10 @@ function handleAddPunch(data) {
       updated_at: now,
     };
     appendRow(SHEETS.ACTIVE_TRACKER, trackerObj, HEADERS.ACTIVE_TRACKER);
-    logActivity(data.updated_by, data.updated_by, 'ADD_PUNCH', 'ACTIVE_TRACKER', tracker_id, 'Added ' + punchQty + ' bags punch for ' + data.te);
-    return success(trackerObj, 'Punch recorded.');
+    logActivity(data.updated_by, data.updated_by, 'ADD_PUNCH', 'PUNCHES', punch_id, 'Added ' + punchQty + ' bags punch (' + points + ' pts) for ' + (data.dealer_name || data.te));
+    returnObj = { ...trackerObj, last_punch: punchObj };
   }
+  return success(returnObj, 'Punch recorded successfully.');
 }
 
 function handleUpdateContractorActivity(data) {
@@ -1550,6 +1608,7 @@ function doGet(e) {
       case 'getSales': return handleGetSales(params);
       case 'getDealerSalesSummary': return handleGetDealerSalesSummary(params);
       case 'getActiveTracker': return handleGetActiveTracker(params);
+      case 'getPunches': return handleGetPunches(params);
       case 'getTEActiveSummary': return handleGetTEActiveSummary(params);
       case 'getMeetings': return handleGetMeetings(params);
       case 'getMeetingTargetSummary': return handleGetMeetingTargetSummary(params);
@@ -1835,16 +1894,29 @@ function sendPushNotificationToSubscribers(title, body, data) {
     });
 
     // Native Android Firebase FCM v1 dispatch (for native tokens like cUwz5QlrRbSY6ZFAeaEjbt:...)
+    const nativeFCMTokens = {};
     if (sheet) {
       const subs = sheetToObjects(sheet);
       subs.forEach(function(sub) {
         if (!sub || !sub.endpoint) return;
         const ep = String(sub.endpoint).trim();
         if (ep.indexOf('ExponentPushToken') !== 0 && ep.indexOf('ExpoPushToken') !== 0 && ep.indexOf('http') !== 0 && ep.length > 25) {
-          sendFcmV1Notification(ep, title, body, data);
+          nativeFCMTokens[ep] = true;
         }
       });
     }
+    if (expoSheet) {
+      const expoRows = sheetToObjects(expoSheet);
+      expoRows.forEach(function(r) {
+        const t = String(r.token || '').trim();
+        if (t.indexOf('ExponentPushToken') !== 0 && t.indexOf('ExpoPushToken') !== 0 && t.indexOf('http') !== 0 && t.length > 25) {
+          nativeFCMTokens[t] = true;
+        }
+      });
+    }
+    Object.keys(nativeFCMTokens).forEach(function(fcmToken) {
+      sendFcmV1Notification(fcmToken, title, body, data);
+    });
   } catch (e) {
     Logger.log('Push dispatch error: ' + e.message);
   }

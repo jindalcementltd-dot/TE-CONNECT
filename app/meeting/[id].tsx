@@ -14,13 +14,15 @@ import { getUser } from '../../src/services/auth';
 import { normalizeDate } from '../../src/utils/helpers';
 import { Meeting, MeetingStatus, User } from '../../src/types';
 import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
-import { format } from 'date-fns';
+import { format, addDays } from 'date-fns';
 
 export default function MeetingDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const queryClient = useQueryClient();
   const [user, setUser] = useState<User | null>(null);
   const [completing, setCompleting] = useState(false);
+  const [rescheduling, setRescheduling] = useState(false);
+  const [rescheduleDate, setRescheduleDate] = useState('');
   const [creditedTE, setCreditedTE] = useState<string>('');
   const [outcome, setOutcome] = useState('');
   const [peopleCount, setPeopleCount] = useState('');
@@ -88,6 +90,16 @@ export default function MeetingDetailScreen() {
     });
   };
 
+  const handleRescheduleMeeting = async () => {
+    if (!rescheduleDate) return;
+    const currentUser = await getUser();
+    updateMutation.mutate({
+      meeting_date: rescheduleDate,
+      updated_by: currentUser?.name || 'Administrator',
+    });
+    setRescheduling(false);
+  };
+
   if (isLoading) {
     return (
       <View style={styles.center}>
@@ -139,8 +151,63 @@ export default function MeetingDetailScreen() {
           <View style={styles.heroDateRow}>
             <Ionicons name="calendar" size={18} color={Colors.primaryLight} style={{ marginRight: 8 }} />
             <Text style={styles.heroDateText}>{formattedDate}</Text>
+            {!isCompleted && (
+              <TouchableOpacity
+                style={{ marginLeft: 'auto', backgroundColor: '#FEF3C7', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, borderWidth: 1, borderColor: '#FDE68A' }}
+                onPress={() => {
+                  const tom = addDays(new Date(), 1);
+                  setRescheduleDate(format(tom, 'yyyy-MM-dd'));
+                  setRescheduling(!rescheduling);
+                }}
+              >
+                <Text style={{ fontFamily: FontFamily.sansBold, fontSize: 11, color: '#B45309' }}>
+                  {rescheduling ? 'Cancel' : 'Postpone 🗓️'}
+                </Text>
+              </TouchableOpacity>
+            )}
           </View>
         </View>
+
+        {rescheduling && (
+          <View style={[styles.statusSectionCard, { backgroundColor: '#FFFBEB', borderColor: '#FDE68A' }]}>
+            <Text style={[styles.sectionHeading, { color: '#B45309' }]}>Reschedule / Postpone Meeting</Text>
+            <Text style={styles.sectionSubHeading}>Pick a new scheduled date:</Text>
+            <View style={{ flexDirection: 'row', gap: 8, marginTop: 8, marginBottom: 12 }}>
+              <TouchableOpacity
+                style={[styles.quickCountBtn, rescheduleDate === format(addDays(new Date(), 1), 'yyyy-MM-dd') && { backgroundColor: '#FEF3C7', borderColor: '#F59E0B' }]}
+                onPress={() => setRescheduleDate(format(addDays(new Date(), 1), 'yyyy-MM-dd'))}
+              >
+                <Text style={styles.quickCountBtnText}>Tomorrow</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.quickCountBtn, rescheduleDate === format(addDays(new Date(), 2), 'yyyy-MM-dd') && { backgroundColor: '#FEF3C7', borderColor: '#F59E0B' }]}
+                onPress={() => setRescheduleDate(format(addDays(new Date(), 2), 'yyyy-MM-dd'))}
+              >
+                <Text style={styles.quickCountBtnText}>In 2 Days</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.quickCountBtn, rescheduleDate === format(addDays(new Date(), 7), 'yyyy-MM-dd') && { backgroundColor: '#FEF3C7', borderColor: '#F59E0B' }]}
+                onPress={() => setRescheduleDate(format(addDays(new Date(), 7), 'yyyy-MM-dd'))}
+              >
+                <Text style={styles.quickCountBtnText}>Next Week</Text>
+              </TouchableOpacity>
+            </View>
+            <TextInput
+              style={[styles.input, { backgroundColor: '#FFFFFF', marginBottom: 12 }]}
+              placeholder="YYYY-MM-DD"
+              placeholderTextColor={Colors.textMuted}
+              value={rescheduleDate}
+              onChangeText={setRescheduleDate}
+            />
+            <TouchableOpacity
+              style={[styles.submitCompleteBtn, { backgroundColor: '#D97706' }]}
+              onPress={handleRescheduleMeeting}
+              disabled={updateMutation.isPending || !rescheduleDate}
+            >
+              {updateMutation.isPending ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.submitCompleteBtnText}>Save New Date 🗓️</Text>}
+            </TouchableOpacity>
+          </View>
+        )}
 
         <View style={styles.statusSectionCard}>
           <Text style={styles.sectionHeading}>Meeting Status</Text>

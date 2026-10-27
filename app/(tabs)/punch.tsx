@@ -9,7 +9,7 @@ import { Colors } from '../../src/theme/colors';
 import { FontFamily } from '../../src/theme/typography';
 import {
   apiGetSales, apiGetDealers, apiGetActiveTracker, apiGetSettings,
-  apiGetContractors, apiGetUsers,
+  apiGetContractors, apiGetUsers, apiGetPunches,
 } from '../../src/services/api';
 import { getUser } from '../../src/services/auth';
 import {
@@ -20,7 +20,7 @@ import {
 import {
   getUserDistrict, getDealerDistrict, getSaleDistrict, getTrackerDistrict, getAvailableDistricts,
 } from '../../src/utils/district';
-import { User, Dealer } from '../../src/types';
+import { User, Dealer, PunchRecord } from '../../src/types';
 import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
 import { format, parseISO } from 'date-fns';
 
@@ -68,6 +68,7 @@ export default function PunchScreen() {
   const { data: dealers, refetch: refetchDealers } = useQuery({ queryKey: ['dealers'], queryFn: () => apiGetDealers() });
   const { data: contractors, refetch: refetchContractors } = useQuery({ queryKey: ['contractors'], queryFn: () => apiGetContractors() });
   const { data: activeTrackers, refetch: refetchTrackers } = useQuery({ queryKey: ['activeTrackers'], queryFn: () => apiGetActiveTracker() });
+  const { data: allPunches, refetch: refetchPunches } = useQuery({ queryKey: ['punches'], queryFn: () => apiGetPunches() });
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -77,9 +78,10 @@ export default function PunchScreen() {
       refetchDealers(),
       refetchContractors(),
       refetchTrackers(),
+      refetchPunches(),
     ]);
     setRefreshing(false);
-  }, [refetchUsers, refetchSales, refetchDealers, refetchContractors, refetchTrackers]);
+  }, [refetchUsers, refetchSales, refetchDealers, refetchContractors, refetchTrackers, refetchPunches]);
 
   const availableDistricts = useMemo(() => {
     return getAvailableDistricts(usersList, dealers);
@@ -117,12 +119,12 @@ export default function PunchScreen() {
     return list.filter(s => getSaleDistrict(s, dealers, usersList).toLowerCase() === activeDistrict.toLowerCase());
   }, [allSales, dealers, usersList, user, activeDistrict]);
 
-  // SCOPED ACTIVE TRACKERS:
+  // SCOPED ACTIVE TRACKERS (SHARED DISTRICT POOL):
   const scopedActiveTrackers = useMemo(() => {
     const list = (activeTrackers || []).filter(Boolean);
     if (user?.role === 'TE') {
-      const cleanName = (user.name || '').trim().toLowerCase();
-      return list.filter(t => (t.te || '').trim().toLowerCase() === cleanName);
+      const userDist = getUserDistrict(user).toLowerCase();
+      return list.filter(t => getTrackerDistrict(t, usersList).toLowerCase() === userDist);
     }
     if (!activeDistrict || activeDistrict === 'ALL') return list;
     return list.filter(t => getTrackerDistrict(t, usersList).toLowerCase() === activeDistrict.toLowerCase());
@@ -279,7 +281,16 @@ export default function PunchScreen() {
     );
   }, [totalSalesBags, teTotalContractors, effectiveBagRate]);
 
-  // ── 5. DEALER SALES BREAKDOWN LIST WITH SAP CODE ──
+  // Month punches
+  const monthPunches = useMemo(() => {
+    return (allPunches || []).filter(p => {
+      if (!p) return false;
+      const m = normalizeDate(p.month || p.date).substring(0, 7);
+      return m === selectedMonth;
+    });
+  }, [allPunches, selectedMonth]);
+
+  // ── 5. DEALER SALES BREAKDOWN LIST WITH SAP CODE & REMAINING PUNCH BALANCE ──
   const dealerLookup = useMemo(() => {
     const map = new Map<string, Dealer>();
     scopedDealers.forEach(d => {
@@ -300,6 +311,13 @@ export default function PunchScreen() {
       total_mt: number;
       f2r_bags: number;
       gold_bags: number;
+      punched_bags: number;
+      punched_mt: number;
+      punched_f2r: number;
+      punched_gold: number;
+      points: number;
+      remaining_bags: number;
+      remaining_mt: number;
     }> = {};
 
     monthSales.forEach(s => {
@@ -320,6 +338,13 @@ export default function PunchScreen() {
           total_mt: 0,
           f2r_bags: 0,
           gold_bags: 0,
+          punched_bags: 0,
+          punched_mt: 0,
+          punched_f2r: 0,
+          punched_gold: 0,
+          points: 0,
+          remaining_bags: 0,
+          remaining_mt: 0,
         };
       }
 
@@ -330,8 +355,34 @@ export default function PunchScreen() {
       if (String(s.product).includes('GOLD')) map[key].gold_bags += q;
     });
 
+    // Match punches for each dealer to compute remaining bags and points
+    Object.keys(map).forEach(key => {
+      const dItem = map[key];
+      const dId = (dItem.dealer_id || '').toLowerCase().trim();
+      const dName = (dItem.dealer_name || '').toLowerCase().trim();
+
+      const dealerPunches = monthPunches.filter(p => {
+        const pId = (p.dealer_id || '').toLowerCase().trim();
+        const pName = (p.dealer_name || '').toLowerCase().trim();
+        return (dId && pId === dId) || (dName && pName === dName) || (pId === key) || (pName === key);
+      });
+
+      const pBags = dealerPunches.reduce((sum, p) => sum + (Number(p.punched_quantity_bags) || 0), 0);
+      const pF2r = dealerPunches.reduce((sum, p) => sum + (Number(p.f2r_bags) || 0), 0);
+      const pGold = dealerPunches.reduce((sum, p) => sum + (Number(p.gold_bags) || 0), 0);
+      const pts = dealerPunches.reduce((sum, p) => sum + (Number(p.points) || (Number(p.f2r_bags || 0) * 2 + Number(p.gold_bags || 0) * 3)), 0);
+
+      dItem.punched_bags = pBags;
+      dItem.punched_mt = pBags / 20;
+      dItem.punched_f2r = pF2r;
+      dItem.punched_gold = pGold;
+      dItem.points = pts;
+      dItem.remaining_bags = Math.max(0, dItem.total_bags - pBags);
+      dItem.remaining_mt = dItem.remaining_bags / 20;
+    });
+
     return Object.values(map).sort((a, b) => b.total_bags - a.total_bags);
-  }, [monthSales, dealerLookup, user, activeDistrict]);
+  }, [monthSales, dealerLookup, user, activeDistrict, monthPunches]);
 
   // Filtered dealers by search term (name, area, SAP code)
   const filteredDealers = useMemo(() => {
@@ -977,25 +1028,51 @@ export default function PunchScreen() {
                     </View>
                   </View>
 
-                  {/* Middle: Total Volume & Product Split */}
+                  {/* Middle: Total Volume, Punched, and Remaining Left */}
                   <View style={styles.dealerVolumeRow}>
                     <View>
                       <Text style={styles.dealerTotalBags}>
-                        {formatNumber(d.total_bags)} <Text style={styles.dealerTotalBagsUnit}>Bags</Text>
+                        {formatNumber(d.total_bags)} <Text style={styles.dealerTotalBagsUnit}>Sold</Text>
                       </Text>
                       <Text style={styles.dealerTotalMT}>{d.total_mt.toFixed(2)} MT Total</Text>
                     </View>
 
+                    <View style={{ alignItems: 'flex-end' }}>
+                      <Text style={[styles.dealerRemainingBags, { color: d.remaining_bags > 0 ? '#16A34A' : '#9CA3AF' }]}>
+                        {formatNumber(d.remaining_bags)} <Text style={styles.dealerRemainingUnit}>Left</Text>
+                      </Text>
+                      <Text style={styles.dealerPunchedSub}>
+                        Punched: {formatNumber(d.punched_bags)}b • {d.points} pts
+                      </Text>
+                    </View>
+                  </View>
+
+                  {/* Product Breakdown & Punch Action Row */}
+                  <View style={styles.dealerBottomActionRow}>
                     <View style={styles.dealerProductPillsRow}>
                       <View style={styles.dealerProductPillF2R}>
                         <View style={[styles.miniDot, { backgroundColor: '#EF4444' }]} />
-                        <Text style={styles.dealerProductPillText}>F2R: {d.f2r_bags} Bags</Text>
+                        <Text style={styles.dealerProductPillText}>F2R: {d.f2r_bags}b</Text>
                       </View>
                       <View style={styles.dealerProductPillGold}>
                         <View style={[styles.miniDot, { backgroundColor: '#F59E0B' }]} />
-                        <Text style={styles.dealerProductPillText}>Gold: {d.gold_bags} Bags</Text>
+                        <Text style={styles.dealerProductPillText}>Gold: {d.gold_bags}b</Text>
                       </View>
                     </View>
+
+                    <TouchableOpacity
+                      style={styles.dealerPunchBtn}
+                      onPress={(e) => {
+                        e.stopPropagation?.();
+                        router.push({
+                          pathname: '/punch/add',
+                          params: { dealer_id: d.dealer_id, dealer_name: d.dealer_name }
+                        } as any);
+                      }}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={styles.dealerPunchBtnText}>Punch 🔨</Text>
+                    </TouchableOpacity>
                   </View>
 
                   {/* Volume Share Bar */}
@@ -2095,6 +2172,40 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.sansRegular,
     fontSize: 11,
     color: '#8A7277',
+  },
+  dealerRemainingBags: {
+    fontFamily: FontFamily.displayBlack,
+    fontSize: 17,
+  },
+  dealerRemainingUnit: {
+    fontSize: 11,
+    fontFamily: FontFamily.sansMedium,
+    color: '#8A7277',
+  },
+  dealerPunchedSub: {
+    fontFamily: FontFamily.sansMedium,
+    fontSize: 10,
+    color: '#8A7277',
+    marginTop: 1,
+  },
+  dealerBottomActionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  dealerPunchBtn: {
+    backgroundColor: '#800E20',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dealerPunchBtnText: {
+    fontFamily: FontFamily.sansBold,
+    fontSize: 11,
+    color: '#FFFFFF',
   },
   dealerProductPillsRow: {
     flexDirection: 'row',

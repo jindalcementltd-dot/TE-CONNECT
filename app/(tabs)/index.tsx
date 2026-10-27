@@ -25,7 +25,7 @@ import {
 import { User, DealerSalesSummary, Slab, Meeting } from '../../src/types';
 import { FontFamily } from '../../src/theme/typography';
 import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
-import { format, parseISO } from 'date-fns';
+import { format, parseISO, addDays } from 'date-fns';
 import { Colors } from '../../src/theme/colors';
 import { getUnreadNotificationsCount, checkAndNotifyNewSlabs, checkAndNotifyNewMeetings } from '../../src/services/notifications';
 
@@ -55,6 +55,11 @@ export default function HomeScreen() {
   const [attendExpense, setAttendExpense] = useState<string>('');
   const [attendOutcome, setAttendOutcome] = useState<string>('');
   const [isSubmittingAttendance, setIsSubmittingAttendance] = useState<boolean>(false);
+
+  // Postpone Meeting State
+  const [meetingToPostpone, setMeetingToPostpone] = useState<Meeting | null>(null);
+  const [postponeDate, setPostponeDate] = useState<string>('');
+  const [isSubmittingPostpone, setIsSubmittingPostpone] = useState<boolean>(false);
 
   // Scroll animation for FAB
   const scrollY = useRef(new Animated.Value(0)).current;
@@ -317,14 +322,15 @@ export default function HomeScreen() {
       if (!activeDistrict || activeDistrict === 'ALL') return true;
       return getSlabDistrict(s, dealers, usersList).toLowerCase() === activeDistrict.toLowerCase();
     });
-    const upcoming = scoped.filter(s => s.status === 'UPCOMING' || normalizeDate(s.slab_date) >= today);
+    // Only upcoming slabs scheduled for today or the future (past unattended slabs are excluded from Home)
+    const upcoming = scoped.filter(s => s.status === 'UPCOMING' && normalizeDate(s.slab_date) >= today);
     return upcoming.sort((a, b) => normalizeDate(a.slab_date).localeCompare(normalizeDate(b.slab_date)));
   }, [allSlabs, today, user, activeDistrict, dealers, usersList]);
 
-  // Display upcoming slabs if available; otherwise show recent slabs from the sheet
+  // Display upcoming slabs if available; otherwise show recent completed slabs from the sheet
   const displaySlabs = useMemo(() => {
     if (upcomingSlabsList.length > 0) return upcomingSlabsList.slice(0, 3);
-    const list = (allSlabs || []).filter(s => s && s.slab_date);
+    const list = (allSlabs || []).filter(s => s && s.slab_date && s.status === 'COMPLETED');
     const scoped = list.filter(s => {
       if (user?.role === 'TE') {
         const userDist = getUserDistrict(user);
@@ -353,14 +359,14 @@ export default function HomeScreen() {
       if (!activeDistrict || activeDistrict === 'ALL') return true;
       return getMeetingDistrict(m, usersList).toLowerCase() === activeDistrict.toLowerCase();
     });
-    const upcoming = scoped.filter(m => m.status === 'PLANNED' || normalizeDate(m.meeting_date) >= today);
+    const upcoming = scoped.filter(m => (m.status === 'PLANNED' || !m.status) && normalizeDate(m.meeting_date) >= today);
     return upcoming.sort((a, b) => normalizeDate(a.meeting_date).localeCompare(normalizeDate(b.meeting_date)));
   }, [allMeetings, today, user, activeDistrict, usersList]);
 
-  // Display upcoming meetings if available; otherwise show recent meetings from sheet
+  // Display upcoming meetings if available; otherwise show recent completed meetings from sheet
   const displayMeetings = useMemo(() => {
     if (upcomingMeetingsList.length > 0) return upcomingMeetingsList.slice(0, 3);
-    const list = (allMeetings || []).filter(m => m && m.meeting_date);
+    const list = (allMeetings || []).filter(m => m && m.meeting_date && m.status === 'COMPLETED');
     const scoped = list.filter(m => {
       if (user?.role === 'TE') {
         const userDist = getUserDistrict(user);
@@ -378,7 +384,7 @@ export default function HomeScreen() {
   // ── TODAY'S PENDING TASKS (FOR ACTION REQUIRED REMINDER) ──
   const [updatingTaskId, setUpdatingTaskId] = useState<string | null>(null);
 
-  // Slabs scheduled for today or past due that are still UPCOMING
+  // Slabs scheduled strictly for TODAY that are still UPCOMING (past unattended slabs are hidden from Home)
   const pendingSlabs = useMemo(() => {
     return (allSlabs || []).filter(s => {
       if (!s || !s.slab_date) return false;
@@ -392,7 +398,7 @@ export default function HomeScreen() {
         if (getSlabDistrict(s, dealers, usersList).toLowerCase() !== activeDistrict.toLowerCase()) return false;
       }
       const slabDate = normalizeDate(s.slab_date);
-      return s.status === 'UPCOMING' && slabDate <= today;
+      return s.status === 'UPCOMING' && slabDate === today;
     });
   }, [allSlabs, today, user, activeDistrict, dealers, usersList]);
 
@@ -476,6 +482,41 @@ export default function HomeScreen() {
       });
     } finally {
       setIsSubmittingAttendance(false);
+    }
+  };
+
+  const openPostponeModal = (meeting: Meeting) => {
+    setMeetingToPostpone(meeting);
+    const tomorrow = addDays(new Date(), 1);
+    setPostponeDate(format(tomorrow, 'yyyy-MM-dd'));
+  };
+
+  const confirmPostponeMeeting = async () => {
+    if (!meetingToPostpone || !postponeDate) return;
+    setIsSubmittingPostpone(true);
+    try {
+      await apiUpdateMeeting(meetingToPostpone.meeting_id, {
+        meeting_date: postponeDate,
+        updated_by: user?.name || 'TE',
+      });
+      await refetchMeetings();
+      Toast.show({
+        type: 'success',
+        text1: 'Meeting Postponed! 🗓️',
+        text2: `Rescheduled to ${formatDateShort(postponeDate)}`,
+        position: 'top',
+        visibilityTime: 3500,
+      });
+      setMeetingToPostpone(null);
+    } catch (err: any) {
+      Toast.show({
+        type: 'error',
+        text1: 'Postpone Failed',
+        text2: err.message || 'Could not reschedule meeting',
+        position: 'top',
+      });
+    } finally {
+      setIsSubmittingPostpone(false);
     }
   };
 
@@ -679,27 +720,51 @@ export default function HomeScreen() {
             ))}
 
             {pendingMeetings.map((meeting) => (
-              <View key={meeting.meeting_id} style={styles.reminderCard}>
-                <View style={[styles.reminderIconCircle, { backgroundColor: '#EDE9FE' }]}>
-                  <Ionicons name="people" size={20} color="#7C3AED" />
-                </View>
-                <View style={{ flex: 1, marginLeft: 10 }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                    <Text style={[styles.reminderItemType, { color: '#7C3AED' }]}>{meeting.meeting_type} MEET</Text>
-                    <Text style={styles.reminderDateTag}>{formatDateShort(meeting.meeting_date)}</Text>
+              <View key={meeting.meeting_id} style={[styles.reminderCard, { flexDirection: 'column', alignItems: 'stretch' }]}>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <View style={[styles.reminderIconCircle, { backgroundColor: '#EDE9FE' }]}>
+                    <Ionicons name="people" size={20} color="#7C3AED" />
                   </View>
-                  <Text style={styles.reminderItemName}>{meeting.meeting_name || `${meeting.meeting_type} Meeting`}</Text>
-                  <Text style={styles.reminderItemDetail}>
-                    📍 {meeting.location || 'Jajpur'}{meeting.people_count ? ` • ${meeting.people_count} People` : ''}
-                  </Text>
+                  <View style={{ flex: 1, marginLeft: 10 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <Text style={[styles.reminderItemType, { color: '#7C3AED' }]}>{meeting.meeting_type} MEET</Text>
+                      <Text style={styles.reminderDateTag}>{formatDateShort(meeting.meeting_date)}</Text>
+                    </View>
+                    <Text style={styles.reminderItemName}>{meeting.meeting_name || `${meeting.meeting_type} Meeting`}</Text>
+                    <Text style={styles.reminderItemDetail}>
+                      📍 {meeting.location || 'Jajpur'}{meeting.people_count ? ` • ${meeting.people_count} People` : ''}
+                    </Text>
+                  </View>
                 </View>
-                <TouchableOpacity
-                  style={[styles.doneActionBtn, { backgroundColor: '#7C3AED' }]}
-                  onPress={() => openAttendModal(meeting)}
-                  activeOpacity={0.8}
-                >
-                  <Text style={styles.doneActionBtnText}>Attend ✓</Text>
-                </TouchableOpacity>
+
+                {/* Quick Actions: Postpone, Edit, Attend */}
+                <View style={{ flexDirection: 'row', gap: 8, marginTop: 10, justifyContent: 'flex-end', alignItems: 'center' }}>
+                  <TouchableOpacity
+                    style={styles.postponeActionBtn}
+                    onPress={() => openPostponeModal(meeting)}
+                    activeOpacity={0.8}
+                  >
+                    <Ionicons name="calendar-outline" size={14} color="#B45309" />
+                    <Text style={styles.postponeActionBtnText}>Postpone</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.editActionBtn}
+                    onPress={() => router.push(`/meeting/${meeting.meeting_id}` as any)}
+                    activeOpacity={0.8}
+                  >
+                    <Feather name="edit-2" size={13} color="#475569" />
+                    <Text style={styles.editActionBtnText}>Edit</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.doneActionBtn, { backgroundColor: '#7C3AED' }]}
+                    onPress={() => openAttendModal(meeting)}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.doneActionBtnText}>Attend ✓</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
             ))}
           </View>
@@ -1409,6 +1474,131 @@ export default function HomeScreen() {
           </View>
         </KeyboardAvoidingView>
       </Modal>
+
+      {/* ── POSTPONE MEETING MODAL ── */}
+      <Modal
+        visible={!!meetingToPostpone}
+        transparent
+        animationType="fade"
+        onRequestClose={() => { if (!isSubmittingPostpone) setMeetingToPostpone(null); }}
+      >
+        <KeyboardAvoidingView
+          style={styles.attendModalOverlay}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
+          <View style={styles.attendModalCard}>
+            {meetingToPostpone && (
+              <>
+                <View style={styles.attendModalHeader}>
+                  <View style={{ flex: 1 }}>
+                    <View style={styles.attendBadgeRow}>
+                      <View style={[styles.attendTypeBadge, { backgroundColor: '#FEF3C7' }]}>
+                        <Text style={[styles.attendTypeBadgeText, { color: '#B45309' }]}>
+                          RESCHEDULE / POSTPONE
+                        </Text>
+                      </View>
+                      <Text style={styles.attendDateTag}>
+                        Was: {formatDateShort(meetingToPostpone.meeting_date)}
+                      </Text>
+                    </View>
+                    <Text style={styles.attendModalTitle}>
+                      {meetingToPostpone.meeting_name || `${meetingToPostpone.meeting_type} Meeting`}
+                    </Text>
+                    <Text style={styles.attendModalLocation}>
+                      📍 {meetingToPostpone.location || 'Jajpur'}
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    onPress={() => setMeetingToPostpone(null)}
+                    disabled={isSubmittingPostpone}
+                    style={styles.modalCloseBtn}
+                  >
+                    <Ionicons name="close" size={22} color={Colors.textPrimary} />
+                  </TouchableOpacity>
+                </View>
+
+                <View style={styles.modalDivider} />
+
+                <Text style={styles.attendFieldLabel}>Select New Date</Text>
+                {/* Quick Date Presets */}
+                <View style={{ flexDirection: 'row', gap: 8, marginBottom: 14 }}>
+                  <TouchableOpacity
+                    style={[
+                      styles.postponePresetBtn,
+                      postponeDate === format(addDays(new Date(), 1), 'yyyy-MM-dd') && styles.postponePresetBtnActive
+                    ]}
+                    onPress={() => setPostponeDate(format(addDays(new Date(), 1), 'yyyy-MM-dd'))}
+                  >
+                    <Text style={[
+                      styles.postponePresetText,
+                      postponeDate === format(addDays(new Date(), 1), 'yyyy-MM-dd') && styles.postponePresetTextActive
+                    ]}>Tomorrow</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[
+                      styles.postponePresetBtn,
+                      postponeDate === format(addDays(new Date(), 2), 'yyyy-MM-dd') && styles.postponePresetBtnActive
+                    ]}
+                    onPress={() => setPostponeDate(format(addDays(new Date(), 2), 'yyyy-MM-dd'))}
+                  >
+                    <Text style={[
+                      styles.postponePresetText,
+                      postponeDate === format(addDays(new Date(), 2), 'yyyy-MM-dd') && styles.postponePresetTextActive
+                    ]}>In 2 Days</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[
+                      styles.postponePresetBtn,
+                      postponeDate === format(addDays(new Date(), 7), 'yyyy-MM-dd') && styles.postponePresetBtnActive
+                    ]}
+                    onPress={() => setPostponeDate(format(addDays(new Date(), 7), 'yyyy-MM-dd'))}
+                  >
+                    <Text style={[
+                      styles.postponePresetText,
+                      postponeDate === format(addDays(new Date(), 7), 'yyyy-MM-dd') && styles.postponePresetTextActive
+                    ]}>Next Week</Text>
+                  </TouchableOpacity>
+                </View>
+
+                {/* Date Input */}
+                <TextInput
+                  style={styles.attendInput}
+                  placeholder="YYYY-MM-DD"
+                  placeholderTextColor="#94A3B8"
+                  value={postponeDate}
+                  onChangeText={setPostponeDate}
+                />
+
+                {/* Actions */}
+                <View style={styles.attendModalActions}>
+                  <TouchableOpacity
+                    style={styles.attendCancelBtn}
+                    onPress={() => setMeetingToPostpone(null)}
+                    disabled={isSubmittingPostpone}
+                  >
+                    <Text style={styles.attendCancelBtnText}>Cancel</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.attendConfirmBtn, { backgroundColor: '#D97706' }]}
+                    onPress={confirmPostponeMeeting}
+                    disabled={isSubmittingPostpone || !postponeDate}
+                    activeOpacity={0.85}
+                  >
+                    {isSubmittingPostpone ? (
+                      <ActivityIndicator size="small" color="#FFFFFF" />
+                    ) : (
+                      <Text style={styles.attendConfirmBtnText}>Save New Date 🗓️</Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </View>
   );
 }
@@ -1627,6 +1817,62 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.sansBold,
     fontSize: 12,
     color: '#FFFFFF',
+  },
+  postponeActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#FEF3C7',
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 10,
+  },
+  postponeActionBtnText: {
+    fontFamily: FontFamily.sansBold,
+    fontSize: 11,
+    color: '#B45309',
+  },
+  editActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#F1F5F9',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 10,
+  },
+  editActionBtnText: {
+    fontFamily: FontFamily.sansBold,
+    fontSize: 11,
+    color: '#475569',
+  },
+  postponePresetBtn: {
+    flex: 1,
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    backgroundColor: '#F8FAFC',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  postponePresetBtnActive: {
+    backgroundColor: '#FEF3C7',
+    borderColor: '#F59E0B',
+  },
+  postponePresetText: {
+    fontFamily: FontFamily.sansMedium,
+    fontSize: 11,
+    color: '#64748B',
+  },
+  postponePresetTextActive: {
+    fontFamily: FontFamily.sansBold,
+    color: '#B45309',
   },
   allClearPill: {
     flexDirection: 'row',
